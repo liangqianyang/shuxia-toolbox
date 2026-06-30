@@ -1,0 +1,21 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "树下小屋的工具箱"
+      }
+    },
+    {
+      "path": "pages/beads/index",
+      "style": {
+        "navigationBarTitleText": "拼豆图纸生成器"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarBackgroundColor": "#FFF8F0",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#FFF8F0"
+  }
+}

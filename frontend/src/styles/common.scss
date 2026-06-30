@@ -1,0 +1,47 @@
+page {
+  background-color: $color-bg;
+  color: $color-text;
+  font-size: $font-body;
+}
+
+.card {
+  background-color: $color-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  padding: 32rpx;
+}
+
+.btn-primary {
+  background-color: $color-primary;
+  color: #ffffff;
+  border-radius: $radius-md;
+  font-size: $font-title;
+  font-weight: 600;
+  text-align: center;
+  padding: 24rpx 0;
+
+  &.disabled {
+    opacity: 0.45;
+  }
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: $color-primary-dark;
+  border: 2rpx solid $color-primary;
+  border-radius: $radius-md;
+  font-size: $font-body;
+  text-align: center;
+  padding: 20rpx 0;
+}
+
+.section-title {
+  font-size: $font-body;
+  font-weight: 600;
+  color: $color-text;
+}
+
+.caption {
+  font-size: $font-caption;
+  color: $color-text-secondary;
+}
