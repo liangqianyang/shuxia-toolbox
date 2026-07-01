@@ -4,7 +4,7 @@
  * 3. 确定性：同图同参两次输出逐格一致
  * 4. 75×75 大图布局：不超 4000px、cellPx 足够印色号
  */
-import { generatePattern, updatePatternCell } from '@/composables/useBeadPattern'
+import { generatePattern, updatePatternCell, recolorColor, eraseColor, useBeadPattern } from '@/composables/useBeadPattern'
 import { computeSheetLayout } from '@/utils/sheetRenderer'
 import { getPalette } from '@/utils/beadPalette'
 import { deltaE2000 } from '@/utils/color'
@@ -385,6 +385,146 @@ async function testFeatureSpeckPreserved() {
   assert(center !== EMPTY_CELL, '中心眼珠格非空')
 }
 
+async function testEdgeAntiAliasing() {
+  console.log('用例 11：描边边缘清晰（crisp、无毛刺、无过渡杂色）')
+  // 左黑右白、边界落在格内正中（px 32 黑 / px 33 白 → 第 16 列格 50/50）。
+  // 新逻辑：50/50 边界格深色占够份量 → crisp 取深色（描边细而贴曲线），不平均成中灰杂色；
+  // 边界外侧第一格深色占比为 0 → 不强制变深，不渗黑、无毛刺。
+  const buf = makeBuffer(64)
+  for (let y = 0; y < 64; y++) {
+    for (let x = 0; x < 64; x++) {
+      if (x < 33) setPx(buf, x, y, 0, 0, 0)
+      else setPx(buf, x, y, 255, 255, 255)
+    }
+  }
+  __setPixels(buf)
+  const result = await generatePattern('test', {
+    ...DEFAULT_PARAMS,
+    boardPresetKey: 'custom',
+    gridWidth: 32,
+    gridHeight: 32,
+    removeBackground: false,
+  })
+  const lumaOf = (x: number, y: number): number => {
+    const idx = result.cells[y * 32 + x]
+    if (idx === EMPTY_CELL) return -1
+    const [r, g, b] = getPalette(result.params.paletteKey).colors[idx].rgb
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const darkLuma = lumaOf(0, 16) // 纯黑区
+  const lightLuma = lumaOf(31, 16) // 纯白区
+  const edgeLuma = lumaOf(16, 16) // 50/50 边界格
+  const outsideLuma = lumaOf(17, 16) // 边界外侧第一格
+  assert(
+    edgeLuma <= darkLuma + 25,
+    `50/50 边界格 crisp 取深色、不平均成中灰杂色（纯黑 ${darkLuma.toFixed(0)} · 边界 ${edgeLuma.toFixed(0)}）`,
+  )
+  assert(
+    outsideLuma > lightLuma - 30,
+    `边界外侧不渗黑、无毛刺（外侧 ${outsideLuma.toFixed(0)} ≈ 纯白 ${lightLuma.toFixed(0)}）`,
+  )
+}
+
+async function testBulkRecolorErase() {
+  console.log('用例 12：批量改色 / 批量擦除（隔离高亮后的操作）')
+  const buf = makeBuffer(64)
+  const colors: [number, number, number][] = [
+    [252, 40, 60], // ≈ F04
+    [255, 200, 48], // ≈ A26
+    [0, 0, 0], // H07
+    [254, 255, 255], // H02
+  ]
+  for (let y = 16; y < 48; y++) {
+    for (let x = 16; x < 48; x++) {
+      const block = (y < 32 ? 0 : 2) + (x < 32 ? 0 : 1)
+      const [r, g, b] = colors[block]
+      setPx(buf, x, y, r, g, b)
+    }
+  }
+  __setPixels(buf)
+  const result = await generatePattern('test', {
+    ...DEFAULT_PARAMS,
+    boardPresetKey: 'custom',
+    gridWidth: 32,
+    gridHeight: 32,
+    removeBackground: false,
+  })
+
+  const countOf = (res: PatternResult, code: string) =>
+    res.used.find((u) => u.color.code === code)?.count ?? 0
+  const idxOf = (res: PatternResult, code: string) =>
+    res.used.find((u) => u.color.code === code)?.paletteIndex ?? -1
+
+  const beforeF04 = countOf(result, 'F04')
+  const beforeA26 = countOf(result, 'A26')
+  const beforeTotal = result.totalBeads
+
+  // 批量改色：F04 → A26
+  const recolored = recolorColor(result, idxOf(result, 'F04'), idxOf(result, 'A26'))
+  assert(countOf(recolored, 'F04') === 0, '改色后原色 F04 清零')
+  assert(
+    countOf(recolored, 'A26') === beforeA26 + beforeF04,
+    `改色后目标色 A26 = 原 A26 + 原 F04（${countOf(recolored, 'A26')} = ${beforeA26}+${beforeF04}）`,
+  )
+  assert(recolored.totalBeads === beforeTotal, '改色不改变总豆数')
+
+  // 批量擦除：H07 → 空
+  const beforeH07 = countOf(recolored, 'H07')
+  const erased = eraseColor(recolored, idxOf(recolored, 'H07'))
+  assert(countOf(erased, 'H07') === 0, '擦除后 H07 清零')
+  assert(
+    erased.totalBeads === beforeTotal - beforeH07,
+    `擦除后总豆数减少（${erased.totalBeads} = ${beforeTotal}-${beforeH07}）`,
+  )
+  assert(erased.cells.some((c) => c === EMPTY_CELL), '擦除产生了空格')
+}
+
+async function testUndo() {
+  console.log('用例 13：撤销编辑（批量改色 / 批量擦除各算一步）')
+  const buf = makeBuffer(64)
+  const colors: [number, number, number][] = [
+    [252, 40, 60], // ≈ F04
+    [255, 200, 48], // ≈ A26
+    [0, 0, 0], // H07
+    [254, 255, 255], // H02
+  ]
+  for (let y = 16; y < 48; y++) {
+    for (let x = 16; x < 48; x++) {
+      const block = (y < 32 ? 0 : 2) + (x < 32 ? 0 : 1)
+      const [r, g, b] = colors[block]
+      setPx(buf, x, y, r, g, b)
+    }
+  }
+  __setPixels(buf)
+  const { params, generate, recolor, eraseAll, undo, canUndo, result } = useBeadPattern()
+  params.boardPresetKey = 'custom'
+  params.gridWidth = 32
+  params.gridHeight = 32
+  params.removeBackground = false
+  await generate('test')
+
+  const countOf = (code: string) => result.value!.used.find((u) => u.color.code === code)?.count ?? 0
+  const idxOf = (code: string) =>
+    result.value!.used.find((u) => u.color.code === code)?.paletteIndex ?? -1
+
+  assert(canUndo.value === false, '初始无历史，不可撤销')
+
+  // 批量改色 F04 → A26，再撤销
+  recolor(idxOf('F04'), idxOf('A26'))
+  assert(canUndo.value === true, '改色后可撤销')
+  assert(countOf('F04') === 0, '改色后 F04 清零')
+  assert(undo() !== null, '撤销返回结果')
+  assert(countOf('F04') === 64, `撤销恢复 F04（${countOf('F04')} = 64）`)
+  assert(countOf('A26') === 64, `撤销恢复 A26（${countOf('A26')} = 64）`)
+  assert(canUndo.value === false, '撤销唯一一步后不可再撤销')
+
+  // 批量擦除 H07，再撤销
+  eraseAll(idxOf('H07'))
+  assert(countOf('H07') === 0, '擦除后 H07 清零')
+  undo()
+  assert(countOf('H07') === 64, `撤销恢复 H07（${countOf('H07')} = 64）`)
+}
+
 async function testBoardSizing() {
   console.log('用例 6：真实拼板规格与等比缩放')
   const buf = { data: new Uint8ClampedArray(148 * 160 * 4), width: 148, height: 160 }
@@ -573,6 +713,9 @@ async function main() {
   await testLightTransitionCleanup()
   await testOutlineUnification()
   await testFeatureSpeckPreserved()
+  await testEdgeAntiAliasing()
+  await testBulkRecolorErase()
+  await testUndo()
   await testBoardSizing()
   await testAutoBoardRecommendation()
   await testLayout()

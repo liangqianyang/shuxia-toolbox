@@ -1,5 +1,5 @@
 <template>
-  <view class="beads" :class="{ 'beads--editing': editMode }">
+  <view class="beads" :class="{ 'beads--panel': panelOpen }">
     <!-- 选图区 -->
     <view v-if="!imagePath" class="beads__picker card" @tap="pickImage">
       <view class="beads__picker-icon">🖼️</view>
@@ -31,6 +31,7 @@
       <view class="card beads__result">
         <view class="beads__summary">
           <text class="section-title beads__summary-text">{{ summaryText }}</text>
+          <view v-if="canUndo" class="beads__edit-toggle" @tap="onUndo">↶ 撤销</view>
           <view
             class="beads__edit-toggle"
             :class="{ 'beads__edit-toggle--active': editMode, disabled: dirty }"
@@ -105,51 +106,102 @@
         <text class="caption">可滑动查看，双指捏合缩放，点“编辑格子”后可改单格颜色</text>
       </view>
 
-      <view v-if="editMode" class="beads__edit-dock">
-        <view class="beads__edit-dock-head">
-          <view class="beads__brush-current">
-            <view
-              class="beads__brush-preview"
-              :class="{ 'beads__brush-preview--empty': activePaletteIndex === EMPTY_CELL || activePaletteIndex === null }"
-              :style="activeBrushPreviewStyle"
-            />
-            <text class="section-title">画笔 {{ activeBrushText }}</text>
-          </view>
-          <text class="caption beads__selected-text">{{ selectedCellText }}</text>
-          <view class="beads__edit-done" @tap="toggleEditMode">完成</view>
-        </view>
-        <scroll-view class="beads__brush-strip" scroll-x enhanced>
-          <view class="beads__brush-row">
-            <view class="beads__brush-column">
+      <!-- 底部面板：逐格编辑(画笔/橡皮擦) · 隔离高亮(批量改色擦除) · 选目标色 -->
+      <view v-if="panelOpen" class="beads__edit-dock">
+        <template v-if="bottomMode === 'edit'">
+          <view class="beads__edit-dock-head">
+            <view class="beads__brush-current">
               <view
-                class="beads__brush-swatch beads__brush-swatch--empty"
-                :class="{ 'beads__brush-swatch--active': activePaletteIndex === EMPTY_CELL }"
-                @tap="selectBrush(EMPTY_CELL)"
-              >
-                空
-              </view>
+                class="beads__brush-preview"
+                :class="{ 'beads__brush-preview--empty': activePaletteIndex === EMPTY_CELL || activePaletteIndex === null }"
+                :style="activeBrushPreviewStyle"
+              />
+              <text class="section-title">{{ activeBrushText }}</text>
             </view>
+            <text class="caption beads__selected-text">{{ selectedCellText }}</text>
             <view
-              v-for="(column, columnIndex) in editPaletteColumns"
-              :key="columnIndex"
-              class="beads__brush-column"
+              class="beads__dock-eraser"
+              :class="{ 'beads__dock-eraser--active': activePaletteIndex === EMPTY_CELL }"
+              @tap="toggleEraser"
             >
+              ⌫ 擦除
+            </view>
+            <view class="beads__edit-done" @tap="toggleEditMode">完成</view>
+          </view>
+          <scroll-view class="beads__brush-strip" scroll-x enhanced>
+            <view class="beads__brush-row">
               <view
-                v-for="entry in column"
-                :key="entry.index"
-                class="beads__brush-swatch"
-                :class="{ 'beads__brush-swatch--active': activePaletteIndex === entry.index }"
-                :style="{ backgroundColor: entry.color.hex, color: textColorOn(entry.color.rgb) }"
-                @tap="selectBrush(entry.index)"
+                v-for="(column, columnIndex) in editPaletteColumns"
+                :key="columnIndex"
+                class="beads__brush-column"
               >
-                {{ displayCode(entry.color.code) }}
+                <view
+                  v-for="entry in column"
+                  :key="entry.index"
+                  class="beads__brush-swatch"
+                  :class="{ 'beads__brush-swatch--active': activePaletteIndex === entry.index }"
+                  :style="{ backgroundColor: entry.color.hex, color: textColorOn(entry.color.rgb) }"
+                  @tap="selectBrush(entry.index)"
+                >
+                  {{ displayCode(entry.color.code) }}
+                </view>
               </view>
             </view>
+          </scroll-view>
+        </template>
+
+        <template v-else-if="bottomMode === 'highlight'">
+          <view class="beads__edit-dock-head">
+            <view class="beads__brush-current">
+              <view
+                v-if="highlightedColor"
+                class="beads__brush-preview"
+                :style="{ backgroundColor: highlightedColor.hex }"
+              />
+              <text class="section-title">
+                {{ highlightedColor ? displayCode(highlightedColor.code) : '' }} 已高亮
+              </text>
+            </view>
+            <view class="beads__dock-action beads__dock-action--primary" @tap="onRecolorAll">
+              全部改色
+            </view>
+            <view class="beads__dock-action beads__dock-action--danger" @tap="onEraseAll">
+              全部擦除
+            </view>
+            <view class="beads__edit-done" @tap="onCancelHighlight">取消</view>
           </view>
-        </scroll-view>
+        </template>
+
+        <template v-else-if="bottomMode === 'pick-target'">
+          <view class="beads__edit-dock-head">
+            <view class="beads__brush-current">
+              <text class="section-title">改成哪种颜色？</text>
+            </view>
+            <view class="beads__edit-done" @tap="onCancelPick">返回</view>
+          </view>
+          <scroll-view class="beads__brush-strip" scroll-x enhanced>
+            <view class="beads__brush-row">
+              <view
+                v-for="(column, columnIndex) in editPaletteColumns"
+                :key="columnIndex"
+                class="beads__brush-column"
+              >
+                <view
+                  v-for="entry in column"
+                  :key="entry.index"
+                  class="beads__brush-swatch"
+                  :style="{ backgroundColor: entry.color.hex, color: textColorOn(entry.color.rgb) }"
+                  @tap="onPickTarget(entry.index)"
+                >
+                  {{ displayCode(entry.color.code) }}
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </template>
       </view>
 
-      <ColorLegend :used="result.used" />
+      <ColorLegend :used="result.used" :active-index="highlightIndex" @select="onLegendSelect" />
 
       <view class="beads__actions">
         <view
@@ -183,10 +235,15 @@ import { textColorOn } from '@/utils/color'
 const instance = getCurrentInstance()?.proxy
 
 const imagePath = ref('')
-const { params, result, generating, error, generate, editCell, reset } = useBeadPattern()
+const { params, result, generating, error, generate, editCell, recolor, eraseAll, undo, canUndo, reset } =
+  useBeadPattern()
 const preview = useBeadCanvas('#preview-canvas')
 const exporter = useBeadExport('#export-canvas')
 const editMode = ref(false)
+/** 隔离高亮的色板下标（点图例颜色定位该色）；null = 不高亮 */
+const highlightIndex = ref<number | null>(null)
+/** "全部改色"时正在选目标色 */
+const pickingTarget = ref(false)
 const selectedCell = ref<{ x: number; y: number; paletteIndex: number } | null>(null)
 const activePaletteIndex = ref<number | null>(null)
 const ignoreNextTap = ref(false)
@@ -204,6 +261,20 @@ const dirty = computed(() => {
     generated.paletteKey !== params.paletteKey ||
     generated.removeBackground !== params.removeBackground
   )
+})
+
+/** 底部面板形态：逐格编辑 / 隔离高亮(批量改色擦除) / 选目标色 / 无 */
+const bottomMode = computed<'none' | 'edit' | 'highlight' | 'pick-target'>(() => {
+  if (editMode.value) return 'edit'
+  if (pickingTarget.value) return 'pick-target'
+  if (highlightIndex.value !== null) return 'highlight'
+  return 'none'
+})
+const panelOpen = computed(() => bottomMode.value !== 'none')
+
+const highlightedColor = computed(() => {
+  if (highlightIndex.value === null || !result.value) return null
+  return getPalette(result.value.params.paletteKey).colors[highlightIndex.value] ?? null
 })
 
 const editPaletteColors = computed(() => {
@@ -246,7 +317,7 @@ const selectedCellText = computed(() => {
 
 const activeBrushText = computed(() => {
   if (activePaletteIndex.value === null) return '未选'
-  if (activePaletteIndex.value === EMPTY_CELL) return '空格'
+  if (activePaletteIndex.value === EMPTY_CELL) return '橡皮擦'
   const color = editPaletteColors.value[activePaletteIndex.value]
   return color ? displayCode(color.code) : '未知'
 })
@@ -275,6 +346,8 @@ async function pickImage() {
     imagePath.value = path
     reset()
     editMode.value = false
+    highlightIndex.value = null
+    pickingTarget.value = false
     selectedCell.value = null
     activePaletteIndex.value = null
     // 结果区 v-if 卸载会让缓存的 canvas 节点失效，必须释放重查
@@ -286,12 +359,19 @@ async function pickImage() {
 
 function onParamsChange() {
   editMode.value = false
+  highlightIndex.value = null
+  pickingTarget.value = false
   selectedCell.value = null
   activePaletteIndex.value = null
 }
 
 async function onGenerate() {
   if (generating.value || !imagePath.value) return
+  highlightIndex.value = null
+  pickingTarget.value = false
+  editMode.value = false
+  activePaletteIndex.value = null
+  await preview.setHighlight(null, null)
   const generated = await generate(imagePath.value)
   if (!generated) {
     uni.showToast({ title: error.value || '生成失败，请重试', icon: 'none' })
@@ -325,13 +405,76 @@ async function onSave() {
   await exporter.exportAndSave(result.value, instance)
 }
 
-function toggleEditMode() {
+async function toggleEditMode() {
   if (!result.value || dirty.value) return
   editMode.value = !editMode.value
   selectedCell.value = null
-  if (!editMode.value) {
+  if (editMode.value) {
+    // 进入逐格编辑：退出隔离高亮 / 选目标色
+    highlightIndex.value = null
+    pickingTarget.value = false
+    await preview.setHighlight(null, result.value, instance)
+  } else {
     activePaletteIndex.value = null
   }
+}
+
+/** 点图例颜色：隔离高亮该色（图纸里暗化其它聚焦该色），再点同一色取消 */
+async function onLegendSelect(paletteIndex: number) {
+  if (!result.value || dirty.value) return
+  const next = highlightIndex.value === paletteIndex ? null : paletteIndex
+  editMode.value = false
+  pickingTarget.value = false
+  selectedCell.value = null
+  activePaletteIndex.value = null
+  highlightIndex.value = next
+  await preview.setHighlight(next, result.value, instance)
+}
+
+/** 高亮色 → 进入选目标色，挑一个色把全部高亮格改成它 */
+function onRecolorAll() {
+  if (highlightIndex.value === null) return
+  pickingTarget.value = true
+}
+
+async function onPickTarget(targetIndex: number) {
+  if (!result.value || highlightIndex.value === null) return
+  const edited = recolor(highlightIndex.value, targetIndex)
+  highlightIndex.value = null
+  pickingTarget.value = false
+  if (edited) await preview.setHighlight(null, edited, instance)
+}
+
+async function onEraseAll() {
+  if (!result.value || highlightIndex.value === null) return
+  const edited = eraseAll(highlightIndex.value)
+  highlightIndex.value = null
+  if (edited) await preview.setHighlight(null, edited, instance)
+}
+
+async function onCancelHighlight() {
+  highlightIndex.value = null
+  if (result.value) await preview.setHighlight(null, result.value, instance)
+}
+
+function onCancelPick() {
+  pickingTarget.value = false
+}
+
+/** 橡皮擦开关：激活后点单格即擦除（与画笔互斥） */
+function toggleEraser() {
+  activePaletteIndex.value = activePaletteIndex.value === EMPTY_CELL ? null : EMPTY_CELL
+}
+
+/** 撤销最近一次编辑（单格画/擦、批量改色/擦除各算一步） */
+async function onUndo() {
+  if (!result.value) return
+  const restored = undo()
+  if (!restored) return
+  selectedCell.value = null
+  pickingTarget.value = false
+  // 保持当前隔离高亮（如有），用恢复后的结果重绘
+  await preview.setHighlight(highlightIndex.value, restored, instance)
 }
 
 async function onCanvasTap(event: unknown) {
@@ -408,7 +551,7 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
   gap: 24rpx;
   padding: 32rpx 32rpx 64rpx;
 
-  &--editing {
+  &--panel {
     padding-bottom: 280rpx;
   }
 
@@ -658,6 +801,43 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     color: #ffffff;
     font-size: $font-caption;
     font-weight: 600;
+  }
+
+  &__dock-eraser {
+    flex-shrink: 0;
+    padding: 10rpx 22rpx;
+    border-radius: $radius-sm;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+    color: $color-text-secondary;
+    font-size: $font-caption;
+    font-weight: 600;
+
+    &--active {
+      background-color: $color-primary;
+      border-color: $color-primary;
+      color: #ffffff;
+    }
+  }
+
+  &__dock-action {
+    flex-shrink: 0;
+    padding: 10rpx 22rpx;
+    border-radius: $radius-sm;
+    border: 2rpx solid transparent;
+    font-size: $font-caption;
+    font-weight: 600;
+
+    &--primary {
+      background-color: $color-primary;
+      color: #ffffff;
+    }
+
+    &--danger {
+      background-color: #fbecec;
+      border-color: #e6b3b3;
+      color: #b03a3a;
+    }
   }
 
   &__brush-strip {

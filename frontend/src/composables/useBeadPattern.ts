@@ -1,4 +1,4 @@
-import { reactive, ref, shallowRef } from 'vue'
+import { computed, reactive, ref, shallowRef } from 'vue'
 import type { BoardPlan, BoardPresetKey, PatternParams, PatternResult, UsedColor } from '@/types/beads'
 import { BOARD_PRESETS, DEFAULT_PARAMS, EMPTY_CELL } from '@/types/beads'
 import { getPalette, nearestBeadIndex } from '@/utils/beadPalette'
@@ -297,6 +297,13 @@ const MAX_MANUAL_LONG_SIDE = 104
  * 判定为有意特征（眼睛/高光/字迹）保留，不并入邻域；低于该值才是抗锯齿/压缩噪点，并入。
  * 选在 25：五官（眼黑 vs 肤色 ≈ 40+）远超此值必保，边缘抗锯齿中间色（≈10–22）会被清掉。 */
 const DESPECKLE_PRESERVE_DE = 25
+
+/** 描边取深色的最低深色占比（darkShare = 格内 luma<90 像素的 alpha 加权占比）。
+ *  只有深色占够份量的格子才取深色——描边细而贴曲线；深色占比很低（轮廓只是擦过一格角）的格子
+ *  不强制变深，否则会冒出孤立深色"毛刺"，让弧线轮廓参差发锯齿。旧阈值 0.05 太低，描边发胖还长毛刺。
+ *  不走面积平均：平均会在描边两侧生出过渡中间色（杂色）。要更平滑的弧线靠提格数（分辨率），不是靠过渡色。
+ *  0.35：真轮廓格（曲线穿过格中心、深色占多数）保留，擦角毛刺格丢弃。 */
+const DARK_MIN_SHARE = 0.35
 
 /** 由实际格数反推拼板方案：≤52 用小板，否则用 104 大板，不足自动拼多张。 */
 function gridToBoardPlan(gridW: number, gridH: number, presetKey: BoardPresetKey): BoardPlan {
@@ -643,14 +650,17 @@ function sampleGrid(
         const avgLuma = 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB
         const avgChroma = Math.max(avgR, avgG, avgB) - Math.min(avgR, avgG, avgB)
         let fired = false
-        // 深色细节（描边）：格内有深色少数且远暗于格平均 → 取深色，避免轮廓被冲淡成中灰。
-        // 彩度闸门：格平均本身已明显彩色（avgChroma 高）且深色只占少数时，深色是相邻描边渗进来的
-        // 边缘像素而非本格特征（如张嘴里的粉舌头格混进 1 个嘴框深像素）——此时保留彩色，不翻黑，
-        // 否则被深框包围的小彩色区会被一圈圈吞成纯黑。低彩度格（真描边，棕/灰）不受影响仍走深色。
+        // 描边二值化（dark 或 fill，绝不平均）：把深色与底色面积平均会得到过渡中间色，沿弧线轮廓
+        // 散落成一串各不相同的灰/中间豆色——正是用户看到的"杂色 + 锯齿"。所以轮廓边的格子只取其一：
+        //  - 深色占够份量（≥ DARK_MIN_SHARE）→ 取深色（描边本体）；
+        //  - 深色只是擦过（< DARK_MIN_SHARE）→ 取"非深色"部分的平均（纯底色），把深色像素剔除，不生中灰；
+        //  - 深色已主导（>0.8）→ 主色路径已取深色，不干涉。
+        // 彩度闸门：格平均已明显彩色且深色占少数时，深色是相邻描边渗进来的边缘像素而非本格特征
+        // （如张嘴里的粉舌头格混进嘴框深像素）——此时不取深色，避免彩色区被一圈圈吞成纯黑。
         if (darkA > 0) {
           const darkShare = darkA / sumA
           const colorfulCell = avgChroma > 50 && darkShare < 0.5
-          if (darkShare >= 0.05 && darkShare <= 0.8 && !colorfulCell) {
+          if (darkShare >= DARK_MIN_SHARE && darkShare <= 0.8 && !colorfulCell) {
             const dr = darkR / darkA
             const dg = darkG / darkA
             const db = darkB / darkA
@@ -659,6 +669,14 @@ function sampleGrid(
               outG = dg
               outB = db
               fired = true
+            }
+          } else if (darkShare < DARK_MIN_SHARE) {
+            // 擦边格：剔除深色像素取底色，避免深色×底色平均出中灰过渡杂色
+            const ndA = sumA - darkA
+            if (ndA > 0) {
+              outR = (sumR - darkR) / ndA
+              outG = (sumG - darkG) / ndA
+              outB = (sumB - darkB) / ndA
             }
           }
         }
@@ -746,7 +764,7 @@ function replacePaletteIndex(cells: Int16Array, from: number, to: number): numbe
 function mergeSimilarColorsByFrequency(
   cells: Int16Array,
   palette: ReturnType<typeof getPalette>,
-  threshold = 12,
+  threshold = 16,
 ): number {
   const counts = buildPaletteIndexCounts(cells)
   let nonEmpty = 0
@@ -773,19 +791,19 @@ function mergeSimilarColorsByFrequency(
 }
 
 /**
- * 描边归并：把"深色"里视觉近似的碎色（描边被抗锯齿拆成的暗红/灰紫/棕，彼此 ΔE 约 7-14）
- * 按频归并到最高频的那个深色，让描边变成一条连续色而非斑驳五六色。
+ * 描边归并：把所有"深色"碎色（描边被抗锯齿拆成的暗红/灰紫/棕，色相跨度大、彼此 ΔE 可达 30+）
+ * 一律并入最高频的那一个深色，让描边变成单色连续，彻底消除边缘杂色。
  *
- * 为什么单独做、且只在深色做：脸上肤色 vs 腮红 ΔE 仅 ~5，比描边碎色之间还近，纯全局阈值会把腮红
- * 一起压平。但描边碎色全是深色(luma<maxLuma)、肤色/腮红全是浅色——按明暗切开就能只动描边不碰脸。
- * 不设占比下限（描边各碎色占比都 >1%，这正是它们逃过 mergeSimilarColorsByFrequency 的原因）。
+ * 为什么不限 ΔE：描边碎色是同一条线的抗锯齿过渡，色相跨度大（暗红↔灰紫↔棕），ΔE 常 >20，
+ * 用阈值总会漏掉一半——这正是边缘杂色的根源。它们都属于"深色"，按 luma 切出来全归并最稳。
+ * 为什么只在深色做：脸上肤色 vs 腮红 ΔE 仅 ~5 但都是浅色(luma>maxLuma)，不在归并范围，不会被误并。
  * protectLuma：近黑(luma<protectLuma)的源不并走，保住眼珠/瞳孔这类最深的五官不被并成中性深灰。
+ * 代价：若图里另有与描边亮度相当的独立深色元素（深色衣服/配件），也会被并进描边主色——单主体贴纸/卡通无此问题。
  */
 function consolidateDarkOutline(
   cells: Int16Array,
   palette: ReturnType<typeof getPalette>,
-  threshold = 14,
-  maxLuma = 100,
+  maxLuma = 112,
   protectLuma = 55,
 ): number {
   const luma = (idx: number) => {
@@ -794,22 +812,15 @@ function consolidateDarkOutline(
   }
   const counts = buildPaletteIndexCounts(cells)
   const dark = [...counts.keys()].filter((idx) => luma(idx) <= maxLuma)
+  if (dark.length < 2) return 0
+  // 最高频深色 = 描边主色，其余深色（除近黑五官）一律并入它
   dark.sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0))
-  const replaced = new Set<number>()
+  const anchor = dark[0]
   let changed = 0
-  for (let i = 0; i < dark.length; i++) {
-    const target = dark[i]
-    if (replaced.has(target)) continue
-    const targetLab = palette.colors[target].lab
-    for (let j = i + 1; j < dark.length; j++) {
-      const source = dark[j]
-      if (replaced.has(source)) continue
-      if (luma(source) < protectLuma) continue // 近黑五官（眼珠）保留
-      if (deltaE2000(palette.colors[source].lab, targetLab) < threshold) {
-        changed += replacePaletteIndex(cells, source, target)
-        replaced.add(source)
-      }
-    }
+  for (let j = 1; j < dark.length; j++) {
+    const source = dark[j]
+    if (luma(source) < protectLuma) continue // 近黑五官（眼珠）保留
+    changed += replacePaletteIndex(cells, source, anchor)
   }
   return changed
 }
@@ -946,6 +957,42 @@ export function updatePatternCell(
   }
 }
 
+/** 把图纸上某一色全部改成另一色（隔离高亮后的"全部改色"）。不可变更新 + 重计图例 */
+export function recolorColor(
+  result: PatternResult,
+  fromIndex: number,
+  toIndex: number,
+): PatternResult {
+  if (fromIndex === toIndex || fromIndex < 0) return result
+  const cells = new Int16Array(result.cells)
+  let changed = false
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === fromIndex) {
+      cells[i] = toIndex
+      changed = true
+    }
+  }
+  if (!changed) return result
+  const { used, totalBeads } = countColors(cells, result.params.paletteKey)
+  return { ...result, cells, used, totalBeads }
+}
+
+/** 把图纸上某一色全部擦除为空格（隔离高亮后的"全部擦除"）。不可变更新 + 重计图例 */
+export function eraseColor(result: PatternResult, fromIndex: number): PatternResult {
+  if (fromIndex < 0) return result
+  const cells = new Int16Array(result.cells)
+  let changed = false
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === fromIndex) {
+      cells[i] = EMPTY_CELL
+      changed = true
+    }
+  }
+  if (!changed) return result
+  const { used, totalBeads } = countColors(cells, result.params.paletteKey)
+  return { ...result, cells, used, totalBeads }
+}
+
 export async function generatePattern(src: string, params: PatternParams): Promise<PatternResult> {
   const loaded = await loadImagePixels(src)
   const buf = params.removeBackground
@@ -992,12 +1039,36 @@ export function useBeadPattern() {
   const result = shallowRef<PatternResult | null>(null)
   const generating = ref(false)
   const error = ref('')
+  /** 编辑历史栈（每次真实改动前的快照），用于撤销。生成/重置时清空 */
+  const history = shallowRef<PatternResult[]>([])
+  const MAX_HISTORY = 30
+  const canUndo = computed(() => history.value.length > 0)
+
+  function pushHistory(state: PatternResult): void {
+    const next =
+      history.value.length >= MAX_HISTORY
+        ? [...history.value.slice(history.value.length - MAX_HISTORY + 1), state]
+        : [...history.value, state]
+    history.value = next
+  }
+
+  /** 撤销最近一次编辑，返回恢复后的结果（无历史返回 null） */
+  function undo(): PatternResult | null {
+    if (history.value.length === 0) return null
+    const arr = [...history.value]
+    const prev = arr.pop()!
+    history.value = arr
+    result.value = prev
+    return prev
+  }
 
   async function generate(src: string): Promise<PatternResult | null> {
     generating.value = true
     error.value = ''
     try {
       result.value = await generatePattern(src, params)
+      // 新生成是新的基线，清空编辑历史
+      history.value = []
       return result.value
     } catch (err) {
       error.value = err instanceof Error ? err.message : '生成失败，请重试'
@@ -1009,14 +1080,42 @@ export function useBeadPattern() {
 
   function editCell(x: number, y: number, paletteIndex: number): PatternResult | null {
     if (!result.value) return null
-    result.value = updatePatternCell(result.value, x, y, paletteIndex)
+    const prev = result.value
+    const next = updatePatternCell(prev, x, y, paletteIndex)
+    if (next !== prev) {
+      pushHistory(prev)
+      result.value = next
+    }
+    return result.value
+  }
+
+  function recolor(fromIndex: number, toIndex: number): PatternResult | null {
+    if (!result.value) return null
+    const prev = result.value
+    const next = recolorColor(prev, fromIndex, toIndex)
+    if (next !== prev) {
+      pushHistory(prev)
+      result.value = next
+    }
+    return result.value
+  }
+
+  function eraseAll(fromIndex: number): PatternResult | null {
+    if (!result.value) return null
+    const prev = result.value
+    const next = eraseColor(prev, fromIndex)
+    if (next !== prev) {
+      pushHistory(prev)
+      result.value = next
+    }
     return result.value
   }
 
   function reset() {
     result.value = null
     error.value = ''
+    history.value = []
   }
 
-  return { params, result, generating, error, generate, editCell, reset }
+  return { params, result, generating, error, generate, editCell, recolor, eraseAll, undo, canUndo, reset }
 }

@@ -29,6 +29,8 @@ export function useBeadCanvas(selector: string) {
   const pinching = ref(false)
   const pinchStartDistance = ref(0)
   const pinchStartZoom = ref(1)
+  /** 隔离高亮的色板下标（null = 不高亮）。改值后需 setHighlight 重绘 */
+  const highlightIndex = ref<number | null>(null)
 
   async function ensureNode(component?: unknown): Promise<CanvasNode> {
     if (!node.value) {
@@ -56,7 +58,19 @@ export function useBeadCanvas(selector: string) {
     contentWidth.value = cssWidth.value
     contentHeight.value = cssHeight.value
 
-    renderSheet(ctx, result, layout)
+    renderSheet(ctx, result, layout, highlightIndex.value ?? undefined)
+  }
+
+  /** 设置/取消隔离高亮并重绘。index=null 关闭高亮 */
+  async function setHighlight(
+    index: number | null,
+    result: PatternResult | null,
+    component?: unknown,
+  ): Promise<void> {
+    highlightIndex.value = index
+    if (result) {
+      await render(result, component)
+    }
   }
 
   async function getCellFromEvent(
@@ -178,6 +192,7 @@ export function useBeadCanvas(selector: string) {
     lastLayout.value = null
     pinching.value = false
     pinchStartDistance.value = 0
+    highlightIndex.value = null
   }
 
   return {
@@ -189,7 +204,9 @@ export function useBeadCanvas(selector: string) {
     scrollLeft,
     scrollTop,
     pinching,
+    highlightIndex,
     render,
+    setHighlight,
     setZoom,
     onScroll,
     onPinchStart,

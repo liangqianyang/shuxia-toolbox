@@ -1,7 +1,7 @@
 <template>
   <view class="home">
     <view class="home__header">
-      <text class="home__title">树下小屋的工具箱</text>
+      <text class="home__title">枫叶小屋的工具箱</text>
       <text class="home__slogan">小工具，慢生活</text>
     </view>
     <view class="home__tools">

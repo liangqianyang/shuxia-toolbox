@@ -120,6 +120,9 @@ export function renderSheet(
   ctx: CanvasRenderingContext2D,
   result: PatternResult,
   layout: SheetLayout,
+  /** 隔离高亮的色板下标：传入时只点亮该色，其余格子（含空格）罩暗纱聚焦该色；
+   *  导出与默认预览不传 → 无暗纱，不影响。 */
+  highlightIndex?: number,
 ): void {
   const { width: gridW, height: gridH, cells, used, totalBeads } = result
   const palette = getPalette(result.params.paletteKey)
@@ -211,6 +214,21 @@ export function renderSheet(
         ctx.fillStyle = textColorOn(color.rgb)
         ctx.font = `${cellFont(code, cellPx)}px sans-serif`
         ctx.fillText(code, (edgeX(x) + edgeX(x + 1)) / 2, (edgeY(y) + edgeY(y + 1)) / 2)
+      }
+    }
+  }
+
+  // 隔离高亮：只点亮某一色，其余格子（含空格）罩一层暗纱聚焦该色。色号/网格线一并变暗。
+  if (highlightIndex != null) {
+    ctx.fillStyle = 'rgba(18, 18, 18, 0.55)'
+    for (let y = 0; y < gridH; y++) {
+      const py = edgeY(y)
+      const ph = edgeY(y + 1) - py
+      for (let x = 0; x < gridW; x++) {
+        if (cells[y * gridW + x] === highlightIndex) continue
+        const px = edgeX(x)
+        const pw = edgeX(x + 1) - px
+        ctx.fillRect(px, py, pw, ph)
       }
     }
   }
