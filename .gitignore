@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+vendor/
+backend/vendor/
+backend/runtime/*
+!backend/runtime/.gitkeep
+frontend/dist/
+frontend/unpackage/
+.env
+.idea/
+frontend/test/.algo.test.cjs
