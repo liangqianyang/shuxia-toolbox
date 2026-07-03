@@ -7,6 +7,7 @@ import { renderTimelineCard } from './timelineCard'
 import { renderPackingCard } from './packingCard'
 import { renderMultiRouteCard } from './multiRouteCard'
 import { renderPhotoTimelineCard } from './photoTimelineCard'
+import { renderSubwayCard } from './subwayCard'
 
 export { CARD_W, CARD_H } from './theme'
 
@@ -88,6 +89,12 @@ export const GUIDE_CARDS: GuideCard[] = [
     mapSource: null,
     needsStopPhotos: true,
     render: (ctx, trip, _map, bg, photos) => renderPhotoTimelineCard(ctx, trip, null, bg, photos),
+  },
+  {
+    key: 'subway',
+    label: '地铁线路图',
+    mapSource: null,
+    render: (ctx, trip, _map, bg) => renderSubwayCard(ctx, trip, null, bg),
   },
 ]
 
