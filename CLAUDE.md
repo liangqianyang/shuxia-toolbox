@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-枫叶小屋的工具箱 (shuxia-toolbox) — a WeChat mini-program toolbox. The only current tool is a 拼豆图纸生成器 (Perler/fuse-bead pattern generator): the user uploads an image and the app produces a bead grid pattern plus per-color bead counts.
+枫叶小屋的工具箱 (shuxia-toolbox) — a WeChat mini-program toolbox. Tools: 拼豆图纸生成器 (image → bead grid + per-color counts) and 旅游攻略图生成器 (origin + destination + travel-mode → AI-planned trip → **multiple independent 小红书 cards** + copy-paste caption; places tagged sight/food/stay/shop/transit).
 
-Key design decision: all image processing runs **client-side** via Canvas (no image upload) to reduce privacy/audit risk. The backend is an API skeleton reserved for future features (AI cutout, saving works, palette management) and is currently **not consumed by the frontend** — there are no network calls in the frontend code.
+Key design decision: image processing (拼豆) runs **client-side** via Canvas (no image upload) to reduce privacy/audit risk. The 旅游攻略 tool is the **backend-consuming** tool — it calls `POST /api/travel/plan` (AI itinerary + geocode + directions + two staticMaps) and `GET /api/travel/geocode` (Tencent-map suggestion proxy behind a `MapProvider` interface, swappable to Amap). Output is **not one long image** but a set of independent 1080×1440 (3:4) 小红书 cards — 路线规划图(真实/示意) / 景点分布图 / 美食推荐图 / 行程时间线 — each individually saved to album, plus an AI-generated 小红书 caption (title/body/tags) with one-click copy. Cards are Canvas-composited (crisp Chinese text) with a procedural "手绘水彩" theme (`utils/guide/theme.ts` — no external PNG assets, no image-gen); real-map cards overlay Tencent staticMap. Frontend `API_BASE` constant (in `useTravelEditor.ts`) points at the backend; note the dev container's 9501 is **not** mapped to the host, so reaching it requires port mapping or an exposed backend URL + WeChat legal-domain config.
 
 ## Commands
 
@@ -25,10 +25,11 @@ No lint script is configured.
 ### Backend (`backend/`, runs inside Docker container `php84-fpm`)
 
 ```bash
-docker exec -w /var/www/html/shuxia-toolbox/backend php84-fpm composer install
-docker exec -w /var/www/html/shuxia-toolbox/backend php84-fpm php bin/hyperf.php start
-docker exec -w /var/www/html/shuxia-toolbox/backend php84-fpm composer cs:fix   # php-cs-fixer
-curl http://127.0.0.1:9501/health   # health check
+docker exec -w /home/user/www/shuxia-toolbox/backend php84-fpm composer install
+docker exec -w /home/user/www/shuxia-toolbox/backend php84-fpm php bin/hyperf.php start
+docker exec -w /home/user/www/shuxia-toolbox/backend php84-fpm composer cs:fix   # php-cs-fixer
+# 注：容器 9501 未映射到宿主机，宿主机 curl 127.0.0.1:9501 不通；在容器内 curl：
+docker exec php84-fpm curl -s http://127.0.0.1:9501/health   # health check（容器内）
 ```
 
 No test framework is configured.
@@ -49,10 +50,14 @@ No test framework is configured.
 ### Backend — PHP 8.4 + Hyperf 3.2 (beta) on Swoole
 
 - Entry point `bin/hyperf.php`; Swoole HTTP server on port 9501 (env `SERVER_PORT`).
-- Routes defined in `config/routes.php`: `GET /health`, `GET /api/health`, `GET /api/beads/palettes`, `POST /api/beads/estimate`.
+- Routes defined in `config/routes.php`: `GET /health`, `GET /api/health`, `GET /api/beads/palettes`, `POST /api/beads/estimate`, `GET /api/travel/geocode` (Tencent suggestion proxy), `POST /api/travel/plan` (the main 旅游攻略 route). `plan` input: `origin`(可选)/`destination`/`travel_mode`(walking|cycling|driving|transit)/`days`/`daily_hours`/`preferences`. `plan` output: `{title, days[stops{...,lng,lat,travelToNext}], food[{name,shop,dishes,note}], tips[], xhs{title,body,tags}, routeMapImage, poiMapImage}`.
 - Response envelope: `{code, message, data}` with code 0 = success, 422 = validation error.
 - `app/Service/BeadPaletteService.php` holds hard-coded palettes (`basic-24`, `mard-291`, and `mard-221` derived from MARD by filtering prefix groups A–H,M).
 - No database, no middleware, no auth wired in. `config/autoload/wechat.php` holds placeholder mini-program credentials (`WECHAT_MINI_APPID`/`WECHAT_MINI_SECRET` from env).
+- Travel service chain: `TravelController`→`TravelService`→`MapProvider` + `AiProvider`. `TravelService::plan` = AI itinerary (`ZhipuProvider`, glm-5.2, web_search on, thinking disabled — one call returns title/days/food/tips/xhs) + best-effort per-stop geocode + adjacent-stop `directions` (mode-mapped) + two staticMaps (`routeMapImage` markers+paths, `poiMapImage` markers-only). Interfaces bound in `config/autoload/dependencies.php` (swap Amap/OpenAI = one line + a Provider class). Uses Tencent **suggestion** (`/ws/place/v1/suggestion`, not geocoder — the dev key has only suggestion enabled) over **HTTP** (Swoole lacks openssl). Guzzle is the only HTTP client.
+- **Travel-mode / directions constraint**: Tencent `directions` supports walking/cycling/driving only; **transit is NOT supported** → `plan` maps `transit`→driving for time estimation while keeping the user's original `transit` mode on `travelToNext.mode` (so the frontend shows the 公交 icon). 缆车/索道 also unsupported — AI writes those into stop `note` only. The `MapProvider::explore`周边搜索 exists but is unused (that key's explore ignores keyword filtering; 美食 now comes from AI `food`).
+- **Swoole hook flags** (`bin/hyperf.php`): `SWOOLE_HOOK_ALL ^ SWOOLE_HOOK_SOCKETS ^ SWOOLE_HOOK_CURL`. `SWOOLE_HOOK_CURL` is disabled because Swoole's curl hook breaks Guzzle (curl option 20312) and Tencent rejects Guzzle's StreamHandler (status 121); disabling it routes Guzzle through the native PHP curl ext (= system libcurl), behaving like shell curl. Trade-off: curl calls block the worker (acceptable — geocode is the only curl user, low frequency). Tencent key requires per-key **quota allocation** in the console or calls return status 121.
+- Container PHP needs the **pcntl** extension (Hyperf DI scan requires it). A container rebuild once dropped it (port-mapping change) and `php bin/hyperf.php start` failed with "Missing pcntl extension"; fix in-container with `docker-php-ext-install pcntl`, permanently via `RUN docker-php-ext-install pcntl` in the Dockerfile.
 
 ### Cross-cutting concern
 
