@@ -24,6 +24,38 @@ export interface ElementRect {
   height: number
 }
 
+/**
+ * 在指定 canvas 上异步加载一张「可绘制图片」。
+ * - MP：image 由目标 canvas.createImage() 创建，**绑定到该 canvas**，只能绘制在该 canvas 上
+ *   （预览 canvas 与导出 canvas 各自的图必须分别加载）
+ * - H5：普通 new Image()，可绘制到任意 canvas
+ * 加载失败 / 空 src 一律解析为 null，调用方按「无配图」回退（画类型色块）。
+ */
+export function loadDrawableImage(canvas: any, src: string): Promise<CanvasImageSource | null> {
+  if (!src) return Promise.resolve(null)
+  // #ifdef MP-WEIXIN
+  return new Promise((resolve) => {
+    if (!canvas || typeof canvas.createImage !== 'function') {
+      resolve(null)
+      return
+    }
+    const img = canvas.createImage()
+    img.onload = () => resolve(img as CanvasImageSource)
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+  // #endif
+
+  // #ifdef H5
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+  // #endif
+}
+
 /** 选一张图，返回临时路径（H5 下是 blob/objectURL） */
 export function chooseImage(): Promise<string> {
   return new Promise((resolve, reject) => {

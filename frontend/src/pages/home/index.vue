@@ -11,6 +11,12 @@
         description="上传图片，生成拼豆图纸和用豆量统计"
         @tap="goBeads"
       />
+      <ToolCard
+        icon="🗺️"
+        title="旅游攻略图生成器"
+        description="编辑行程，生成可分享的旅游攻略图"
+        @tap="goTravel"
+      />
     </view>
   </view>
 </template>
@@ -20,6 +26,10 @@ import ToolCard from '@/components/ToolCard.vue'
 
 function goBeads() {
   uni.navigateTo({ url: '/pages/beads/index' })
+}
+
+function goTravel() {
+  uni.navigateTo({ url: '/pages/travel/index' })
 }
 </script>
 

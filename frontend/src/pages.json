@@ -11,6 +11,12 @@
       "style": {
         "navigationBarTitleText": "拼豆图纸生成器"
       }
+    },
+    {
+      "path": "pages/travel/index",
+      "style": {
+        "navigationBarTitleText": "旅游攻略图生成器"
+      }
     }
   ],
   "globalStyle": {

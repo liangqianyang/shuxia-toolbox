@@ -9,9 +9,7 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 
 final class BeadController
 {
-    public function __construct(private readonly BeadPaletteService $paletteService)
-    {
-    }
+    public function __construct(private readonly BeadPaletteService $paletteService) {}
 
     public function palettes(): array
     {
