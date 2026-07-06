@@ -9,6 +9,11 @@ import { preloadMapImage } from '@/utils/stopImage'
  * 每张卡片一个页内 <canvas>（固定 1080×1440），预览即导出（CSS 缩放显示，canvas 本身满分辨率）。
  * MP 限制：真实底图必须加载到即将绘制它的那张 canvas 上，故逐卡片各自预加载再渲染。
  * 平台差异全部收敛在 canvasAdapter，本文件无 #ifdef。
+ *
+ * 性能优化：
+ * - loadingIndex 追踪当前渲染进度（UI 可据此显示「第 N/M 张」）
+ * - 单张出错不阻断其他卡片，失败数记录在 renderErrors
+ * - 每次渲染前 clearRect 清空 canvas，防止鬼影
  */
 export function useTravelImages() {
   const cards = GUIDE_CARDS
@@ -16,6 +21,10 @@ export function useTravelImages() {
   const cssHeight = ref(0)
   const rendered = ref(false)
   const saving = ref(false)
+  /** 当前正在渲染第几张（0-based），-1=未开始，cards.length=全部完成 */
+  const loadingIndex = ref(-1)
+  /** 渲染失败的卡片 key 列表（用于 UI 提示）*/
+  const renderErrors = ref<string[]>([])
   const nodes = shallowRef<Map<number, CanvasNode>>(new Map())
 
   function selectorOf(index: number): string {
@@ -48,10 +57,27 @@ export function useTravelImages() {
     const { canvas, ctx } = await nodeOf(index, component)
     canvas.width = CARD_W
     canvas.height = CARD_H
+    // 清空画布防止上次内容鬼影
+    ctx.clearRect(0, 0, CARD_W, CARD_H)
+
     const mapImage = await preloadMapImage(canvas, cardMapUrl(trip, card))
-    // 自定义底图：每张 canvas 各自加载（MP 下图片绑定到目标 canvas）
     const bgImage = bgUrl ? await preloadMapImage(canvas, bgUrl) : null
-    card.render(ctx, trip, mapImage, bgImage)
+
+    // 预加载景点照片（仅 needsStopPhotos=true 的卡片）
+    let stopPhotos: Map<string, CanvasImageSource> | undefined
+    if (card.needsStopPhotos) {
+      stopPhotos = new Map()
+      for (const day of trip.days) {
+        for (const stop of day.stops) {
+          if (stop.photo) {
+            const img = await preloadMapImage(canvas, stop.photo)
+            if (img) stopPhotos.set(stop.id, img)
+          }
+        }
+      }
+    }
+
+    card.render(ctx, trip, mapImage, bgImage, stopPhotos)
   }
 
   /**
@@ -67,9 +93,18 @@ export function useTravelImages() {
       rendered.value = true
       await nextTick()
     }
+    renderErrors.value = []
     for (let i = 0; i < cards.length; i++) {
-      await renderCard(i, cards[i], trip, component, cardBgs?.[i] ?? null)
+      loadingIndex.value = i
+      try {
+        await renderCard(i, cards[i], trip, component, cardBgs?.[i] ?? null)
+      } catch (err) {
+        // 单张失败不阻断后续，记录供 UI 提示
+        renderErrors.value.push(cards[i].key)
+        console.warn(`[useTravelImages] 卡片 ${cards[i].key} 渲染失败:`, err)
+      }
     }
+    loadingIndex.value = cards.length
   }
 
   /** 保存单张到相册；授权被拒引导去设置页 */
@@ -124,9 +159,11 @@ export function useTravelImages() {
   function release(): void {
     nodes.value.clear()
     rendered.value = false
+    loadingIndex.value = -1
+    renderErrors.value = []
   }
 
-  return { cards, cssWidth, cssHeight, rendered, saving, renderAll, saveOne, saveAll, release }
+  return { cards, cssWidth, cssHeight, rendered, saving, loadingIndex, renderErrors, renderAll, saveOne, saveAll, release }
 }
 
 function isAuthError(err: unknown): boolean {

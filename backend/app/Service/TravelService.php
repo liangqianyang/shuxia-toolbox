@@ -32,7 +32,23 @@ final class TravelService
      *
      * @param array{destination: string, days: int, daily_hours: float, preferences?: string, origin?: ?string, travel_mode?: string} $input
      *
-     * @return array{title: string, routeMapImage: string|null, poiMapImage: string|null, food: array<int, array{name: string, shop: string, dishes: array<int, string>, note: string}>, tips: array<int, string>, xhs: array{title: string, body: string, tags: array<int, string>}, days: array<int, array{index: int, title: string, stops: array<int, array{name: string, type: string, time: string, note: string, lng: float|null, lat: float|null, travelToNext: array{mode: string, distanceM: int, durationMin: int}|null}>}>}
+     * @return array{
+     *   title: string,
+     *   routeMapImage: string|null,
+     *   poiMapImage: string|null,
+     *   cityRouteMapImage: string|null,
+     *   intercity: array|null,
+     *   packingTips: array<int, string>,
+     *   food: array<int, array{name: string, shop: string, dishes: array<int, string>, note: string}>,
+     *   tips: array<int, string>,
+     *   xhs: array{title: string, body: string, tags: array<int, string>},
+     *   days: array<int, array{
+     *     index: int,
+     *     title: string,
+     *     routeTag?: string,
+     *     stops: array<int, array{name: string, type: string, time: string, note: string, lng: float|null, lat: float|null, travelToNext: array{mode: string, distanceM: int, durationMin: int}|null}>
+     *   }>
+     * }
      */
     public function plan(array $input): array
     {

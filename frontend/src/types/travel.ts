@@ -1,6 +1,21 @@
 /** 地点类型：攻略图核心维度，每种带 emoji icon + 主题色 */
 export type PoiType = 'sight' | 'food' | 'stay' | 'shop' | 'transit'
 
+/** 活动类型（小时粒度时间线用，覆盖 PoiType 并增加 rest/shopping） */
+export type ActivityType = 'sight' | 'food' | 'rest' | 'transit' | 'shopping'
+
+/** 小时粒度活动条目（用于时间线卡片细化展示） */
+export interface ActivityItem {
+  /** 时间点，如「09:30」 */
+  time: string
+  /** 活动类型 */
+  type: ActivityType
+  /** 活动名称，如「参观正殿」 */
+  name: string
+  /** 时长（分钟）；可空 */
+  duration?: number
+}
+
 /** 出行方式：决定后端路线规划模式 + 卡片交通图标 */
 export type TravelMode = 'walking' | 'cycling' | 'driving' | 'transit' | 'train'
 
@@ -24,6 +39,8 @@ export interface Stop {
   travelToNext: { mode: string; distanceM: number; durationMin: number } | null
   /** 配图临时路径（chooseImage 返回）；可空 */
   photo: string | null
+  /** 小时粒度子活动（时间线升级后使用，AI 规划时返回）；可空 */
+  activities?: ActivityItem[]
 }
 
 /** 一天的行程 */
@@ -35,6 +52,8 @@ export interface Day {
   title: string
   /** 当天地点序列（顺序即路线顺序） */
   stops: Stop[]
+  /** AI 标注的路线主题标签，如「西湖线」「灵隐茶山线」；用于多路线分区地图；可空 */
+  routeTag?: string
 }
 
 /** 美食推荐（AI 生成，美食推荐图数据源） */
@@ -94,6 +113,8 @@ export interface Trip {
   /** 跨城段（出发地→目的地，用户所选方式）；无出发地或 geocode 失败时为 null */
   intercity: IntercityLeg | null
   days: Day[]
+  /** 出行清单（AI 生成，12-15项，出行清单卡片数据源）；可空 */
+  packingTips?: string[]
 }
 
 /** 攻略图渲染参数（控制版式，区别于 Trip 数据本身） */

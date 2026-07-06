@@ -19,11 +19,13 @@ interface AiProvider
      *     days: array<int, array{
      *         index: int,
      *         title: string,
+     *         routeTag?: string,
      *         stops: array<int, array{name: string, type: string, time: string, note: string}>
      *     }>,
      *     food: array<int, array{name: string, shop: string, dishes: array<int, string>, note: string}>,
      *     tips: array<int, string>,
-     *     xhs: array{title: string, body: string, tags: array<int, string>}
+     *     xhs: array{title: string, body: string, tags: array<int, string>},
+     *     packingTips: array<int, string>
      * }
      */
     public function generateItinerary(array $input): array;

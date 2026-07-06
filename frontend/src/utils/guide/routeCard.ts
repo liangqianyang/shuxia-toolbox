@@ -16,6 +16,9 @@ import {
   modeLabel,
 } from './theme'
 
+/** DAY N 对应色（与 timelineCard 保持一致）*/
+const DAY_COLORS = ['#F6A6A1', '#A8D5A2', '#9FC3F0', '#F3C98B', '#C9A8E0']
+
 /**
  * 路线规划图（1080×1440）。
  * variant='real'：腾讯 staticMap 真实底图。
@@ -23,14 +26,20 @@ import {
  *     （方式/距离/时长），市内细节交给「景点分布图」「行程时间线」。
  *   - 无跨城段：全站 markers + 按天折线 + 下方站点清单。
  * variant='schematic'：routeProject 手绘示意（编号点 + 连线 + 跨城虚线）+ 站点清单。
+ * variant='by-day'：按天分色地图（底图 + 编号点按天染色 + 每天区块清单）。
  */
 export function renderRouteCard(
   ctx: CanvasRenderingContext2D,
   trip: Trip,
-  variant: 'real' | 'schematic',
+  variant: 'real' | 'schematic' | 'by-day',
   mapImage: CanvasImageSource | null,
   bgImage: CanvasImageSource | null = null,
 ): void {
+  if (variant === 'by-day') {
+    renderByDayCard(ctx, trip, mapImage, bgImage)
+    return
+  }
+
   drawBackground(ctx, bgImage)
   const allStops = trip.days.flatMap((d) => d.stops)
   const intercity = trip.intercity ?? null
@@ -122,6 +131,257 @@ export function renderRouteCard(
   })
 
   drawFooter(ctx)
+}
+
+/** 按天分色路线图：底图（或示意底）+ 每天编号点按 DAY_COLORS 染色 + 下方按天分色清单 */
+function renderByDayCard(
+  ctx: CanvasRenderingContext2D,
+  trip: Trip,
+  mapImage: CanvasImageSource | null,
+  bgImage: CanvasImageSource | null,
+): void {
+  drawBackground(ctx, bgImage)
+  const days = trip.days.filter((d) => d.stops.length > 0)
+
+  const subtitleParts: string[] = []
+  days.forEach((d, i) => {
+    const tag = d.routeTag || `Day ${d.index}`
+    const color = DAY_COLORS[i % DAY_COLORS.length]
+    subtitleParts.push(`${tag}`)
+    void color // 仅注释用途
+  })
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : '按天分区游览'
+  const bannerBottom = drawBanner(ctx, trip.title || '分日游览路线', subtitle, '📅')
+
+  // ---- 地图区 ----
+  const mapX = 64
+  const mapY = bannerBottom + 28
+  const mapW = CARD_W - mapX * 2
+  const mapH = 480
+
+  ctx.save()
+  roundRect(ctx, mapX, mapY, mapW, mapH, 36)
+  ctx.clip()
+  if (mapImage) {
+    drawImageCover(ctx, mapImage, mapX, mapY, mapW, mapH)
+    // 叠加半透明蒙层，让按天色标注更清晰
+    ctx.fillStyle = 'rgba(255, 252, 245, 0.35)'
+    ctx.fillRect(mapX, mapY, mapW, mapH)
+  } else {
+    ctx.fillStyle = C.panelSoft
+    ctx.fillRect(mapX, mapY, mapW, mapH)
+    // 示意图：按天分色连线 + 编号点
+    drawByDaySchematic(ctx, trip, { x: mapX, y: mapY, width: mapW, height: mapH })
+  }
+  ctx.restore()
+  roundRect(ctx, mapX, mapY, mapW, mapH, 36)
+  ctx.lineWidth = 4
+  ctx.strokeStyle = C.line
+  ctx.stroke()
+
+  // ---- 图例（地图右上角浮层）----
+  if (days.length > 1) {
+    drawDayLegend(ctx, days, mapX + mapW - 16, mapY + 16)
+  }
+
+  // ---- 按天分色清单 ----
+  const listTop = mapY + mapH + 28
+  const listBottom = CARD_H - 96
+  const availH = listBottom - listTop
+  const dayBlockH = Math.min(180, Math.floor((availH - (days.length - 1) * 16) / days.length))
+
+  let y = listTop
+  days.forEach((day, di) => {
+    if (y + dayBlockH > listBottom) return
+    const color = DAY_COLORS[di % DAY_COLORS.length]
+    drawDayListBlock(ctx, day, di + 1, 64, y, CARD_W - 128, dayBlockH, color)
+    y += dayBlockH + 16
+  })
+
+  drawFooter(ctx)
+}
+
+/** 按天分色示意图（无底图兜底）：每天一种颜色，连线 + 编号点 */
+function drawByDaySchematic(
+  ctx: CanvasRenderingContext2D,
+  trip: Trip,
+  box: { x: number; y: number; width: number; height: number },
+): void {
+  const allStops = trip.days.flatMap((d) => d.stops)
+  const proj = projectRoute(allStops, box, { padding: 0.12 })
+
+  // 按 stopIndex 反查所属 day
+  let globalIdx = 0
+  const stopDayIdx: number[] = []
+  trip.days.forEach((d, di) => {
+    d.stops.forEach(() => {
+      stopDayIdx[globalIdx++] = di
+    })
+  })
+
+  proj.segments.forEach((seg, si) => {
+    const di = stopDayIdx[seg.points[0]?.stopIndex ?? 0] ?? 0
+    const color = DAY_COLORS[di % DAY_COLORS.length]
+    ctx.lineWidth = 6
+    ctx.strokeStyle = color
+    ctx.lineCap = 'round'
+    ctx.setLineDash([])
+    ctx.beginPath()
+    seg.points.forEach((p, pi) => (pi === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.stroke()
+    // 天间跨段虚线
+    if (si < proj.segments.length - 1) {
+      const last = seg.points[seg.points.length - 1]
+      const next = proj.segments[si + 1].points[0]
+      ctx.setLineDash([14, 12])
+      ctx.strokeStyle = C.line
+      ctx.beginPath()
+      ctx.moveTo(last.x, last.y)
+      ctx.lineTo(next.x, next.y)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+  })
+
+  proj.segments.forEach((seg) => {
+    seg.points.forEach((p) => {
+      const stop = allStops[p.stopIndex]
+      const di = stopDayIdx[p.stopIndex] ?? 0
+      const color = DAY_COLORS[di % DAY_COLORS.length]
+      // 带颜色圆点
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, 26, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.fillStyle = '#5A3B1E'
+      ctx.font = `bold 26px ${FONT}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(p.stopIndex + 1), p.x, p.y)
+      // 名称标签
+      ctx.fillStyle = C.name
+      ctx.font = `bold 28px ${FONT}`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      const label = truncateText(ctx, stop?.name || '', 160)
+      ctx.lineWidth = 5
+      ctx.strokeStyle = C.panelSoft
+      ctx.strokeText(label, p.x + 34, p.y)
+      ctx.fillText(label, p.x + 34, p.y)
+    })
+  })
+}
+
+/** 地图右上角图例：Day 1 ● / Day 2 ● 等小胶囊 */
+function drawDayLegend(
+  ctx: CanvasRenderingContext2D,
+  days: Trip['days'],
+  rightX: number,
+  topY: number,
+): void {
+  const itemH = 40
+  const padX = 16
+  const gap = 8
+
+  let y = topY
+  days.forEach((day, di) => {
+    const color = DAY_COLORS[di % DAY_COLORS.length]
+    const tag = day.routeTag || `Day ${day.index}`
+    ctx.font = `bold 26px ${FONT}`
+    const tw = ctx.measureText(tag).width
+    const pillW = tw + padX * 2 + 28 + 8 // 28 = dot space
+    const x = rightX - pillW
+
+    roundRect(ctx, x, y, pillW, itemH, itemH / 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fill()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+
+    // 彩色圆点
+    ctx.beginPath()
+    ctx.arc(x + padX + 10, y + itemH / 2, 8, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+
+    ctx.fillStyle = C.primaryDark
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(tag, x + padX + 28, y + itemH / 2)
+
+    y += itemH + gap
+  })
+}
+
+/** 单天清单区块：彩色左侧标识 + 站点行 */
+function drawDayListBlock(
+  ctx: CanvasRenderingContext2D,
+  day: Trip['days'][0],
+  di: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+): void {
+  roundRect(ctx, x, y, w, h, 20)
+  ctx.fillStyle = C.panel
+  ctx.fill()
+  ctx.lineWidth = 3
+  ctx.strokeStyle = color + '88'
+  ctx.stroke()
+
+  // 左侧色块
+  const sideW = 100
+  ctx.save()
+  roundRect(ctx, x, y, sideW, h, 20)
+  ctx.clip()
+  ctx.fillStyle = color
+  ctx.fillRect(x, y, sideW, h)
+  ctx.restore()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `bold 30px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`DAY`, x + sideW / 2, y + h / 2 - 18)
+  ctx.font = `bold 52px ${FONT}`
+  ctx.fillText(String(di), x + sideW / 2, y + h / 2 + 18)
+
+  // 站点名列表（横排，超出省略）
+  const stopsX = x + sideW + 20
+  const stopsW = w - sideW - 36
+  const stops = day.stops.slice(0, 5)
+  const slot = Math.min(180, Math.floor(stopsW / stops.length))
+
+  stops.forEach((s, i) => {
+    const sx = stopsX + slot * i
+    const cy = y + h / 2
+    // 彩色编号圆
+    ctx.beginPath()
+    ctx.arc(sx + 18, cy - 16, 16, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = `bold 20px ${FONT}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(String(i + 1), sx + 18, cy - 16)
+    // 名称
+    ctx.fillStyle = C.name
+    ctx.font = `26px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText(truncateText(ctx, s.name || '', slot - 8), sx + 4, cy + 4)
+  })
+  if (day.stops.length > 5) {
+    const moreX = stopsX + slot * 5
+    ctx.fillStyle = C.note
+    ctx.font = `26px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(`+${day.stops.length - 5}`, moreX, y + h / 2)
+  }
 }
 
 /**
@@ -224,3 +484,4 @@ function drawSchematic(
     })
   })
 }
+

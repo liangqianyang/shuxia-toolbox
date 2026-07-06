@@ -110,17 +110,21 @@ final class ZhipuProvider implements AiProvider
         $system = '你是专业旅游规划师。根据用户需求规划行程' . $searchClause . '。'
             . '只输出一个 JSON 对象，禁止 markdown 代码块、禁止任何解释文字。'
             . '结构：{"title":字符串,'
-            . '"days":[{"index":整数,"title":当日主题字符串,'
+            . '"days":[{"index":整数,"title":当日主题字符串,"routeTag":"当日路线主题如西湖线或灵隐茶山线（若为单日行程或无明显主题则省略该字段）",'
             . '"stops":[{"name":地点名,"type":"sight|food|stay|shop|transit"之一,'
             . '"time":"如 09:00-10:30","note":"简短实用 tips"}]}],'
             . '"food":[{"name":美食名,"shop":推荐店名,"dishes":[必点菜名数组],"note":"简短点评"}],'
             . '"tips":[实用建议字符串数组（最佳游玩方式、避坑、交通、预约提醒等）],'
-            . '"xhs":{"title":"小红书爆款风格标题（可含 emoji）","body":"小红书正文（分段、口语化、可含 emoji 与换行）","tags":["#话题1","#话题2"]}}。'
+            . '"xhs":{"title":"小红书爆款风格标题（可含 emoji）","body":"小红书正文（分段、口语化、可含 emoji 与换行）","tags":["#话题1","#话题2"]},'
+            . '"packingTips":["必带物品或注意事项1","必带物品或注意事项2"（共12-15条，涵盖证件、电子设备、衣物、药品、目的地特别注意事项）]}。'
             . '规则：每天 4-6 个 stop（时长短的天少排），按真实游玩顺序，围绕出行方式安排路线尽量不走回头路；'
             . '景点=sight 美食=food 住宿=stay 购物=shop 交通=transit；'
             . 'time 用时间段；note 写当季/实用要点；'
             . 'food 给 4-8 个当地必吃（含推荐店与必点菜）；tips 给 3-6 条；'
-            . 'xhs 文案要真实可直接发布、有代入感；严格遵循用户指定的每天游玩时长、天数、出行方式与偏好。';
+            . 'xhs 文案要真实可直接发布、有代入感；'
+            . 'packingTips 结合目的地特点给出个性化建议；'
+            . '多天行程的 routeTag 用于区分各天的游玩区域主题（如第1天西湖景区可标"西湖线"，第2天灵隐可标"灵隐茶山线"）；'
+            . '严格遵循用户指定的每天游玩时长、天数、出行方式与偏好。';
 
         $user = sprintf(
             '目的地：%s；天数：%d；每日游玩时长：%s；出行方式：%s；偏好：%s。',
@@ -191,11 +195,17 @@ final class ZhipuProvider implements AiProvider
                 continue; // 空天丢弃
             }
             $i++;
-            $days[] = [
+            $dayData = [
                 'index' => $i,
                 'title' => is_string($day['title'] ?? null) ? trim((string) $day['title']) : '',
                 'stops' => $stops,
             ];
+            // routeTag：AI 标注的当日游览主题（如「西湖线」），可选
+            $routeTag = is_string($day['routeTag'] ?? null) ? trim((string) $day['routeTag']) : '';
+            if ($routeTag !== '') {
+                $dayData['routeTag'] = $routeTag;
+            }
+            $days[] = $dayData;
         }
 
         if ($days === []) {
@@ -208,6 +218,7 @@ final class ZhipuProvider implements AiProvider
             'food' => $this->parseFood($data['food'] ?? null),
             'tips' => $this->parseTips($data['tips'] ?? null),
             'xhs' => $this->parseXhs($data['xhs'] ?? null),
+            'packingTips' => $this->parseTips($data['packingTips'] ?? null),
         ];
     }
 
