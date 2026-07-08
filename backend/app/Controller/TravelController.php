@@ -56,7 +56,6 @@ final class TravelController
      */
     public function plan(RequestInterface $request): array
     {
-        $this->logger->info("Your log message.");
         $destination = trim((string) $request->input('destination', ''));
         if ($destination === '') {
             return [
