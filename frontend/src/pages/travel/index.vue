@@ -860,18 +860,30 @@ async function onPlan(): Promise<void> {
   }
 }
 
-/** AI 规划失败的友好提示：识别超时给更贴切文案，其余按「繁忙/网络」处理并附原始原因 */
+/** AI 规划失败的友好提示：识别限流/鉴权/超时给更贴切文案，其余按「繁忙/网络」处理并附原始原因 */
 function showPlanFailed(detail?: string): void {
   const d = (detail || '').trim()
   const isTimeout = /timeout|超时|abort/i.test(d)
-  planError.value = isTimeout ? 'AI 规划超时，请重试' : d || '规划失败'
-  const reason = isTimeout
-    ? 'AI 规划超时了——联网搜索偶有波动，再点一次「AI 生成攻略」通常就好。'
-    : '可能是网络不稳定或 AI 当前繁忙，请稍后点「AI 生成攻略」重试。'
+  const isRateLimit = /频繁|429/.test(d)
+  const isAuth = /API Key|未授权|401/.test(d)
+  let reason: string
+  if (isRateLimit) {
+    planError.value = '操作太频繁'
+    reason = '刚才点得太快啦，接口被限流了，稍等几秒再点「AI 生成攻略」。'
+  } else if (isAuth) {
+    planError.value = '接口鉴权失败'
+    reason = '接口鉴权失败（API Key 缺失或无效），请检查小程序配置。'
+  } else if (isTimeout) {
+    planError.value = 'AI 规划超时，请重试'
+    reason = 'AI 规划超时了——联网搜索偶有波动，再点一次「AI 生成攻略」通常就好。'
+  } else {
+    planError.value = d || '规划失败'
+    reason = '可能是网络不稳定或 AI 当前繁忙，请稍后点「AI 生成攻略」重试。'
+  }
   uni.hideLoading()
   uni.showModal({
     title: '规划未能完成',
-    content: reason + (d && !isTimeout ? `\n（${d}）` : ''),
+    content: reason + (d && !isRateLimit && !isAuth && !isTimeout ? `\n（${d}）` : ''),
     showCancel: false,
     confirmText: '知道了',
   })

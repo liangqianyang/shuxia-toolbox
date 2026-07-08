@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev:mp-weixin": "UNI_OUTPUT_DIR=dist/dev/mp-weixin uni -p mp-weixin",
-    "build:mp-weixin:local": "VITE_API_BASE=http://127.0.0.1:9501 uni build -p mp-weixin",
+    "build:mp-weixin:local": "VITE_API_BASE=http://127.0.0.1:9501 VITE_API_KEY=0dc92116a59b1bd23f46ae49f52ef62e4e4d74f7a7b5da2fea16f86aeb62cc0f uni build -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
     "dev:h5": "uni",
     "build:h5": "uni build",

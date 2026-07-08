@@ -4,65 +4,48 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Exception\BizException;
+use App\Middleware\ApiKeyMiddleware;
 use App\Service\TravelService;
-use Psr\Log\LoggerInterface;
-use Hyperf\Logger\LoggerFactory;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\RateLimit\Annotation\RateLimit;
 use Throwable;
 
-final class TravelController
+class TravelController extends AbstractController
 {
-    protected LoggerInterface $logger;
-
-    public function __construct(private readonly TravelService $travel, LoggerFactory $loggerFactory)
+    public function __construct(private readonly TravelService $travel)
     {
-        // 第一个参数对应日志的 name, 第二个参数对应 config/autoload/logger.php 内的 key
-        $this->logger = $loggerFactory->get('log', 'default');
     }
 
+    #[RateLimit(create: 5, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function geocode(RequestInterface $request): array
     {
         $q = trim((string) $request->input('q', ''));
         if ($q === '') {
-            return [
-                'code' => 422,
-                'message' => '查询地址不能为空',
-                'data' => null,
-            ];
+            throw new BizException(422, '查询地址不能为空');
         }
 
         try {
             $candidates = $this->travel->geocode($q);
         } catch (Throwable $e) {
-            return [
-                'code' => 502,
-                'message' => $e->getMessage(),
-                'data' => null,
-            ];
+            throw new BizException(500, $e->getMessage(), null, $e);
         }
 
-        return [
-            'code' => 0,
-            'message' => 'ok',
-            'data' => [
-                'candidates' => $candidates,
-            ],
-        ];
+        return $this->ok([
+            'candidates' => $candidates,
+        ]);
     }
 
     /**
      * AI 规划行程：出发地 + 目的地 + 出行方式 + 天数 + 每天时长 + 偏好 → 结构化行程
      * （每站带 best-effort 坐标与站间路线）+ 美食/贴士/小红书文案 + 两张真实地图。
      */
+    #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function plan(RequestInterface $request): array
     {
         $destination = trim((string) $request->input('destination', ''));
         if ($destination === '') {
-            return [
-                'code' => 422,
-                'message' => '目的地不能为空',
-                'data' => null,
-            ];
+            throw new BizException(422, '目的地不能为空');
         }
 
         $days = (int) $request->input('days', 1);
@@ -113,42 +96,27 @@ final class TravelController
         try {
             $plan = $this->travel->plan($input);
         } catch (Throwable $e) {
-            return [
-                'code' => 502,
-                'message' => 'AI 规划失败：' . $e->getMessage(),
-                'data' => null,
-            ];
+            throw new BizException(500, 'AI 规划失败：' . $e->getMessage(), null, $e);
         }
 
-        return [
-            'code' => 0,
-            'message' => 'ok',
-            'data' => $plan,
-        ];
+        return $this->ok($plan);
     }
 
     /**
      * 局部重写某一天：保留锁定地点，只替换当天未锁定部分。
      */
+    #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function refineDay(RequestInterface $request): array
     {
         $dayIndex = (int) $request->input('day_index', 0);
         if ($dayIndex < 1) {
-            return [
-                'code' => 422,
-                'message' => 'day_index 不合法',
-                'data' => null,
-            ];
+            throw new BizException(422, 'day_index 不合法');
         }
 
         $day = $request->input('day', []);
         $days = $request->input('days', []);
         if (! is_array($day) || ! is_array($days) || $days === []) {
-            return [
-                'code' => 422,
-                'message' => '缺少当前行程数据',
-                'data' => null,
-            ];
+            throw new BizException(422, '缺少当前行程数据');
         }
 
         $mode = (string) $request->input('travel_mode', 'walking');
@@ -175,51 +143,32 @@ final class TravelController
         try {
             $result = $this->travel->refineDay($input);
         } catch (Throwable $e) {
-            return [
-                'code' => 502,
-                'message' => 'AI 重写失败：' . $e->getMessage(),
-                'data' => null,
-            ];
+            throw new BizException(500, 'AI 重写失败：' . $e->getMessage(), null, $e);
         }
 
-        return [
-            'code' => 0,
-            'message' => 'ok',
-            'data' => $result,
-        ];
+        return $this->ok($result);
     }
 
     /**
      * 替换某一天里的单个地点：保留其它地点，只让 AI 给一个新 stop。
      */
+    #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function replaceStop(RequestInterface $request): array
     {
         $dayIndex = (int) $request->input('day_index', 0);
         if ($dayIndex < 1) {
-            return [
-                'code' => 422,
-                'message' => 'day_index 不合法',
-                'data' => null,
-            ];
+            throw new BizException(422, 'day_index 不合法');
         }
 
         $rawStopIndex = $request->input('stop_index', null);
         if ($rawStopIndex === null || (int) $rawStopIndex < 0) {
-            return [
-                'code' => 422,
-                'message' => 'stop_index 不合法',
-                'data' => null,
-            ];
+            throw new BizException(422, 'stop_index 不合法');
         }
 
         $day = $request->input('day', []);
         $days = $request->input('days', []);
         if (! is_array($day) || ! is_array($days) || $days === []) {
-            return [
-                'code' => 422,
-                'message' => '缺少当前行程数据',
-                'data' => null,
-            ];
+            throw new BizException(422, '缺少当前行程数据');
         }
 
         $mode = (string) $request->input('travel_mode', 'walking');
@@ -248,17 +197,9 @@ final class TravelController
         try {
             $result = $this->travel->replaceStop($input);
         } catch (Throwable $e) {
-            return [
-                'code' => 502,
-                'message' => 'AI 替换失败：' . $e->getMessage(),
-                'data' => null,
-            ];
+            throw new BizException(500, 'AI 替换失败：' . $e->getMessage(), null, $e);
         }
 
-        return [
-            'code' => 0,
-            'message' => 'ok',
-            'data' => $result,
-        ];
+        return $this->ok($result);
     }
 }

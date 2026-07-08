@@ -12,6 +12,17 @@ const STORAGE_KEY = 'shuxia-travel-trip'
  */
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:9501').replace(/\/$/, '')
 
+/**
+ * AI 规划类请求（plan / refine-day / replace-stop）超时。
+ * 后端这类请求要串联 AI 联网规划 + 多次地图 API（geocode / directions / staticMap），
+ * 链路较长，120s 偶尔不够会前端先超时，放宽到 180s。
+ * geocode 是腾讯 suggestion 轻量代理，走 uni.request 默认超时即可，不在此列。
+ */
+const AI_REQUEST_TIMEOUT_MS = 180000
+
+/** 后端 API Key，随 X-API-Key 请求头带上（后端中间件校验）。本地/生产由 VITE_API_KEY 注入，需与后端 APP_API_KEY 一致。 */
+const API_KEY = import.meta.env.VITE_API_KEY || ''
+
 interface Envelope<T> {
   code: number
   message: string
@@ -29,6 +40,7 @@ function uniRequest<T>(
       url,
       method,
       data: data as Record<string, unknown> | undefined,
+      header: { 'X-API-Key': API_KEY },
       success: (res) => resolve(res.data as Envelope<T>),
       fail: (err) => reject(new Error(err.errMsg || '网络请求失败')),
     }
@@ -351,7 +363,7 @@ export function useTravelEditor() {
         departure_date: input.departureDate,
         sights: input.sights,
         foods: input.foods,
-      }, 120000)
+      }, AI_REQUEST_TIMEOUT_MS)
       if (res.code !== 0) {
         return { ok: false, error: res.message || '规划失败' }
       }
@@ -447,7 +459,7 @@ export function useTravelEditor() {
         intensity: input.intensity,
         daily_hours: input.dailyHours ?? 8,
         intercity: trip.intercity,
-      }, 120000)
+      }, AI_REQUEST_TIMEOUT_MS)
       if (res.code !== 0) {
         return { ok: false, error: res.message || '重写失败' }
       }
@@ -525,7 +537,7 @@ export function useTravelEditor() {
         intensity: input.intensity,
         daily_hours: input.dailyHours ?? 8,
         intercity: trip.intercity,
-      }, 120000)
+      }, AI_REQUEST_TIMEOUT_MS)
       if (res.code !== 0) {
         return { ok: false, error: res.message || '替换失败' }
       }

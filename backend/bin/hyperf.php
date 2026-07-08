@@ -3,6 +3,7 @@
 
 declare(strict_types=1);
 
+use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ApplicationInterface;
 use Hyperf\Di\ClassLoader;
 
@@ -53,5 +54,8 @@ require BASE_PATH . '/vendor/autoload.php';
 ClassLoader::init();
 
 $container = require BASE_PATH . '/config/container.php';
+// 显式注册到 ApplicationContext：AOP 的 ProxyTrait::makePipeline 等处通过静态 getContainer() 取容器，
+// 不注册则返回 null、注解切面（如 #[RateLimit]）会抛 TypeError。项目此前未调用，故一直无法用注解 AOP。
+ApplicationContext::setContainer($container);
 $application = $container->get(ApplicationInterface::class);
 $application->run();

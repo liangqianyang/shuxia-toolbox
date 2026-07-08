@@ -12,6 +12,8 @@
     "hyperf/framework": "^3.2@beta",
     "hyperf/http-server": "^3.2@beta",
     "hyperf/logger": "^3.2@beta",
+    "hyperf/rate-limit": "^3.2@beta",
+    "hyperf/redis": "^3.2@beta",
     "hyperf/server": "^3.2@beta",
     "hyperf/support": "^3.2@beta"
   },
