@@ -37,12 +37,14 @@ final class TencentMapProvider implements MapProvider
         if ($sk === '') {
             return '';
         }
+        // 官方算法（lbs.qq.com WebServiceAPI GET 签名）：参数按名升序排序、原始值（不 urlencode）
+        // 拼成 key=value&...，再 md5(path + '?' + 排序后原始参数串 + sk)，结果小写。无外层 urlencode。
         ksort($params);
         $pairs = [];
         foreach ($params as $k => $v) {
             $pairs[] = $k . '=' . $v;
         }
-        return md5(urlencode($path . implode('&', $pairs) . $sk));
+        return md5($path . '?' . implode('&', $pairs) . $sk);
     }
 
     /** Guzzle query 场景（参数名唯一）：算 sig 后并入参数数组。 */
@@ -170,12 +172,12 @@ final class TencentMapProvider implements MapProvider
             }
         }
 
-        // SK 签名（SN 校验）：多同名参数按 key 排序、同 key 按 value 排序后拼 key=value 参与签名
+        // SK 签名（官方 GET 算法）：多同名参数按 key 升序、同 key 按 value 升序，原始值，md5(path+'?'+串+sk)，无 urlencode。
         if ($sk !== '') {
             $sorted = $params;
             usort($sorted, static fn ($a, $b) => $a[0] <=> $b[0] ?: strcmp((string) $a[1], (string) $b[1]));
-            $basic = '/ws/staticmap/v2/' . implode('&', array_map(static fn ($p) => $p[0] . '=' . $p[1], $sorted));
-            $params[] = ['sig', md5(urlencode($basic . $sk))];
+            $raw = implode('&', array_map(static fn ($p) => $p[0] . '=' . $p[1], $sorted));
+            $params[] = ['sig', md5('/ws/staticmap/v2/?' . $raw . $sk)];
         }
 
         // 拼 URL：每个值 rawurlencode
