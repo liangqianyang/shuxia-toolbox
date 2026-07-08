@@ -50,18 +50,31 @@ export function getPalette(key: PaletteKey): Palette {
   return palette
 }
 
-/** ΔE2000 找最近拼豆色，调用方只对聚类中心调用（≤48 次），无性能压力 */
-export function nearestBeadIndex(lab: Lab, palette: Palette): number {
-  let best = 0
+/**
+ * ΔE2000 找最近拼豆色。逐格调用（非聚类中心），故热点在此——
+ * 调用方 mapCellsDirectToPalette 用「打包 RGB → 索引」缓存去重，
+ * 平涂区大量同色格子只在此计算一次。
+ *
+ * allowedIndices：库存约束——仅在这些色板下标里找最近色（如用户「只有这些豆」）。
+ * 传空集合或 undefined 时退回全色板，避免约束到 0 色导致无法映射。
+ */
+export function nearestBeadIndex(
+  lab: Lab,
+  palette: Palette,
+  allowedIndices?: ReadonlySet<number>,
+): number {
+  const constrained = allowedIndices && allowedIndices.size > 0
+  let best = -1
   let bestDist = Infinity
   for (let i = 0; i < palette.colors.length; i++) {
+    if (constrained && !allowedIndices!.has(i)) continue
     const dist = deltaE2000(lab, palette.colors[i].lab)
     if (dist < bestDist) {
       bestDist = dist
       best = i
     }
   }
-  return best
+  return best === -1 ? 0 : best
 }
 
 export const PALETTE_OPTIONS: { key: PaletteKey; label: string }[] = [

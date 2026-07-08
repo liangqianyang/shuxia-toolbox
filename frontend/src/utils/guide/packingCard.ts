@@ -14,9 +14,8 @@ import {
 
 /**
  * 出行清单卡片（1080×1440）：两栏式清单（必带物品 / 注意事项）。
- * 数据源 trip.packingTips（AI 生成，12-15 条目）。
- * 前半段作「必带物品」，后半段作「注意事项」，均以 ✓ 打勾风格呈现。
- * 空 packingTips 时退化为通用出行建议。
+ * 数据源 trip.packingMust（实物类）+ trip.packingNotes（非实物提醒），均 AI 生成、按组直读两栏。
+ * 空时退化为通用出行建议。
  */
 export function renderPackingCard(
   ctx: CanvasRenderingContext2D,
@@ -26,12 +25,8 @@ export function renderPackingCard(
   drawBackground(ctx, bgImage)
   const bannerBottom = drawBanner(ctx, '出行清单', trip.title || '必备物品 · 少踩坑', '🎒')
 
-  const tips = trip.packingTips && trip.packingTips.length > 0 ? trip.packingTips : FALLBACK_TIPS
-
-  // 将清单对半分：前半 = 必带物品，后半 = 注意事项
-  const half = Math.ceil(tips.length / 2)
-  const leftItems = tips.slice(0, half)
-  const rightItems = tips.slice(half)
+  const leftItems = trip.packingMust.length > 0 ? trip.packingMust : FALLBACK_MUST
+  const rightItems = trip.packingNotes.length > 0 ? trip.packingNotes : FALLBACK_NOTES
 
   const padX = 56
   const colGap = 32
@@ -147,8 +142,8 @@ function drawColumn(
   })
 }
 
-/** packingTips 为空时的通用兜底清单 */
-const FALLBACK_TIPS: string[] = [
+/** 必带物品为空时的通用兜底 */
+const FALLBACK_MUST: string[] = [
   '身份证 / 学生证',
   '充电宝 & 充电线',
   '防晒霜 / 遮阳帽',
@@ -157,6 +152,9 @@ const FALLBACK_TIPS: string[] = [
   '雨伞 / 防水装备',
   '自拍杆 / 相机',
   '纸巾 / 湿巾',
+]
+/** 注意事项为空时的通用兜底 */
+const FALLBACK_NOTES: string[] = [
   '常备小药包',
   '提前看预约要求',
   '高峰期避开吃饭',

@@ -25,6 +25,23 @@ export interface ElementRect {
 }
 
 /**
+ * 取窗口信息。uni.getSystemInfoSync 已废弃（控制台告警），优先用 uni.getWindowInfo；
+ * 老版本/不支持时回退 getSystemInfoSync。
+ */
+export function getWindowInfo(): { windowWidth: number; pixelRatio: number } {
+  const u = uni as unknown as {
+    getWindowInfo?: () => { windowWidth?: number; pixelRatio?: number }
+    getSystemInfoSync: () => { windowWidth: number; pixelRatio: number }
+  }
+  if (typeof u.getWindowInfo === 'function') {
+    const w = u.getWindowInfo()
+    return { windowWidth: w.windowWidth ?? 0, pixelRatio: w.pixelRatio ?? 1 }
+  }
+  const s = u.getSystemInfoSync()
+  return { windowWidth: s.windowWidth, pixelRatio: s.pixelRatio }
+}
+
+/**
  * 在指定 canvas 上异步加载一张「可绘制图片」。
  * - MP：image 由目标 canvas.createImage() 创建，**绑定到该 canvas**，只能绘制在该 canvas 上
  *   （预览 canvas 与导出 canvas 各自的图必须分别加载）
@@ -39,10 +56,37 @@ export function loadDrawableImage(canvas: any, src: string): Promise<CanvasImage
       resolve(null)
       return
     }
-    const img = canvas.createImage()
-    img.onload = () => resolve(img as CanvasImageSource)
-    img.onerror = () => resolve(null)
-    img.src = src
+    const load = (drawableSrc: string) => {
+      const img = canvas.createImage()
+      img.onload = () => resolve(img as CanvasImageSource)
+      img.onerror = () => {
+        console.warn('[canvasAdapter] 图片加载失败:', drawableSrc)
+        resolve(null)
+      }
+      img.src = drawableSrc
+    }
+
+    // 微信 2D canvas 对远程图直载不稳定；先下载成临时文件再绘制，地图底图会稳很多。
+    if (/^https?:\/\//i.test(src) && typeof wx !== 'undefined' && typeof wx.downloadFile === 'function') {
+      wx.downloadFile({
+        url: src,
+        success: (res: { statusCode?: number; tempFilePath?: string }) => {
+          if ((res.statusCode ?? 200) >= 400 || !res.tempFilePath) {
+            console.warn('[canvasAdapter] 图片下载失败:', src, res.statusCode)
+            load(src)
+            return
+          }
+          load(res.tempFilePath)
+        },
+        fail: (err: { errMsg?: string }) => {
+          console.warn('[canvasAdapter] 图片下载失败:', src, err.errMsg)
+          load(src)
+        },
+      })
+      return
+    }
+
+    load(src)
   })
   // #endif
 
@@ -58,6 +102,28 @@ export function loadDrawableImage(canvas: any, src: string): Promise<CanvasImage
 
 /** 选一张图，返回临时路径（H5 下是 blob/objectURL） */
 export function chooseImage(): Promise<string> {
+  // #ifdef MP-WEIXIN
+  // 新基础库 uni.chooseImage 已废弃，改用 wx.chooseMedia（选相册/拍照单图）
+  return new Promise((resolve, reject) => {
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sizeType: ['original', 'compressed'],
+      sourceType: ['album', 'camera'],
+      success: (res: { tempFiles?: Array<{ tempFilePath?: string }> }) => {
+        const path = res.tempFiles?.[0]?.tempFilePath
+        if (path) {
+          resolve(path)
+        } else {
+          reject(new Error('未选择图片'))
+        }
+      },
+      fail: (err: { errMsg?: string }) => reject(new Error(err.errMsg ?? '选图失败')),
+    })
+  })
+  // #endif
+
+  // #ifdef H5
   return new Promise((resolve, reject) => {
     uni.chooseImage({
       count: 1,
@@ -75,6 +141,7 @@ export function chooseImage(): Promise<string> {
       fail: (err) => reject(new Error(err.errMsg ?? '选图失败')),
     })
   })
+  // #endif
 }
 
 /**
@@ -150,7 +217,7 @@ export function getCanvasNode(selector: string, component?: unknown): Promise<Ca
           ctx,
           width: field.width ?? 0,
           height: field.height ?? 0,
-          dpr: uni.getSystemInfoSync().pixelRatio || 1,
+          dpr: getWindowInfo().pixelRatio,
         })
       })
   })
@@ -230,7 +297,8 @@ export function getElementRect(selector: string, component?: unknown): Promise<E
 export function canvasToFile(canvas: any, width: number, height: number): Promise<string> {
   // #ifdef MP-WEIXIN
   return new Promise((resolve, reject) => {
-    uni.canvasToTempFilePath({
+    const api = typeof wx !== 'undefined' && typeof wx.canvasToTempFilePath === 'function' ? wx : (uni as any)
+    api.canvasToTempFilePath({
       canvas,
       x: 0,
       y: 0,
@@ -239,9 +307,15 @@ export function canvasToFile(canvas: any, width: number, height: number): Promis
       destWidth: width,
       destHeight: height,
       fileType: 'png',
-      success: (res: { tempFilePath: string }) => resolve(res.tempFilePath),
-      fail: (err: { errMsg?: string }) => reject(new Error(err.errMsg ?? '导出失败')),
-    } as any)
+      success: (res: { tempFilePath?: string }) => {
+        if (res.tempFilePath) {
+          resolve(res.tempFilePath)
+        } else {
+          reject(new Error('导出失败：未返回临时图片路径'))
+        }
+      },
+      fail: (err: { errMsg?: string }) => reject(new Error(normalizeWxError(err.errMsg, '导出失败'))),
+    })
   })
   // #endif
 
@@ -254,10 +328,11 @@ export function canvasToFile(canvas: any, width: number, height: number): Promis
 export function saveImageToAlbum(filePath: string): Promise<void> {
   // #ifdef MP-WEIXIN
   return new Promise((resolve, reject) => {
-    uni.saveImageToPhotosAlbum({
+    const api = typeof wx !== 'undefined' && typeof wx.saveImageToPhotosAlbum === 'function' ? wx : (uni as any)
+    api.saveImageToPhotosAlbum({
       filePath,
       success: () => resolve(),
-      fail: (err) => reject(new Error(err.errMsg ?? '保存失败')),
+      fail: (err: { errMsg?: string }) => reject(new Error(normalizeWxError(err.errMsg, '保存失败'))),
     })
   })
   // #endif
@@ -278,4 +353,12 @@ export function openAuthSetting(): void {
   // #ifdef MP-WEIXIN
   uni.openSetting({})
   // #endif
+}
+
+function normalizeWxError(errMsg: string | undefined, fallback: string): string {
+  const message = errMsg || fallback
+  if (/api scope is not declared in the privacy agreement/i.test(message)) {
+    return '微信隐私协议未声明“保存到相册”用途。请在小程序后台的用户隐私保护指引中补充相册写入/保存图片用途，重新预览或发布后再试。'
+  }
+  return message
 }

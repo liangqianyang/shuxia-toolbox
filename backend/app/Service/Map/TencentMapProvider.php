@@ -89,11 +89,19 @@ final class TencentMapProvider implements MapProvider
         $w = min(928, max(100, (int) ($size['width'] ?? 600)));
         $h = min(928, max(100, (int) ($size['height'] ?? 300)));
 
-        // base 参数：只给 size + key，center/zoom 留空 → 腾讯按 markers/path 自动适配范围
-        $url = 'https://apis.map.qq.com/ws/staticmap/v2/?' . http_build_query([
+        // base 参数：size + key；若调用方提供 center+zoom（无标注底图场景）则带上，
+        // 否则留空让腾讯按 markers/path 自动适配范围。
+        $base = [
             'size' => $w . '*' . $h,
             'key' => $key,
-        ]);
+        ];
+        if (isset($size['centerLat'], $size['centerLng'])) {
+            $base['center'] = $size['centerLat'] . ',' . $size['centerLng'];
+        }
+        if (isset($size['zoom'])) {
+            $base['zoom'] = $size['zoom'];
+        }
+        $url = 'https://apis.map.qq.com/ws/staticmap/v2/?' . http_build_query($base);
 
         // 每站一个 marker 组（带类型色 + 序号 label），逐个 rawurlencode 拼到 URL
         foreach ($markers as $m) {
@@ -114,16 +122,23 @@ final class TencentMapProvider implements MapProvider
             $url .= '&markers=' . rawurlencode($style . '|' . $lat . ',' . $lng);
         }
 
-        // 折线：多段（如按天），每段颜色 + 粗细 + 顶点（直线段，按 stop 顺序）
+        // 折线：多段（如按天）。每段可自带 color；兼容旧形态（纯点列表，默认米色）。
         foreach ($paths as $polyline) {
+            if (isset($polyline['points']) && is_array($polyline['points'])) {
+                $raw = $polyline['points'];
+                $color = strtoupper(ltrim((string) ($polyline['color'] ?? 'C8A98A'), '#'));
+            } else {
+                $raw = $polyline;
+                $color = 'C8A98A';
+            }
             $pts = [];
-            foreach ($polyline as $p) {
+            foreach ($raw as $p) {
                 if (($p['lat'] ?? null) !== null && ($p['lng'] ?? null) !== null) {
                     $pts[] = $p['lat'] . ',' . $p['lng'];
                 }
             }
             if (count($pts) >= 2) {
-                $url .= '&path=' . rawurlencode('color:0xC8A98A|weight:4|' . implode('|', $pts));
+                $url .= '&path=' . rawurlencode('color:0x' . $color . '|weight:4|' . implode('|', $pts));
             }
         }
 
@@ -183,6 +198,133 @@ final class TencentMapProvider implements MapProvider
             'durationMin' => (int) ($route['duration'] ?? 0), // walking 实测为分钟
             'polyline' => $polyline,
         ];
+    }
+
+    public function transit(array $from, array $to): array
+    {
+        $key = getenv('TENCENT_MAP_KEY') ?: '';
+        if ($key === '') {
+            throw new RuntimeException('地图服务未配置 TENCENT_MAP_KEY');
+        }
+
+        $timeout = max((int) (getenv('MAP_TIMEOUT') ?: 5), 8);
+
+        try {
+            $response = $this->client->get('http://apis.map.qq.com/ws/direction/v1/transit', [
+                'query' => [
+                    'from' => $from['lat'] . ',' . $from['lng'],
+                    'to' => $to['lat'] . ',' . $to['lng'],
+                    'policy' => 'LEAST_TIME',
+                    'key' => $key,
+                ],
+                'timeout' => $timeout,
+            ]);
+            $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable $e) {
+            throw new RuntimeException('公共交通规划请求失败: ' . $e->getMessage(), 0, $e);
+        }
+
+        $status = $body['status'] ?? -1;
+        if ($status !== 0) {
+            $message = is_string($body['message'] ?? null) ? $body['message'] : "status={$status}";
+            throw new RuntimeException('公共交通规划返回错误: ' . $message);
+        }
+
+        $route = $body['result']['routes'][0] ?? null;
+        if (! is_array($route)) {
+            throw new RuntimeException('公共交通规划无结果');
+        }
+
+        $lines = [];
+        $walkingM = 0;
+        foreach ($this->flattenTransitSteps($route['steps'] ?? []) as $step) {
+            $mode = strtoupper((string) ($step['mode'] ?? ''));
+            if ($mode === 'WALKING' || $mode === 'WALK') {
+                $walkingM += (int) ($step['distance'] ?? 0);
+            }
+            foreach (($step['lines'] ?? []) as $line) {
+                if (! is_array($line)) {
+                    continue;
+                }
+                $title = $this->stringField($line, ['title', 'name', 'line_name']);
+                if ($title === '') {
+                    continue;
+                }
+                $lines[] = array_filter([
+                    'vehicle' => strtoupper($this->stringField($line, ['vehicle', 'type', 'mode']) ?: $mode ?: 'TRANSIT'),
+                    'title' => $title,
+                    'geton' => $this->stationName($line['geton'] ?? null),
+                    'getoff' => $this->stationName($line['getoff'] ?? null),
+                    'stationCount' => (int) ($line['station_count'] ?? $line['stations'] ?? 0),
+                    'distanceM' => (int) ($line['distance'] ?? 0),
+                    'durationMin' => (int) ($line['duration'] ?? 0),
+                    'price' => isset($line['price']) ? (float) $line['price'] : null,
+                    'startTime' => $this->stringField($line, ['start_time', 'startTime']),
+                    'endTime' => $this->stringField($line, ['end_time', 'endTime']),
+                ], static fn ($value) => $value !== null && $value !== '');
+            }
+        }
+
+        if ($lines === []) {
+            throw new RuntimeException('公共交通规划无有效线路');
+        }
+
+        $summary = implode(' → ', array_map(static fn ($line) => $line['title'], $lines));
+
+        return [
+            'distanceM' => (int) ($route['distance'] ?? 0),
+            'durationMin' => (int) ($route['duration'] ?? 0),
+            'walkingM' => $walkingM,
+            'transferCount' => max(0, count($lines) - 1),
+            'summary' => $summary,
+            'lines' => $lines,
+        ];
+    }
+
+    /**
+     * 腾讯 transit steps 在不同城市/方案里可能是一层或多层数组，这里统一摊平成 step 列表。
+     *
+     * @return array<int, array>
+     */
+    private function flattenTransitSteps(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+        if (isset($raw['mode']) || isset($raw['lines'])) {
+            return [$raw];
+        }
+        $out = [];
+        foreach ($raw as $item) {
+            foreach ($this->flattenTransitSteps($item) as $step) {
+                $out[] = $step;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int, string> $keys
+     */
+    private function stringField(array $source, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (is_string($source[$key] ?? null) && trim((string) $source[$key]) !== '') {
+                return trim((string) $source[$key]);
+            }
+        }
+        return '';
+    }
+
+    private function stationName(mixed $station): string
+    {
+        if (is_string($station)) {
+            return trim($station);
+        }
+        if (! is_array($station)) {
+            return '';
+        }
+        return $this->stringField($station, ['title', 'name', 'station_name']);
     }
 
     public function explore(array $center, int $radius, string $keyword): array

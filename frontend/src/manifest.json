@@ -13,7 +13,12 @@
       "minified": true
     },
     "usingComponents": true,
-    "lazyCodeLoading": "requiredComponents"
+    "lazyCodeLoading": "requiredComponents",
+    "permission": {
+      "scope.writePhotosAlbum": {
+        "desc": "用于保存生成的攻略图到相册"
+      }
+    }
   },
   "h5": {
     "router": {

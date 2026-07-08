@@ -12,6 +12,7 @@ import {
   truncateText,
   poiIcon,
   modeIcon,
+  interStopModeIcon,
   wrapText,
 } from './theme'
 
@@ -154,6 +155,13 @@ function drawDayBand(
     ctx.font = `${Math.min(22, slot * 0.24)}px ${FONT}`
     ctx.fillText(truncateText(ctx, s.name || '', slot - 4), cx, dotY + dotR + 34)
 
+    const trust = trustLine(s)
+    if (trust) {
+      ctx.fillStyle = C.primaryDark
+      ctx.font = `${Math.min(18, slot * 0.18)}px ${FONT}`
+      ctx.fillText(truncateText(ctx, trust, slot - 4), cx, dotY + dotR + 58)
+    }
+
     // ---- 站间交通图标（横线中点）----
     if (s.travelToNext && i < n - 1) {
       const midX = cx + slot / 2
@@ -165,7 +173,7 @@ function drawDayBand(
       ctx.font = `22px ${FONT}`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(modeIcon(s.travelToNext.mode), midX, dotY)
+      ctx.fillText(interStopModeIcon(s.travelToNext.mode), midX, dotY)
     }
   })
 
@@ -186,5 +194,14 @@ function drawDayBand(
   }
 }
 
-export { wrapText }
+function trustLine(stop: Day['stops'][number]): string {
+  const info = stop.poiInfo
+  if (!info) return ''
+  const parts = []
+  if (info.reservation) parts.push(info.reservation)
+  if (info.ticket) parts.push(info.ticket)
+  if (info.duration) parts.push(`建议${info.duration}`)
+  return parts.slice(0, 3).join(' · ')
+}
 
+export { wrapText }

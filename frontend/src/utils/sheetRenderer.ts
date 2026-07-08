@@ -83,6 +83,163 @@ function cellFont(code: string, cellPx: number): number {
   return Math.round(cellPx * 0.28)
 }
 
+const GRID_LINE = 'rgba(0, 0, 0, 0.18)'
+const GRID_BORDER = 'rgba(0, 0, 0, 0.45)'
+const HIGHLIGHT_VEIL = 'rgba(18, 18, 18, 0.55)'
+
+/** 标题：Mard(3474) · 52×50 · 1 张 52 小板。自带白底清除，供全量与增量复用 */
+function drawTitle(ctx: CanvasRenderingContext2D, result: PatternResult, layout: SheetLayout): void {
+  const { width: gridW, height: gridH, totalBeads } = result
+  const palette = getPalette(result.params.paletteKey)
+  const { cellPx, margin, titleH, gridY, indexBand, totalW } = layout
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, 0, totalW, gridY - indexBand) // 顶栏（margin+title），不含列编号行
+  ctx.fillStyle = '#3A3A3A'
+  ctx.font = `bold ${Math.round(cellPx * 0.72)}px sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(
+    `${palette.displayName}(${totalBeads}) · ${gridW}×${gridH} · ${result.boardPlan.label}`,
+    margin,
+    margin + titleH / 2,
+  )
+  ctx.textAlign = 'center'
+}
+
+/** 底部彩色药丸图例（色号 + 数量）。自带白底清除，供全量与增量复用 */
+function drawLegend(ctx: CanvasRenderingContext2D, result: PatternResult, layout: SheetLayout): void {
+  const { used } = result
+  const { cellPx, margin, indexBand, gridY, totalW, totalH } = layout
+  const gridBottom = Math.round(gridY + result.height * cellPx)
+  const legendTop = gridBottom + indexBand + layout.legendGap
+  const clearTop = gridBottom + indexBand // 底部行编号之下开始清，保留编号
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, clearTop, totalW, totalH - clearTop)
+
+  const pillW = layout.legendItemW - Math.round(cellPx * 0.4)
+  const pillH = layout.legendItemH - Math.round(cellPx * 0.35)
+  const legendFont = Math.round(cellPx * 0.42)
+  for (let i = 0; i < used.length; i++) {
+    const col = i % layout.legendCols
+    const row = (i / layout.legendCols) | 0
+    const x = margin + col * layout.legendItemW
+    const y = legendTop + row * layout.legendItemH
+    const item = used[i]
+
+    roundRect(ctx, x, y, pillW, pillH, Math.round(cellPx * 0.18))
+    ctx.fillStyle = item.color.hex
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.fillStyle = textColorOn(item.color.rgb)
+    ctx.font = `bold ${legendFont}px sans-serif`
+    ctx.textAlign = 'left'
+    ctx.fillText(
+      `${displayCode(item.color.code)}  (${item.count})`,
+      x + Math.round(cellPx * 0.35),
+      y + pillH / 2,
+    )
+    ctx.textAlign = 'center'
+  }
+}
+
+/**
+ * 增量重绘：单格改色只重画「这一格 + 标题 + 图例」，跳过 4096 格全网格 / 全色号循环。
+ * 前提是版式未变（未引入新色/未删除某色最后一格）——由调用方比对 layout 后决定是否走此路。
+ * 需调用方已设置好 ctx.save + textAlign/textBaseline，或在 renderCell 内自理。
+ */
+export function renderCell(
+  ctx: CanvasRenderingContext2D,
+  result: PatternResult,
+  layout: SheetLayout,
+  cx: number,
+  cy: number,
+  highlightIndex?: number,
+): void {
+  const { width: gridW, height: gridH, cells } = result
+  const palette = getPalette(result.params.paletteKey)
+  const { cellPx, gridX, gridY, showCodes } = layout
+  const edgeX = (i: number) => Math.round(gridX + i * cellPx)
+  const edgeY = (i: number) => Math.round(gridY + i * cellPx)
+
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  const px = edgeX(cx)
+  const py = edgeY(cy)
+  const pw = edgeX(cx + 1) - px
+  const ph = edgeY(cy + 1) - py
+  const idx = cells[cy * gridW + cx]
+
+  // 1) 填色 / 空格棋盘
+  if (idx === EMPTY_CELL) {
+    drawCheckerCell(ctx, px, py, pw, ph)
+  } else {
+    ctx.fillStyle = palette.colors[idx].hex
+    ctx.fillRect(px, py, pw, ph)
+  }
+
+  // 2) 补回被 fillRect 覆盖的四边网格线（含触边时的粗边框）
+  ctx.strokeStyle = GRID_LINE
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(edgeX(cx) + 0.5, py)
+  ctx.lineTo(edgeX(cx) + 0.5, edgeY(cy + 1))
+  ctx.moveTo(edgeX(cx + 1) + 0.5, py)
+  ctx.lineTo(edgeX(cx + 1) + 0.5, edgeY(cy + 1))
+  ctx.moveTo(px, edgeY(cy) + 0.5)
+  ctx.lineTo(edgeX(cx + 1), edgeY(cy) + 0.5)
+  ctx.moveTo(px, edgeY(cy + 1) + 0.5)
+  ctx.lineTo(edgeX(cx + 1), edgeY(cy + 1) + 0.5)
+  ctx.stroke()
+  if (cx === 0 || cx === gridW - 1 || cy === 0 || cy === gridH - 1) {
+    ctx.strokeStyle = GRID_BORDER
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    if (cx === 0) {
+      ctx.moveTo(edgeX(0), py)
+      ctx.lineTo(edgeX(0), edgeY(cy + 1))
+    }
+    if (cx === gridW - 1) {
+      ctx.moveTo(edgeX(gridW), py)
+      ctx.lineTo(edgeX(gridW), edgeY(cy + 1))
+    }
+    if (cy === 0) {
+      ctx.moveTo(px, edgeY(0))
+      ctx.lineTo(edgeX(cx + 1), edgeY(0))
+    }
+    if (cy === gridH - 1) {
+      ctx.moveTo(px, edgeY(gridH))
+      ctx.lineTo(edgeX(cx + 1), edgeY(gridH))
+    }
+    ctx.stroke()
+  }
+
+  // 3) 色号
+  if (showCodes && idx !== EMPTY_CELL) {
+    const color = palette.colors[idx]
+    const code = displayCode(color.code)
+    ctx.fillStyle = textColorOn(color.rgb)
+    ctx.font = `${cellFont(code, cellPx)}px sans-serif`
+    ctx.fillText(code, (px + edgeX(cx + 1)) / 2, (py + edgeY(cy + 1)) / 2)
+  }
+
+  // 4) 隔离高亮暗纱（该格非高亮色时罩暗，和全量渲染一致）
+  if (highlightIndex != null && idx !== highlightIndex) {
+    ctx.fillStyle = HIGHLIGHT_VEIL
+    ctx.fillRect(px, py, pw, ph)
+  }
+
+  // 5) 标题（总豆数）+ 图例（计数）随之更新
+  drawTitle(ctx, result, layout)
+  drawLegend(ctx, result, layout)
+
+  ctx.restore()
+}
+
 function drawCheckerCell(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -124,9 +281,9 @@ export function renderSheet(
    *  导出与默认预览不传 → 无暗纱，不影响。 */
   highlightIndex?: number,
 ): void {
-  const { width: gridW, height: gridH, cells, used, totalBeads } = result
+  const { width: gridW, height: gridH, cells, used } = result
   const palette = getPalette(result.params.paletteKey)
-  const { cellPx, margin, indexBand, gridX, gridY, totalW, totalH, showCodes } = layout
+  const { cellPx, indexBand, gridX, gridY, totalW, totalH, showCodes } = layout
 
   // 每格左缘取整对齐，宽度用相邻边缘差，杜绝缝隙和重叠毛边
   const edgeX = (i: number) => Math.round(gridX + i * cellPx)
@@ -143,15 +300,7 @@ export function renderSheet(
   ctx.fillRect(0, 0, totalW, totalH)
 
   // 标题：Mard(3474) · 52×50 · 1 张 52 小板
-  ctx.fillStyle = '#3A3A3A'
-  ctx.font = `bold ${Math.round(cellPx * 0.72)}px sans-serif`
-  ctx.textAlign = 'left'
-  ctx.fillText(
-    `${palette.displayName}(${totalBeads}) · ${gridW}×${gridH} · ${result.boardPlan.label}`,
-    margin,
-    margin + layout.titleH / 2,
-  )
-  ctx.textAlign = 'center'
+  drawTitle(ctx, result, layout)
 
   // 四边行列编号
   ctx.fillStyle = '#8C8C8C'
@@ -185,7 +334,7 @@ export function renderSheet(
   }
 
   // 网格线
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)'
+  ctx.strokeStyle = GRID_LINE
   ctx.lineWidth = 1
   ctx.beginPath()
   for (let x = 0; x <= gridW; x++) {
@@ -199,28 +348,47 @@ export function renderSheet(
     ctx.lineTo(gridRight, py)
   }
   ctx.stroke()
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)'
+  ctx.strokeStyle = GRID_BORDER
   ctx.lineWidth = 2
   ctx.strokeRect(gridX, gridY, gridRight - gridX, gridBottom - gridY)
 
   // 格内色号（黑白自适应）
   if (showCodes) {
+    // 每色的色号/文字色/字体串只算一次；循环内仅在值变化时切 ctx.font/fillStyle
+    // （逐格设 ctx.font 是 canvas 最贵操作之一，相邻同色格子共用即可跳过）
+    const meta = new Map<number, { code: string; fill: string; font: string }>()
+    for (const item of used) {
+      const code = displayCode(item.color.code)
+      meta.set(item.paletteIndex, {
+        code,
+        fill: textColorOn(item.color.rgb),
+        font: `${cellFont(code, cellPx)}px sans-serif`,
+      })
+    }
+    let lastFont = ''
+    let lastFill = ''
     for (let y = 0; y < gridH; y++) {
       for (let x = 0; x < gridW; x++) {
         const idx = cells[y * gridW + x]
         if (idx === EMPTY_CELL) continue
-        const color = palette.colors[idx]
-        const code = displayCode(color.code)
-        ctx.fillStyle = textColorOn(color.rgb)
-        ctx.font = `${cellFont(code, cellPx)}px sans-serif`
-        ctx.fillText(code, (edgeX(x) + edgeX(x + 1)) / 2, (edgeY(y) + edgeY(y + 1)) / 2)
+        const m = meta.get(idx)
+        if (!m) continue
+        if (m.font !== lastFont) {
+          ctx.font = m.font
+          lastFont = m.font
+        }
+        if (m.fill !== lastFill) {
+          ctx.fillStyle = m.fill
+          lastFill = m.fill
+        }
+        ctx.fillText(m.code, (edgeX(x) + edgeX(x + 1)) / 2, (edgeY(y) + edgeY(y + 1)) / 2)
       }
     }
   }
 
   // 隔离高亮：只点亮某一色，其余格子（含空格）罩一层暗纱聚焦该色。色号/网格线一并变暗。
   if (highlightIndex != null) {
-    ctx.fillStyle = 'rgba(18, 18, 18, 0.55)'
+    ctx.fillStyle = HIGHLIGHT_VEIL
     for (let y = 0; y < gridH; y++) {
       const py = edgeY(y)
       const ph = edgeY(y + 1) - py
@@ -234,34 +402,7 @@ export function renderSheet(
   }
 
   // 图例：彩色药丸（色号 + 数量），按用量降序
-  const legendTop = gridBottom + indexBand + layout.legendGap
-  const pillW = layout.legendItemW - Math.round(cellPx * 0.4)
-  const pillH = layout.legendItemH - Math.round(cellPx * 0.35)
-  const legendFont = Math.round(cellPx * 0.42)
-  for (let i = 0; i < used.length; i++) {
-    const col = i % layout.legendCols
-    const row = (i / layout.legendCols) | 0
-    const x = margin + col * layout.legendItemW
-    const y = legendTop + row * layout.legendItemH
-    const item = used[i]
-
-    roundRect(ctx, x, y, pillW, pillH, Math.round(cellPx * 0.18))
-    ctx.fillStyle = item.color.hex
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-
-    ctx.fillStyle = textColorOn(item.color.rgb)
-    ctx.font = `bold ${legendFont}px sans-serif`
-    ctx.textAlign = 'left'
-    ctx.fillText(
-      `${displayCode(item.color.code)}  (${item.count})`,
-      x + Math.round(cellPx * 0.35),
-      y + pillH / 2,
-    )
-    ctx.textAlign = 'center'
-  }
+  drawLegend(ctx, result, layout)
 
   ctx.restore()
 }

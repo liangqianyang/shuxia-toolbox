@@ -15,6 +15,8 @@ import {
   poiIcon,
   modeIcon,
   modeLabel,
+  interStopModeIcon,
+  interStopModeLabel,
   wrapText,
 } from './theme'
 
@@ -130,7 +132,9 @@ export function renderPhotoTimelineCard(
     // 照片边框
     roundRect(ctx, photoX, rowTop, photoW, photoH, 18)
     ctx.lineWidth = 3
-    ctx.strokeStyle = POI_THEME[s.type]?.hex + '66' ?? C.line
+    // 有类型色用 hex+66（带透明），否则回退 C.line；旧写法 `hex + '66' ?? C.line` 因左操作数恒为字符串而永不触发
+    const frameHex = POI_THEME[s.type]?.hex
+    ctx.strokeStyle = frameHex ? frameHex + '66' : C.line
     ctx.stroke()
 
     // -- 文字区 --
@@ -168,7 +172,7 @@ export function renderPhotoTimelineCard(
         s.travelToNext.distanceM >= 1000
           ? `${(s.travelToNext.distanceM / 1000).toFixed(1)}km`
           : `${s.travelToNext.distanceM}m`
-      const phrase = `${modeIcon(s.travelToNext.mode)} ${modeLabel(s.travelToNext.mode)}  ${s.travelToNext.durationMin}分钟 · ${dist}`
+      const phrase = `${interStopModeIcon(s.travelToNext.mode)} ${interStopModeLabel(s.travelToNext.mode)}  ${s.travelToNext.durationMin}分钟 · ${dist}`
 
       ctx.fillStyle = C.note
       ctx.font = `26px ${FONT}`

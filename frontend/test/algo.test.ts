@@ -552,8 +552,8 @@ async function testBoardSizing() {
   __setPixels(buf)
   const simpleAuto = await generatePattern('test', { ...DEFAULT_PARAMS, boardPresetKey: 'auto', removeBackground: false })
   assert(
-    simpleAuto.width === 36 && simpleAuto.height === 39,
-    `auto 把纯色 148×160 自适应降到 36×39（实际 ${simpleAuto.width}×${simpleAuto.height}）`,
+    simpleAuto.width === 29 && simpleAuto.height === 31,
+    `auto 把纯色 148×160 简单图下探到 29×31（简单图不过度膨胀，实际 ${simpleAuto.width}×${simpleAuto.height}）`,
   )
   assert(
     simpleAuto.boardPlan.boardSize === 52 && simpleAuto.boardPlan.total === 1,
@@ -706,6 +706,64 @@ async function testManualCellEdit() {
   assert(emptied.totalBeads === 0 && emptied.used.length === 0, '改为空格后统计清零')
 }
 
+async function testDefringe() {
+  console.log('用例 13：去背景光晕清理（defringe，主体边缘不留浅色白边）')
+  // 带噪近白底（抬高 bg 容差到 realistic）+ 中央饱和红方块主体 + 一圈 ~88% 白的抗锯齿接缝。
+  // 接缝像素"够像背景"（落在更宽容差环内）应被 defringe 清掉，否则采样时被平均进边缘格 → 浅色光晕。
+  const size = 64
+  const buf = makeBuffer(size)
+  const rand = rng(4242)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const n = Math.round(rand() * 6)
+      setPx(buf, x, y, 255 - n, 255 - n, 255 - n) // 250-255 近白噪点底
+    }
+  }
+  const subj: [number, number, number] = [215, 45, 55] // 高饱和红
+  const lo = 12
+  const hi = 52 // 主体 [12,52) = 40×40，占多数，避开"背景>78%跳过去背景"的安全阀
+  for (let y = lo; y < hi; y++) {
+    for (let x = lo; x < hi; x++) setPx(buf, x, y, subj[0], subj[1], subj[2])
+  }
+  // 主体外一圈 2px 接缝：88% 白 + 12% 主体（够像背景、chroma>18 不被中性规则清）
+  const f = 0.12
+  const fr = Math.round(255 * (1 - f) + subj[0] * f)
+  const fg = Math.round(255 * (1 - f) + subj[1] * f)
+  const fb = Math.round(255 * (1 - f) + subj[2] * f)
+  for (let y = lo - 2; y < hi + 2; y++) {
+    for (let x = lo - 2; x < hi + 2; x++) {
+      const inSubj = x >= lo && x < hi && y >= lo && y < hi
+      if (!inSubj) setPx(buf, x, y, fr, fg, fb)
+    }
+  }
+
+  __setPixels(buf)
+  const result = await generatePattern('test', {
+    ...DEFAULT_PARAMS,
+    boardPresetKey: 'auto',
+    removeBackground: true,
+  })
+  const palette = getPalette(result.params.paletteKey)
+  // 光晕豆 = 用到的浅色（luma>210）且非纯中性（chroma>10，即带背景色调的粉白边）
+  let haloBeads = 0
+  for (const u of result.used) {
+    const [r, g, b] = u.color.rgb
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b)
+    if (luma > 210 && chroma > 10) haloBeads += u.count
+  }
+  // 主体本身应保留为饱和红（存在 luma<160 的用色）
+  const hasSaturatedSubject = result.used.some((u) => {
+    const [r, g, b] = u.color.rgb
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b < 160
+  })
+  assert(hasSaturatedSubject, `主体保留为饱和色（未被侵蚀）`)
+  assert(
+    haloBeads <= 3,
+    `主体边缘无浅色光晕环（残留光晕豆 ${haloBeads} 颗，应≈0）`,
+  )
+}
+
 async function main() {
   await testPixelArt()
   await testNoisyPhoto()
@@ -720,6 +778,7 @@ async function main() {
   await testAutoBoardRecommendation()
   await testLayout()
   await testManualCellEdit()
+  await testDefringe()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)

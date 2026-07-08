@@ -8,6 +8,7 @@ import { renderPackingCard } from './packingCard'
 import { renderMultiRouteCard } from './multiRouteCard'
 import { renderPhotoTimelineCard } from './photoTimelineCard'
 import { renderSubwayCard } from './subwayCard'
+import { renderHandbookDayCard } from './handbookDayCard'
 
 export { CARD_W, CARD_H } from './theme'
 
@@ -66,22 +67,10 @@ export const GUIDE_CARDS: GuideCard[] = [
     render: (ctx, trip, map, bg) => renderPoiCard(ctx, trip, map, bg),
   },
   {
-    key: 'food',
-    label: '美食推荐图',
-    mapSource: null,
-    render: (ctx, trip, _map, bg) => renderFoodCard(ctx, trip, bg),
-  },
-  {
     key: 'timeline',
     label: '行程时间线',
     mapSource: null,
     render: (ctx, trip, _map, bg) => renderTimelineCard(ctx, trip, bg),
-  },
-  {
-    key: 'packing',
-    label: '出行清单',
-    mapSource: null,
-    render: (ctx, trip, _map, bg) => renderPackingCard(ctx, trip, bg),
   },
   {
     key: 'photo-timeline',
@@ -92,11 +81,41 @@ export const GUIDE_CARDS: GuideCard[] = [
   },
   {
     key: 'subway',
-    label: '地铁线路图',
+    label: '地铁公交换乘图',
     mapSource: null,
     render: (ctx, trip, _map, bg) => renderSubwayCard(ctx, trip, null, bg),
   },
+  {
+    key: 'food',
+    label: '美食推荐图',
+    mapSource: null,
+    render: (ctx, trip, _map, bg) => renderFoodCard(ctx, trip, bg),
+  },
+  {
+    key: 'packing',
+    label: '出行清单',
+    mapSource: null,
+    render: (ctx, trip, _map, bg) => renderPackingCard(ctx, trip, bg),
+  },
 ]
+
+export function guideCardsForTrip(trip?: Trip): GuideCard[] {
+  if (!trip) return GUIDE_CARDS.slice()
+  const handbookCards: GuideCard[] = trip.days
+    .filter((day) => day.stops.some((stop) => stop.name.trim()))
+    .map((day) => ({
+      key: `handbook-day-${day.id}`,
+      label: `手帐 Day ${day.index}`,
+      mapSource: null,
+      needsStopPhotos: true,
+      render: (ctx, currentTrip, _map, bg, photos) => renderHandbookDayCard(ctx, currentTrip, day.id, bg, photos),
+    }))
+  return [
+    ...GUIDE_CARDS.slice(0, 5),
+    ...handbookCards,
+    ...GUIDE_CARDS.slice(5),
+  ]
+}
 
 /** 取该卡对应的真实底图 URL（无则 null） */
 export function cardMapUrl(trip: Trip, card: GuideCard): string | null {

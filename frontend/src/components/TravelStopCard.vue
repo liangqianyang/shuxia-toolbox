@@ -56,6 +56,52 @@
       @blur="commitNote"
     />
 
+    <view class="stop__handbook">
+      <view class="stop__poi-head">
+        <text class="stop__poi-title">手帐文案</text>
+        <text class="stop__poi-caption">短句</text>
+      </view>
+      <textarea
+        class="stop__handbook-input"
+        v-model="localHandbookText"
+        placeholder="例如：风吹过湖面，把午后的光留在照片里。"
+        :auto-height="true"
+        @blur="commitHandbookText"
+      />
+    </view>
+
+    <!-- 可信信息：AI 生成，用户可按真实情况修正 -->
+    <view class="stop__poi">
+      <view class="stop__poi-head">
+        <text class="stop__poi-title">可信信息</text>
+        <text class="stop__poi-caption">出发前建议再确认</text>
+      </view>
+      <input
+        class="stop__poi-input"
+        v-model="localPoiInfo.openHours"
+        placeholder="开放/营业时间，如 09:00-17:00"
+        @blur="commitPoiInfo"
+      />
+      <input
+        class="stop__poi-input"
+        v-model="localPoiInfo.reservation"
+        placeholder="预约要求，如 需提前预约 / 无需预约"
+        @blur="commitPoiInfo"
+      />
+      <input
+        class="stop__poi-input"
+        v-model="localPoiInfo.ticket"
+        placeholder="门票/消费，如 免费 / 约 60 元 / 人均 80"
+        @blur="commitPoiInfo"
+      />
+      <input
+        class="stop__poi-input"
+        v-model="localPoiInfo.duration"
+        placeholder="建议停留，如 1.5 小时"
+        @blur="commitPoiInfo"
+      />
+    </view>
+
     <!-- 配图 -->
     <view class="stop__photo-row">
       <view v-if="stop.photo" class="stop__photo">
@@ -65,8 +111,55 @@
       <view v-else class="stop__add-photo" @tap="pickPhoto">+ 配图</view>
     </view>
 
+    <!-- 到下一站交通（可自定义方式/线路/耗时）-->
+    <view class="stop__leg">
+      <view class="stop__leg-toggle" @tap="legOpen = !legOpen">
+        <text class="stop__leg-title">↳ 到下一站</text>
+        <text v-if="stop.travelToNext" class="stop__leg-cur"
+          >{{ modeIcon(stop.travelToNext.mode) }} {{ modeLabel(stop.travelToNext.mode)
+          }}{{ stop.travelToNext.durationMin ? ' · ' + stop.travelToNext.durationMin + '分钟' : '' }}</text
+        >
+        <text v-else class="stop__leg-cur caption">未设置</text>
+        <text class="stop__leg-chev">{{ legOpen ? '收起' : '设置' }}</text>
+      </view>
+      <view v-if="legOpen" class="stop__leg-body">
+        <view class="stop__leg-modes">
+          <view
+            v-for="m in LEG_MODE_ORDER"
+            :key="m"
+            class="stop__leg-mode"
+            :class="{ 'stop__leg-mode--active': legMode === m }"
+            @tap="pickLegMode(m)"
+          >
+            <text class="stop__leg-mode-icon">{{ modeIcon(m) }}</text>
+            <text class="stop__leg-mode-label">{{ modeLabel(m) }}</text>
+          </view>
+        </view>
+        <input
+          class="stop__leg-detail"
+          v-model="legDetail"
+          placeholder="线路/换乘，如 1号线至凤起路站"
+          @blur="commitLegDetail"
+        />
+        <view class="stop__leg-durrow">
+          <text class="caption">约</text>
+          <input class="stop__leg-dur" type="number" v-model="legDur" @blur="commitLegDur" />
+          <text class="caption">分钟</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 操作 -->
     <view class="stop__ops">
+      <text
+        class="stop__op"
+        :class="{ 'stop__op--disabled': replacing || stop.locked }"
+        @tap="requestReplace"
+        >{{ replacing ? '替换中' : '替换' }}</text
+      >
+      <text class="stop__op" :class="{ 'stop__op--locked': stop.locked }" @tap="emit('update', { locked: !stop.locked })">{{
+        stop.locked ? '已锁定' : '锁定'
+      }}</text>
       <text class="stop__op" @tap="emit('move', -1)">上移</text>
       <text class="stop__op" @tap="emit('move', 1)">下移</text>
       <text class="stop__op stop__op--del" @tap="emit('remove')">删除</text>
@@ -75,14 +168,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { chooseImage } from '@/utils/canvasAdapter'
 import { textColorOn } from '@/utils/color'
+import { LEG_MODE_ORDER, modeIcon, modeLabel } from '@/utils/guide/theme'
 import {
   POI_TYPE_ORDER,
   POI_ICON,
   POI_LABEL,
   POI_THEME,
+  createEmptyPoiInfo,
+  type PoiInfo,
   type Stop,
   type GeocodeCandidate,
 } from '@/types/travel'
@@ -90,20 +186,50 @@ import {
 const props = defineProps<{
   stop: Stop
   onGeocode: (query: string) => Promise<GeocodeCandidate[]>
+  replacing?: boolean
 }>()
 
 const emit = defineEmits<{
   update: [patch: Partial<Stop>]
   remove: []
   move: [dir: -1 | 1]
+  replace: []
 }>()
 
 const searchText = ref(props.stop.name)
 const localName = ref(props.stop.name)
 const localNote = ref(props.stop.note)
+const localHandbookText = ref(props.stop.handbookText ?? '')
 const localTime = ref(props.stop.time)
+const localPoiInfo = ref<PoiInfo>({ ...createEmptyPoiInfo(), ...(props.stop.poiInfo ?? {}) })
 const candidates = ref<GeocodeCandidate[]>([])
 const geocoding = ref(false)
+
+// 「到下一站」交通编辑态（折叠式）：方式 chips + 线路/换乘说明 + 耗时
+const legOpen = ref(false)
+const legDetail = ref(props.stop.travelToNext?.detail ?? '')
+const legDur = ref(props.stop.travelToNext?.durationMin ? String(props.stop.travelToNext.durationMin) : '')
+const legMode = computed(() => props.stop.travelToNext?.mode ?? 'walking')
+watch(
+  () => props.stop.travelToNext,
+  (t) => {
+    legDetail.value = t?.detail ?? ''
+    legDur.value = t?.durationMin ? String(t.durationMin) : ''
+  },
+)
+function patchLeg(patch: Partial<{ mode: string; distanceM: number; durationMin: number; detail: string }>): void {
+  const cur = props.stop.travelToNext ?? { mode: 'walking', distanceM: 0, durationMin: 0, detail: '' }
+  emit('update', { travelToNext: { ...cur, ...patch } })
+}
+function pickLegMode(m: string): void {
+  patchLeg({ mode: m })
+}
+function commitLegDetail(): void {
+  patchLeg({ detail: legDetail.value })
+}
+function commitLegDur(): void {
+  patchLeg({ durationMin: Math.max(0, Math.round(Number(legDur.value) || 0)) })
+}
 
 // 父组件替换 stop（如 geocode 命中）时同步本地输入
 watch(() => props.stop.name, (v) => {
@@ -112,9 +238,15 @@ watch(() => props.stop.name, (v) => {
 watch(() => props.stop.note, (v) => {
   localNote.value = v
 })
+watch(() => props.stop.handbookText, (v) => {
+  localHandbookText.value = v ?? ''
+})
 watch(() => props.stop.time, (v) => {
   localTime.value = v
 })
+watch(() => props.stop.poiInfo, (v) => {
+  localPoiInfo.value = { ...createEmptyPoiInfo(), ...(v ?? {}) }
+}, { deep: true })
 
 async function doGeocode(): Promise<void> {
   if (!searchText.value.trim()) return
@@ -141,8 +273,25 @@ function commitName(): void {
 function commitNote(): void {
   if (localNote.value !== props.stop.note) emit('update', { note: localNote.value })
 }
+function commitHandbookText(): void {
+  if (localHandbookText.value !== (props.stop.handbookText ?? '')) {
+    emit('update', { handbookText: localHandbookText.value })
+  }
+}
 function commitTime(): void {
   if (localTime.value !== props.stop.time) emit('update', { time: localTime.value })
+}
+function commitPoiInfo(): void {
+  emit('update', { poiInfo: { ...localPoiInfo.value } })
+}
+
+function requestReplace(): void {
+  if (props.replacing) return
+  if (props.stop.locked) {
+    uni.showToast({ title: '先解锁再替换', icon: 'none' })
+    return
+  }
+  emit('replace')
 }
 
 async function pickPhoto(): Promise<void> {
@@ -271,6 +420,66 @@ async function pickPhoto(): Promise<void> {
     min-height: 80rpx;
   }
 
+  &__handbook {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 16rpx 20rpx;
+    border-radius: $radius-md;
+    background-color: #fff8ef;
+    border: 2rpx solid #ead6bf;
+  }
+
+  &__handbook-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14rpx 20rpx;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+    font-size: $font-body;
+    color: $color-text;
+    line-height: 1.45;
+    min-height: 88rpx;
+  }
+
+  &__poi {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 16rpx 20rpx;
+    border-radius: $radius-md;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+  }
+
+  &__poi-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12rpx;
+  }
+
+  &__poi-title {
+    font-size: $font-caption;
+    font-weight: 700;
+    color: $color-text;
+  }
+
+  &__poi-caption {
+    font-size: 22rpx;
+    color: $color-text-secondary;
+  }
+
+  &__poi-input {
+    padding: 12rpx 18rpx;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+    font-size: $font-caption;
+    color: $color-text-secondary;
+  }
+
   &__photo-row {
     display: flex;
   }
@@ -324,9 +533,118 @@ async function pickPhoto(): Promise<void> {
   &__op {
     padding: 8rpx 0;
 
+    &--disabled {
+      color: #b8a797;
+    }
+
+    &--locked {
+      color: $color-primary;
+      font-weight: 600;
+    }
+
     &--del {
       color: #d9534f;
     }
+  }
+
+  &__leg {
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+    padding: 16rpx 20rpx;
+    border-radius: $radius-md;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+  }
+
+  &__leg-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+
+  &__leg-title {
+    font-size: $font-caption;
+    font-weight: 600;
+    color: $color-text;
+  }
+
+  &__leg-cur {
+    flex: 1;
+    font-size: $font-caption;
+    color: $color-text-secondary;
+  }
+
+  &__leg-chev {
+    font-size: $font-caption;
+    color: $color-primary;
+    flex-shrink: 0;
+  }
+
+  &__leg-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+  }
+
+  &__leg-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10rpx;
+  }
+
+  &__leg-mode {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    padding: 6rpx 16rpx;
+    border-radius: 999rpx;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+    font-size: $font-caption;
+    color: $color-text-secondary;
+
+    &--active {
+      border-color: $color-primary;
+      background-color: #fff3e6;
+      color: $color-primary-dark;
+      font-weight: 600;
+    }
+  }
+
+  &__leg-mode-icon {
+    font-size: 28rpx;
+  }
+
+  &__leg-mode-label {
+    font-size: $font-caption;
+  }
+
+  &__leg-detail {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14rpx 20rpx;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+    font-size: $font-body;
+  }
+
+  &__leg-durrow {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+
+  &__leg-dur {
+    width: 120rpx;
+    padding: 10rpx 16rpx;
+    text-align: center;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+    font-size: $font-body;
+    font-weight: 600;
   }
 }
 </style>

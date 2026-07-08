@@ -19,9 +19,20 @@ pnpm install
 pnpm dev:mp-weixin
 ```
 
-然后用微信开发者工具导入 `frontend/dist/dev/mp-weixin`。
+本地开发默认请求 `http://127.0.0.1:9501`，微信开发者工具导入 `frontend/dist/dev/mp-weixin`。
+如果需要把本地开发产物也输出到 `dist/build/mp-weixin`，使用：
 
-正式构建：
+```bash
+pnpm build:mp-weixin:local
+```
+
+如需临时切换本地后端地址，可在 `frontend/.env.local` 配置：
+
+```bash
+VITE_API_BASE=https://your-api.example.com
+```
+
+正式生产构建会读取 `frontend/.env.production`，接口为 `https://shuxia.lqy-comic.com`：
 
 ```bash
 pnpm build:mp-weixin

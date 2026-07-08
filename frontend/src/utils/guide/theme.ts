@@ -1,4 +1,4 @@
-import type { PoiType } from '@/types/travel'
+import type { GuideStyle, PoiInfo, PoiType } from '@/types/travel'
 import { POI_THEME, POI_LABEL } from '@/types/travel'
 import { textColorOn } from '@/utils/color'
 import { wrapText } from '@/utils/textLayout'
@@ -35,6 +35,17 @@ export function poiIcon(type: PoiType): string {
   return USE_EMOJI_ON_CANVAS ? POI_ICON_EMOJI[type] : POI_ICON_FALLBACK[type]
 }
 
+/**
+ * 是否为「要去游览/消费」的目的地站点。
+ * transit（火车站/机场/汽车站等）只是跨城出入节点，不算景点——
+ * 它已在路线规划图的跨城段体现，不应再作为编号景点出现在市内地图/清单上。
+ * 市内地图类卡片（景点分布/游玩顺序/分日/多路线/地铁）据此过滤；
+ * 时间线类卡片不过滤（枢纽是日程流的一部分）。
+ */
+export function isVisitStop(s: { type: string }): boolean {
+  return s.type !== 'transit'
+}
+
 // ---- 主题色板 ----
 export const C = {
   bgTop: '#FFF9F2',
@@ -53,6 +64,72 @@ export const C = {
 }
 
 export const FONT = 'sans-serif'
+
+const STYLE_THEMES: Record<GuideStyle, {
+  bgTop: string
+  bgBottom: string
+  banner: string
+  bannerSoft: string
+  bannerText: string
+  accent: string
+  decor: [string, string, string, string]
+}> = {
+  handbook: {
+    bgTop: '#FFF9F2',
+    bgBottom: '#FDF1E2',
+    banner: '#F6C89A',
+    bannerSoft: '#FFF3E2',
+    bannerText: '#5A3B1E',
+    accent: '#C8956C',
+    decor: ['🌸', '🍃', '🌿', '🌼'],
+  },
+  minimal: {
+    bgTop: '#F8FAF8',
+    bgBottom: '#EEF3F0',
+    banner: '#D9E6DE',
+    bannerSoft: '#FFFFFF',
+    bannerText: '#243A32',
+    accent: '#4E7568',
+    decor: ['□', '＋', '—', '○'],
+  },
+  family: {
+    bgTop: '#FFF7D7',
+    bgBottom: '#EAF6FF',
+    banner: '#FFD879',
+    bannerSoft: '#FFFDF2',
+    bannerText: '#5C4A12',
+    accent: '#4B85C5',
+    decor: ['☀️', '🎈', '⭐', '🧃'],
+  },
+  couple: {
+    bgTop: '#FFF4F7',
+    bgBottom: '#F6ECFF',
+    banner: '#F6B6C8',
+    bannerSoft: '#FFF7FA',
+    bannerText: '#683246',
+    accent: '#C66D8B',
+    decor: ['♡', '✦', '♡', '✧'],
+  },
+  weekend: {
+    bgTop: '#F4F8FF',
+    bgBottom: '#FFF5E7',
+    banner: '#AFC7F2',
+    bannerSoft: '#FFFFFF',
+    bannerText: '#263C66',
+    accent: '#E29A54',
+    decor: ['↗', '○', '▱', '↘'],
+  },
+}
+
+let currentGuideStyle: GuideStyle = 'handbook'
+
+export function setGuideStyle(style: GuideStyle | undefined): void {
+  currentGuideStyle = style && STYLE_THEMES[style] ? style : 'handbook'
+}
+
+function activeStyle() {
+  return STYLE_THEMES[currentGuideStyle]
+}
 
 /** 圆角矩形路径（不 fill/stroke，调用方自行填充） */
 export function roundRect(
@@ -82,10 +159,13 @@ export function drawImageCover(
   dw: number,
   dh: number,
 ): void {
+  // 腾讯 staticMap 源图封顶 ~928px，2x 导出时会被放大；用高质量插值让放大更平滑、少锯齿。
   const a = img as { width?: number; naturalWidth?: number; height?: number; naturalHeight?: number }
   const iw = a.width || a.naturalWidth || 0
   const ih = a.height || a.naturalHeight || 0
   if (!iw || !ih) return
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
   const scale = Math.max(dw / iw, dh / ih)
   const sw = iw * scale
   const sh = ih * scale
@@ -102,6 +182,42 @@ export function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWid
   return `${t}…`
 }
 
+function cleanTrustValue(value: string | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function withTrustPrefix(prefix: string, value: string): string {
+  return value.startsWith(prefix) ? value : `${prefix}${value}`
+}
+
+export function poiTrustParts(
+  info: PoiInfo | undefined,
+  options: { includeOpenHours?: boolean; max?: number } = {},
+): string[] {
+  if (!info) return []
+  const parts: string[] = []
+  if (options.includeOpenHours) {
+    const openHours = cleanTrustValue(info.openHours)
+    if (openHours) parts.push(withTrustPrefix('开放 ', openHours))
+  }
+  const reservation = cleanTrustValue(info.reservation)
+  if (reservation) parts.push(reservation)
+  const ticket = cleanTrustValue(info.ticket)
+  if (ticket) parts.push(ticket)
+  const duration = cleanTrustValue(info.duration)
+  if (duration) parts.push(/^建议/.test(duration) ? duration : `建议${duration}`)
+
+  const deduped = [...new Set(parts)]
+  return deduped.slice(0, options.max ?? 3)
+}
+
+export function poiTrustLine(
+  info: PoiInfo | undefined,
+  options: { includeOpenHours?: boolean; max?: number; separator?: string } = {},
+): string {
+  return poiTrustParts(info, options).join(options.separator ?? ' · ')
+}
+
 /**
  * 卡片背景。bgImage 为用户自定义底图时：全幅铺满 + 半透明暖白蒙层（保证文字清晰、底图作水印质感）；
  * 否则用内置竖向渐变 + 四角 emoji 点缀。
@@ -115,8 +231,9 @@ export function drawBackground(ctx: CanvasRenderingContext2D, bgImage: CanvasIma
   }
 
   const g = ctx.createLinearGradient(0, 0, 0, CARD_H)
-  g.addColorStop(0, C.bgTop)
-  g.addColorStop(1, C.bgBottom)
+  const style = activeStyle()
+  g.addColorStop(0, style.bgTop)
+  g.addColorStop(1, style.bgBottom)
   ctx.fillStyle = g
   ctx.fillRect(0, 0, CARD_W, CARD_H)
 
@@ -126,13 +243,13 @@ export function drawBackground(ctx: CanvasRenderingContext2D, bgImage: CanvasIma
   ctx.font = `72px ${FONT}`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText('🌸', 24, 20)
+  ctx.fillText(style.decor[0], 24, 20)
   ctx.textAlign = 'right'
-  ctx.fillText('🍃', CARD_W - 24, 20)
+  ctx.fillText(style.decor[1], CARD_W - 24, 20)
   ctx.textBaseline = 'bottom'
-  ctx.fillText('🌿', CARD_W - 24, CARD_H - 16)
+  ctx.fillText(style.decor[2], CARD_W - 24, CARD_H - 16)
   ctx.textAlign = 'left'
-  ctx.fillText('🌼', 24, CARD_H - 16)
+  ctx.fillText(style.decor[3], 24, CARD_H - 16)
   ctx.restore()
 }
 
@@ -170,23 +287,24 @@ export function drawBanner(
   const h = padTop + titleBlockH + (hasSub ? 10 + subtitleH : 0) + padBottom
 
   // 胶囊底（双层，模拟水彩描边）
+  const style = activeStyle()
   roundRect(ctx, x, top, w, h, 40)
-  ctx.fillStyle = C.banner
+  ctx.fillStyle = style.banner
   ctx.fill()
   roundRect(ctx, x + 8, top + 8, w - 16, h - 16, 32)
-  ctx.fillStyle = '#FFF3E2'
+  ctx.fillStyle = style.bannerSoft
   ctx.fill()
 
   const blockTop = top + padTop
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillStyle = C.bannerText
+  ctx.fillStyle = style.bannerText
   ctx.font = `bold 62px ${FONT}`
   lines.forEach((ln, i) => ctx.fillText(ln, CARD_W / 2, blockTop + i * titleLineH + 6))
 
   if (hasSub) {
     ctx.font = `34px ${FONT}`
-    ctx.fillStyle = C.primary
+    ctx.fillStyle = style.accent
     ctx.fillText(subtitle, CARD_W / 2, blockTop + titleBlockH + 10)
   }
 
@@ -276,21 +394,47 @@ const MODE_ICON_EMOJI: Record<string, string> = {
   walking: '🚶',
   cycling: '🚴',
   driving: '🚗',
+  taxi: '🚕',
+  metro: '🚇',
+  bus: '🚌',
   transit: '🚌',
   train: '🚆',
+  ferry: '🛳️',
+  cablecar: '🚠',
 }
 const MODE_LABEL: Record<string, string> = {
   walking: '步行',
   cycling: '骑行',
-  driving: '驾车',
+  driving: '自驾',
+  taxi: '打车',
+  metro: '地铁',
+  bus: '公交',
   transit: '公交',
   train: '火车',
+  ferry: '轮渡',
+  cablecar: '缆车',
 }
 export function modeIcon(mode: string): string {
   return USE_EMOJI_ON_CANVAS ? (MODE_ICON_EMOJI[mode] ?? '🚶') : (MODE_LABEL[mode] ?? '步行')
 }
 export function modeLabel(mode: string): string {
   return MODE_LABEL[mode] ?? '步行'
+}
+
+/** 站间「到下一站」可选出行方式（编辑器 chips 用）。后端自动：<1.5km 步行、更远 taxi（打车） */
+export const LEG_MODE_ORDER = ['walking', 'metro', 'bus', 'taxi', 'driving', 'cycling', 'ferry', 'cablecar'] as const
+export type LegMode = (typeof LEG_MODE_ORDER)[number]
+
+/**
+ * 市内景点间衔接（travelToNext）的展示图标/标签。
+ * 后端自动段远距用 taxi（打车）呈现；driving 仅当用户显式选「自驾」时出现。
+ * 直接走 modeIcon/modeLabel，保留此函数仅作语义命名（调用方无需改）。
+ */
+export function interStopModeIcon(mode: string): string {
+  return modeIcon(mode)
+}
+export function interStopModeLabel(mode: string): string {
+  return modeLabel(mode)
 }
 
 /** 站间交通短语：如「步行 12 分钟 · 0.8km」 */

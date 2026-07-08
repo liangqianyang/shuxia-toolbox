@@ -36,9 +36,14 @@ export interface PatternParams {
   gridLongSide: number
   paletteKey: PaletteKey
   removeBackground: boolean
+  /** 仅用「我的库存」里勾选的颜色映射（库存为空时忽略，退回全色板） */
+  ownedOnly: boolean
   /** 0–255，格子 alpha 占比低于该值视为空格 */
   alphaThreshold: number
 }
+
+/** 购物清单按包估算用：一包拼豆约多少颗。经验值，各卖家不一，可调。 */
+export const BEADS_PER_PACK = 300
 
 /** cells 中表示空格（透明/被去除背景）的值 */
 export const EMPTY_CELL = -1
@@ -99,5 +104,57 @@ export const DEFAULT_PARAMS: PatternParams = {
   gridLongSide: 52,
   paletteKey: 'mard-221',
   removeBackground: true,
+  ownedOnly: false,
   alphaThreshold: 32,
 }
+
+/**
+ * 用途预设：把常见成品尺寸一键套成板型/格数参数，降低休闲用户的认知负担。
+ * 选「自定义」则展开高级设置手动调。尺寸为经验值，可调。
+ */
+export interface UseCasePreset {
+  key: string
+  label: string
+  icon: string
+  /** 应用到 params 的字段（部分覆盖） */
+  patch: Partial<Pick<PatternParams, 'boardPresetKey' | 'autoGridSize' | 'gridLongSide'>>
+  hint: string
+}
+
+export const USE_CASE_PRESETS: readonly UseCasePreset[] = [
+  {
+    key: 'smart',
+    label: '智能推荐',
+    icon: '✨',
+    patch: { boardPresetKey: 'auto', autoGridSize: true },
+    hint: '按图片内容自动定尺寸，适合大多数场景',
+  },
+  {
+    key: 'keychain',
+    label: '钥匙扣',
+    icon: '🔑',
+    patch: { boardPresetKey: 'auto', autoGridSize: false, gridLongSide: 30 },
+    hint: '小巧成品，约 30 格，豆量省',
+  },
+  {
+    key: 'coaster',
+    label: '杯垫',
+    icon: '☕',
+    patch: { boardPresetKey: 'small-1', autoGridSize: false, gridLongSide: 52 },
+    hint: '1 张 52 小板铺满，方形成品',
+  },
+  {
+    key: 'avatar',
+    label: '头像',
+    icon: '🙂',
+    patch: { boardPresetKey: 'auto', autoGridSize: false, gridLongSide: 58 },
+    hint: '中等分辨率，五官细节清晰',
+  },
+  {
+    key: 'frame',
+    label: '相框大图',
+    icon: '🖼️',
+    patch: { boardPresetKey: 'large-1', autoGridSize: false, gridLongSide: 104 },
+    hint: '1 张 104 大板，细节最多（建议分页打印）',
+  },
+] as const

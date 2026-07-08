@@ -45,6 +45,33 @@ interface MapProvider
     public function directions(array $from, array $to, string $mode = 'walking'): array;
 
     /**
+     * 两点间公共交通 / 地铁换乘路线规划。
+     *
+     * @param array{lat: float, lng: float} $from
+     * @param array{lat: float, lng: float} $to
+     * @return array{
+     *     distanceM: int,
+     *     durationMin: int,
+     *     walkingM: int,
+     *     transferCount: int,
+     *     summary: string,
+     *     lines: array<int, array{
+     *         vehicle: string,
+     *         title: string,
+     *         geton: string,
+     *         getoff: string,
+     *         stationCount: int,
+     *         distanceM: int,
+     *         durationMin: int,
+     *         price?: float,
+     *         startTime?: string,
+     *         endTime?: string
+     *     }>
+     * }
+     */
+    public function transit(array $from, array $to): array;
+
+    /**
      * 周边搜索（探索）：中心点 radius 米内、匹配 keyword 的 POI。
      *
      * @param array{lat: float, lng: float} $center

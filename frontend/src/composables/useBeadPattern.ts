@@ -2,7 +2,7 @@ import { computed, reactive, ref, shallowRef } from 'vue'
 import type { BoardPlan, BoardPresetKey, PatternParams, PatternResult, UsedColor } from '@/types/beads'
 import { BOARD_PRESETS, DEFAULT_PARAMS, EMPTY_CELL } from '@/types/beads'
 import { getPalette, nearestBeadIndex } from '@/utils/beadPalette'
-import { deltaE2000, rgbToLab } from '@/utils/color'
+import { deltaE2000, rgbToLab, SRGB8_TO_LINEAR, linearToSrgb8 } from '@/utils/color'
 import { loadImagePixels, type PixelBuffer } from '@/utils/canvasAdapter'
 
 interface GridSample {
@@ -278,6 +278,45 @@ function removeSourceBackgroundFlood(buf: PixelBuffer, alphaThreshold: number): 
   for (const cell of flooded) {
     cleaned[cell * 4 + 3] = 0
   }
+
+  // Defringe（深度受限侵蚀）：flood 只清掉"够像背景"的像素，主体边缘那圈半透明抗锯齿接缝
+  // （背景×主体混色，色差比容差略大而未被 flood）会留下，采样时被平均进边缘格 → 主体周围一圈浅色光晕。
+  // 从 flood 边界向内做 tolerance 门控的 BFS：把仍落在"更宽容差环"内的接缝像素逐环清掉，直到碰上
+  // 主体主导（远离背景色）的像素为止。深度封顶 2 环——真实 AA 接缝仅 1-2px，封顶可吃净多像素接缝，
+  // 又杜绝经主体浅色区深漏侵蚀特征。基于集合标记，一个像素只清一次。
+  const fringeTolSq = Math.min(90 * 90, bg.toleranceSq * 4)
+  const isFlooded = visited // 1 = 已删背景（含本轮新清的接缝）
+  const MAX_FRINGE_DEPTH = 2
+  let frontier = flooded
+  for (let depth = 0; depth < MAX_FRINGE_DEPTH; depth++) {
+    const next: number[] = []
+    for (const cell of frontier) {
+      const x = cell % width
+      const y = (cell / width) | 0
+      const neighbors = [
+        x > 0 ? cell - 1 : -1,
+        x < width - 1 ? cell + 1 : -1,
+        y > 0 ? cell - width : -1,
+        y < height - 1 ? cell + width : -1,
+      ]
+      for (const nb of neighbors) {
+        if (nb < 0 || isFlooded[nb]) continue
+        const i = nb * 4
+        if (data[i + 3] < alphaThreshold) continue
+        const dr = data[i] - bg.r
+        const dg = data[i + 1] - bg.g
+        const db = data[i + 2] - bg.b
+        if (dr * dr + dg * dg + db * db <= fringeTolSq) {
+          isFlooded[nb] = 1
+          cleaned[nb * 4 + 3] = 0
+          next.push(nb)
+        }
+      }
+    }
+    if (next.length === 0) break
+    frontier = next
+  }
+
   return { data: cleaned, width, height }
 }
 
@@ -292,6 +331,10 @@ function getBoardPreset(key: BoardPresetKey) {
 const MIN_LONG_SIDE = 24
 const MAX_AUTO_LONG_SIDE = 64
 const MAX_MANUAL_LONG_SIDE = 104
+/** auto 简单图基线下限：色少且边缘稀疏的图（纯色/大色块/简单 emoji）不必硬撑 38 格，
+ *  基线可平滑下探到此值，避免简单图被过度膨胀成大图纸。复杂图基线仍为 38，不受影响。 */
+const SIMPLE_MIN_LONG_SIDE = 30
+const FULL_BASE_LONG_SIDE = 38
 
 /** 去毛点高对比豁免阈值（ΔE2000）：≤2 格小色块若与将替换它的邻域主色差异超过该值，
  * 判定为有意特征（眼睛/高光/字迹）保留，不并入邻域；低于该值才是抗锯齿/压缩噪点，并入。
@@ -464,9 +507,19 @@ function resolveAutoGridSize(
 ): { width: number; height: number } {
   const sourceLong = Math.max(crop.width, crop.height)
   const { colors, edgeDensity } = estimateComplexity(buf, crop, alphaThreshold)
-  // 边缘项权重：把"线密"图顶到 52 上限；纯色/渐变图 edgeDensity≈0 不受影响
+  // 边缘项权重：把"线密"图顶到上限；纯色/渐变图 edgeDensity≈0 不受影响
   const EDGE_WEIGHT = 80
-  const detailCap = clamp(Math.round(38 + colors * 0.6 + edgeDensity * EDGE_WEIGHT), 38, MAX_AUTO_LONG_SIDE)
+  // 简单度插值基线：仅当"边缘稀疏 且 色少"（两者都低，取乘积）时基线才从 38 下探到 30，
+  // 简单图不被过度膨胀；只要有一项偏高（线密或多色），基线迅速回到 38，复杂图分辨率不受影响。
+  const edgeFactor = clamp(edgeDensity / 0.06, 0, 1) // 0=边缘极稀疏 1=够密
+  const colorFactor = clamp((colors - 2) / 6, 0, 1) // colors≤2 极简单，≥8 视为不简单
+  const simplicity = (1 - edgeFactor) * (1 - colorFactor) // 1=极简单 0=不简单
+  const base = FULL_BASE_LONG_SIDE - simplicity * (FULL_BASE_LONG_SIDE - SIMPLE_MIN_LONG_SIDE)
+  const detailCap = clamp(
+    Math.round(base + colors * 0.6 + edgeDensity * EDGE_WEIGHT),
+    SIMPLE_MIN_LONG_SIDE,
+    MAX_AUTO_LONG_SIDE,
+  )
   const targetLong = clamp(Math.min(detailCap, sourceLong), MIN_LONG_SIDE, MAX_AUTO_LONG_SIDE)
   const aspect = crop.width / Math.max(1, crop.height)
   let width: number
@@ -488,8 +541,10 @@ function resolveLayout(
   crop: CropRect,
 ): { width: number; height: number; boardPlan: BoardPlan } {
   if (params.boardPresetKey === 'custom') {
-    const width = Math.max(1, Math.round(params.gridWidth))
-    const height = Math.max(1, Math.round(params.gridHeight || params.gridWidth))
+    // 钳到 [1, MAX_MANUAL_LONG_SIDE]：畸形入参（如 5000）会造百万格网格，
+    // 叠加逐格映射直接卡死设备
+    const width = clamp(Math.round(params.gridWidth), 1, MAX_MANUAL_LONG_SIDE)
+    const height = clamp(Math.round(params.gridHeight || params.gridWidth), 1, MAX_MANUAL_LONG_SIDE)
     return { width, height, boardPlan: gridToBoardPlan(width, height, 'custom') }
   }
 
@@ -571,6 +626,10 @@ function sampleGrid(
       let sumG = 0
       let sumB = 0
       let sumA = 0
+      // 线性光累加：通用面积平均在线性空间做，避免 sRGB 直接平均导致混合色偏暗发闷
+      let linR = 0
+      let linG = 0
+      let linB = 0
       let darkR = 0
       let darkG = 0
       let darkB = 0
@@ -592,6 +651,9 @@ function sampleGrid(
           sumG += g * a
           sumB += b * a
           sumA += a
+          linR += SRGB8_TO_LINEAR[r] * a
+          linG += SRGB8_TO_LINEAR[g] * a
+          linB += SRGB8_TO_LINEAR[b] * a
           pixels++
           if (a >= alphaThreshold) {
             const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
@@ -622,15 +684,21 @@ function sampleGrid(
       }
 
       const cell = gy * gridW + gx
-      if (sumA / pixels < alphaThreshold) {
+      // pixels===0（退化裁剪/极端宽高比）时 sumA/pixels=NaN，NaN<阈值 为 false 会误判非空
+      // 并把 NaN 写进 rgb 污染映射；显式判空守住
+      if (pixels === 0 || sumA / pixels < alphaThreshold) {
         empty[cell] = 1
       } else {
         const avgR = sumR / sumA
         const avgG = sumG / sumA
         const avgB = sumB / sumA
-        let outR = avgR
-        let outG = avgG
-        let outB = avgB
+        // 线性正确的 sRGB 平均：仅作输出值（避免混合发暗）；阈值判定仍用 gamma 平均 avgR/G/B（既有调参依赖）
+        const lavgR = linearToSrgb8(linR / sumA)
+        const lavgG = linearToSrgb8(linG / sumA)
+        const lavgB = linearToSrgb8(linB / sumA)
+        let outR = lavgR
+        let outG = lavgG
+        let outB = lavgB
         // 主色（众数）打底：某色占格内过半时用主色而非平均，边界更锐利、不糊（同豆数下更清晰）；
         // 没有明显主色（渐变/照片）仍用平均，避免噪点化。
         let domA = 0
@@ -643,9 +711,9 @@ function sampleGrid(
           }
         }
         if (domA / sumA <= 0.5) {
-          outR = avgR
-          outG = avgG
-          outB = avgB
+          outR = lavgR
+          outG = lavgG
+          outB = lavgB
         }
         const avgLuma = 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB
         const avgChroma = Math.max(avgR, avgG, avgB) - Math.min(avgR, avgG, avgB)
@@ -708,24 +776,33 @@ function sampleGrid(
  * 阶段 2：每格映射到最近豆色（CIELAB ΔE2000）。
  * 直接映射在降采样后的格子上做——平涂区同色格子映射同一豆色，
  * 照片的渐变保留自然过渡，比 k-means 预聚类更保真。
+ *
+ * 性能：按「打包 RGB(24bit) → 豆色索引」缓存。降采样后平涂/描边区
+ * 大量格子颜色相同，缓存把逐格全色板 ΔE2000 扫描塌缩到「每种唯一色一次」，
+ * 且 rgbToLab 同样只算一次。rgb 为区域平均（小数），按四舍五入取整做 key
+ * 兼作量化——同一整数色命中同一缓存，对离散豆色的最近映射结果无实质影响。
  */
 function mapCellsDirectToPalette(
-  labs: Float64Array,
+  rgb: Float32Array,
   empty: Uint8Array,
   cellCount: number,
   palette: ReturnType<typeof getPalette>,
+  allowedIndices?: ReadonlySet<number>,
 ): Int16Array {
   const cells = new Int16Array(cellCount).fill(EMPTY_CELL)
+  const cache = new Map<number, number>()
   for (let i = 0; i < cellCount; i++) {
     if (empty[i]) continue
-    cells[i] = nearestBeadIndex(
-      {
-        l: labs[i * 3],
-        a: labs[i * 3 + 1],
-        b: labs[i * 3 + 2],
-      },
-      palette,
-    )
+    const r = Math.round(rgb[i * 3])
+    const g = Math.round(rgb[i * 3 + 1])
+    const b = Math.round(rgb[i * 3 + 2])
+    const key = (r << 16) | (g << 8) | b
+    let idx = cache.get(key)
+    if (idx === undefined) {
+      idx = nearestBeadIndex(rgbToLab(r, g, b), palette, allowedIndices)
+      cache.set(key, idx)
+    }
+    cells[i] = idx
   }
   return cells
 }
@@ -821,6 +898,61 @@ function consolidateDarkOutline(
     const source = dark[j]
     if (luma(source) < protectLuma) continue // 近黑五官（眼珠）保留
     changed += replacePaletteIndex(cells, source, anchor)
+  }
+  return changed
+}
+
+/**
+ * 极低频杂色兜底归并：merge/despeckle 之后仍残留的“零星几颗”色，
+ * 无条件并入色空间最近的高频色（不限 ΔE，取最近邻让视觉变化最小）。
+ *
+ * 为什么需要：mergeSimilarColorsByFrequency 只并“ΔE2000<16 的相近低频色”，
+ * 但真实杂色常因 AA/JPEG 色相偏移而 ΔE>16（浅灰泛粉、深灰泛紫…），被当成独立细节保留，
+ * 图例里就剩一堆 1~十几颗的杂色。这些色太少根本拼不出形状，人眼只读作杂色。
+ *
+ * 双重门槛防误伤：
+ *  - share < shareThreshold：只动极低频，结构色（渐变/明暗）不动；
+ *  - count < countCap：保护“虽低频但有体量”的真细节（车轮辐条、小装饰）——它们颗数够多、
+ *    能拼出形状，保留。两个条件同时满足才归并。
+ * 高对比豁免：若 rare 色与所有高频主色 ΔE 都 >preserveDE（与 despeckle 同阈值 25），
+ * 多半是有意的高对比小特征（眼珠/字迹/高光），保留——只有"接近某主色的偏移杂色"才并入。
+ * 取最近邻（而非最高频）：归并点的颜色变化最小，不引入突兀色块。
+ */
+function pruneRareColors(
+  cells: Int16Array,
+  palette: ReturnType<typeof getPalette>,
+  shareThreshold = 0.007,
+  countCap = 16,
+  preserveDE = DESPECKLE_PRESERVE_DE,
+): number {
+  const counts = buildPaletteIndexCounts(cells)
+  let nonEmpty = 0
+  for (const count of counts.values()) nonEmpty += count
+  if (nonEmpty === 0) return 0
+  // 锚点 = 不会被清的色（share 够高 或 颗数够多）。低频色并入它们里 ΔE 最近的一个。
+  const anchors: number[] = []
+  const rare: number[] = []
+  for (const [idx, count] of counts) {
+    if (count / nonEmpty >= shareThreshold || count >= countCap) anchors.push(idx)
+    else rare.push(idx)
+  }
+  if (anchors.length === 0 || rare.length === 0) return 0
+  let changed = 0
+  for (const source of rare) {
+    const lab = palette.colors[source].lab
+    let bestIdx = anchors[0]
+    let bestDelta = deltaE2000(lab, palette.colors[bestIdx].lab)
+    for (let k = 1; k < anchors.length; k++) {
+      const d = deltaE2000(lab, palette.colors[anchors[k]].lab)
+      if (d < bestDelta) {
+        bestDelta = d
+        bestIdx = anchors[k]
+      }
+    }
+    // 与所有高频主色都差异巨大（ΔE>preserveDE）→ 多半是有意的高对比小特征（眼珠/字迹/高光），
+    // 保留；与 despeckle 的 DESPECKLE_PRESERVE_DE 同语义。只有"接近某主色的偏移杂色"才并入。
+    if (bestDelta > preserveDE) continue
+    if (bestIdx !== source) changed += replacePaletteIndex(cells, source, bestIdx)
   }
   return changed
 }
@@ -993,7 +1125,11 @@ export function eraseColor(result: PatternResult, fromIndex: number): PatternRes
   return { ...result, cells, used, totalBeads }
 }
 
-export async function generatePattern(src: string, params: PatternParams): Promise<PatternResult> {
+export async function generatePattern(
+  src: string,
+  params: PatternParams,
+  allowedIndices?: ReadonlySet<number>,
+): Promise<PatternResult> {
   const loaded = await loadImagePixels(src)
   const buf = params.removeBackground
     ? removeSourceBackgroundFlood(loaded, params.alphaThreshold)
@@ -1005,19 +1141,12 @@ export async function generatePattern(src: string, params: PatternParams): Promi
   const sample = sampleGrid(buf, crop, w, h, params.alphaThreshold)
   await yieldToUI()
 
-  // 每格 LAB 只算一次，去背景/映射共用
   const cellCount = w * h
-  const labs = new Float64Array(cellCount * 3)
-  for (let i = 0; i < cellCount; i++) {
-    if (sample.empty[i]) continue
-    const lab = rgbToLab(sample.rgb[i * 3], sample.rgb[i * 3 + 1], sample.rgb[i * 3 + 2])
-    labs[i * 3] = lab.l
-    labs[i * 3 + 1] = lab.a
-    labs[i * 3 + 2] = lab.b
-  }
-
   const palette = getPalette(params.paletteKey)
-  const cells = mapCellsDirectToPalette(labs, sample.empty, cellCount, palette)
+  // 库存约束：仅当 ownedOnly 开启且传入非空集合时限定色板子集
+  const constraint = params.ownedOnly ? allowedIndices : undefined
+  // 每种唯一 RGB 只做一次 rgbToLab + ΔE2000（缓存去重），平涂/描边区大幅提速
+  const cells = mapCellsDirectToPalette(sample.rgb, sample.empty, cellCount, palette, constraint)
   // 合并抗锯齿/压缩产生的相近低频色（ΔE2000<12 且占比<1%），减少杂色、描边连续不斑驳；
   // 占比更高的结构相近色保留，保住脸上的明暗/渐变层次、避免串色发灰
   mergeSimilarColorsByFrequency(cells, palette)
@@ -1029,6 +1158,12 @@ export async function generatePattern(src: string, params: PatternParams): Promi
   for (let round = 0; round < 4; round++) {
     if (despeckle(cells, w, h, palette, 3) === 0) break
   }
+
+  // 极低频杂色兜底：把残留的“零星几颗”（share<0.7% 且 <16 颗）并入最近邻高频色，
+  // 清掉 merge 漏掉的 ΔE>16 杂色（浅灰泛粉、深灰泛紫的 AA/JPEG 残片）
+  pruneRareColors(cells, palette)
+  // 归并后可能留下 1~3 颗的孤立锚点色，再清一次去毛点
+  despeckle(cells, w, h, palette, 3)
 
   const { used, totalBeads } = countColors(cells, params.paletteKey)
   return { width: w, height: h, boardPlan, cells, used, totalBeads, params: { ...params } }
@@ -1062,11 +1197,11 @@ export function useBeadPattern() {
     return prev
   }
 
-  async function generate(src: string): Promise<PatternResult | null> {
+  async function generate(src: string, allowedIndices?: ReadonlySet<number>): Promise<PatternResult | null> {
     generating.value = true
     error.value = ''
     try {
-      result.value = await generatePattern(src, params)
+      result.value = await generatePattern(src, params, allowedIndices)
       // 新生成是新的基线，清空编辑历史
       history.value = []
       return result.value

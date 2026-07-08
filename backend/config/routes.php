@@ -15,4 +15,6 @@ Router::addGroup('/api', function (): void {
     Router::post('/beads/estimate', [BeadController::class, 'estimate']);
     Router::get('/travel/geocode', [TravelController::class, 'geocode']);
     Router::post('/travel/plan', [TravelController::class, 'plan']);
+    Router::post('/travel/refine-day', [TravelController::class, 'refineDay']);
+    Router::post('/travel/replace-stop', [TravelController::class, 'replaceStop']);
 });

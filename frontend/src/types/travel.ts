@@ -19,7 +19,27 @@ export interface ActivityItem {
 /** 出行方式：决定后端路线规划模式 + 卡片交通图标 */
 export type TravelMode = 'walking' | 'cycling' | 'driving' | 'transit' | 'train'
 
+/** 旅行强度：影响 AI 每天排点密度、休息/用餐缓冲与路线跨度 */
+export type TravelIntensity = 'relaxed' | 'standard' | 'packed'
+
+/** 攻略图模板风格 */
+export type GuideStyle = 'handbook' | 'minimal' | 'family' | 'couple' | 'weekend'
+
+/** 手帐日记氛围：影响手帐卡片配色、装饰和 AI 文案口吻 */
+export type DayMood = 'citywalk' | 'nature' | 'culture' | 'food' | 'family' | 'couple' | 'classic'
+
 /** 地点（行程中的一个停留点） */
+export interface PoiInfo {
+  /** 开放时间 / 营业时间，未知时写出发前确认 */
+  openHours: string
+  /** 预约要求，如无需预约/需提前预约/节假日建议预约 */
+  reservation: string
+  /** 门票或消费提示，如免费/约 60 元/人均 80 */
+  ticket: string
+  /** 建议停留时长，如 1.5 小时 */
+  duration: string
+}
+
 export interface Stop {
   /** 前端生成的稳定 id（v-for key + 编辑） */
   id: string
@@ -36,11 +56,47 @@ export interface Stop {
   /** 时间段，自由文本，如「09:30-12:00」；可空 */
   time: string
   /** 到下一站的交通（AI 规划时由后端 directions 算出填充；手填行程为 null） */
-  travelToNext: { mode: string; distanceM: number; durationMin: number } | null
+  travelToNext: {
+    mode: string
+    distanceM: number
+    durationMin: number
+    detail?: string
+    transit?: TransitRoute | null
+  } | null
   /** 配图临时路径（chooseImage 返回）；可空 */
   photo: string | null
+  /** 是否锁定：局部重排/重生成时优先保持该地点当前位置 */
+  locked?: boolean
+  /** 景点/餐厅可信信息，用于出发前确认和攻略细节 */
+  poiInfo?: PoiInfo
+  /** AI 生成的水彩手帐插画提示词，供后续图片生成服务使用 */
+  illustrationPrompt?: string
+  /** 手帐图中展示的旅行日记短句，用户可单独编辑，不影响实用备注 */
+  handbookText?: string
   /** 小时粒度子活动（时间线升级后使用，AI 规划时返回）；可空 */
   activities?: ActivityItem[]
+}
+
+export interface TransitLine {
+  vehicle: string
+  title: string
+  geton: string
+  getoff: string
+  stationCount: number
+  distanceM: number
+  durationMin: number
+  price?: number
+  startTime?: string
+  endTime?: string
+}
+
+export interface TransitRoute {
+  distanceM: number
+  durationMin: number
+  walkingM: number
+  transferCount: number
+  summary: string
+  lines: TransitLine[]
 }
 
 /** 一天的行程 */
@@ -54,6 +110,10 @@ export interface Day {
   stops: Stop[]
   /** AI 标注的路线主题标签，如「西湖线」「灵隐茶山线」；用于多路线分区地图；可空 */
   routeTag?: string
+  /** 手帐卡片氛围，用于自动挑选配色和装饰 */
+  dayMood?: DayMood
+  /** 手帐卡片底部今日一句话，用户可编辑 */
+  handbookSummary?: string
 }
 
 /** 美食推荐（AI 生成，美食推荐图数据源） */
@@ -66,6 +126,8 @@ export interface FoodRec {
   dishes: string[]
   /** 简短点评 */
   note: string
+  /** 餐厅可信信息（AI 生成或从行程内美食 stop 匹配而来）；可空 */
+  poiInfo?: PoiInfo
 }
 
 /** 小红书文案（AI 生成，一键复制发布） */
@@ -75,7 +137,14 @@ export interface XhsCopy {
   tags: string[]
 }
 
-/** 跨城段：出发地 → 目的地（用户所选出行方式），由后端 geocode 出发地 + 估算距离/耗时 */
+/** 地图视口（center + zoom，Web Mercator），后端按站点 bounds 算出，前端用它把站点投影到底图像素画清晰编号点 */
+export interface MapViewport {
+  centerLat: number
+  centerLng: number
+  zoom: number
+}
+
+/** 跨城段：出发地 → 目的地（用户所选出行方式）。耗时/里程优先用 AI 联网查的真实值，geocode 失败则无坐标 */
 export interface IntercityLeg {
   from: string
   to: string
@@ -85,9 +154,11 @@ export interface IntercityLeg {
   durationMin: number
   /** 是否往返（含返程） */
   roundTrip: boolean
-  /** 出发地坐标（路线概览图已含，前端一般不直接用） */
-  lat: number
-  lng: number
+  /** 出发地坐标（路线概览图已含，前端一般不直接用）；geocode 失败兜底时为 null */
+  lat: number | null
+  lng: number | null
+  /** AI/手动编辑的跨城备注（如「建议合肥南出发，提前购票」）；可空 */
+  note?: string
 }
 
 /** 整个行程（编辑输入 + 渲染输入） */
@@ -98,12 +169,16 @@ export interface Trip {
   origin: string
   /** 出行方式 */
   travelMode: TravelMode
+  /** 攻略图模板风格 */
+  guideStyle: GuideStyle
   /** 路线规划图真实底图 URL（staticMap 带折线；无坐标时为 null） */
   routeMapImage: string | null
   /** 景点分布图真实底图 URL（staticMap 仅打点；无坐标时为 null） */
   poiMapImage: string | null
   /** 游玩顺序图真实底图 URL（staticMap 编号点 + 按天连线；无坐标时为 null） */
   cityRouteMapImage: string | null
+  /** 景点分布图视口（无标注底图 + 前端 canvas 编号点用）；无坐标时为 null */
+  mapViewport: MapViewport | null
   /** 美食推荐（AI 生成）；手填行程为空 */
   food: FoodRec[]
   /** 实用贴士 / 最佳游玩方式（AI 生成）；手填行程为空 */
@@ -113,8 +188,10 @@ export interface Trip {
   /** 跨城段（出发地→目的地，用户所选方式）；无出发地或 geocode 失败时为 null */
   intercity: IntercityLeg | null
   days: Day[]
-  /** 出行清单（AI 生成，12-15项，出行清单卡片数据源）；可空 */
-  packingTips?: string[]
+  /** 必带物品（AI 生成，实物类：证件/电子设备/衣物/药品/雨具防晒等） */
+  packingMust: string[]
+  /** 注意事项（AI 生成，非实物提醒：预约/避坑/礼仪/安全等） */
+  packingNotes: string[]
 }
 
 /** 攻略图渲染参数（控制版式，区别于 Trip 数据本身） */
@@ -189,9 +266,50 @@ export const TRAVEL_MODE_META: Record<TravelMode, { icon: string; label: string 
 /** 出行方式可选顺序（分段选择器用） */
 export const TRAVEL_MODE_ORDER: readonly TravelMode[] = ['walking', 'cycling', 'driving', 'transit', 'train']
 
+/** 旅行强度 → 中文说明（AI 输入 + 前端选择） */
+export const TRAVEL_INTENSITY_META: Record<TravelIntensity, { label: string; hint: string }> = {
+  relaxed: { label: '轻松', hint: '少排点，多留休息' },
+  standard: { label: '标准', hint: '兼顾效率和舒适' },
+  packed: { label: '充实', hint: '多打卡，节奏更紧' },
+}
+
+/** 旅行强度可选顺序 */
+export const TRAVEL_INTENSITY_ORDER: readonly TravelIntensity[] = ['relaxed', 'standard', 'packed']
+
+export const GUIDE_STYLE_META: Record<GuideStyle, { label: string; hint: string }> = {
+  handbook: { label: '清新手账', hint: '柔和水彩感' },
+  minimal: { label: '极简地图', hint: '干净信息流' },
+  family: { label: '亲子', hint: '明亮轻松' },
+  couple: { label: '情侣', hint: '温柔纪念' },
+  weekend: { label: '周末游', hint: '城市短途' },
+}
+
+export const GUIDE_STYLE_ORDER: readonly GuideStyle[] = ['handbook', 'minimal', 'family', 'couple', 'weekend']
+
+export const DAY_MOOD_META: Record<DayMood, { label: string; hint: string }> = {
+  citywalk: { label: '城市漫游', hint: '街巷和光影' },
+  nature: { label: '自然风景', hint: '山水和花草' },
+  culture: { label: '人文历史', hint: '古迹和故事' },
+  food: { label: '美食日记', hint: '烟火和小店' },
+  family: { label: '亲子轻松', hint: '明亮和松弛' },
+  couple: { label: '浪漫纪念', hint: '温柔和合照' },
+  classic: { label: '经典打卡', hint: '地标和路线' },
+}
+
+export const DAY_MOOD_ORDER: readonly DayMood[] = ['citywalk', 'nature', 'culture', 'food', 'family', 'couple', 'classic']
+
 /** 生成稳定 id（页面新建 stop/day 时用） */
 export function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function createEmptyPoiInfo(): PoiInfo {
+  return {
+    openHours: '',
+    reservation: '',
+    ticket: '',
+    duration: '',
+  }
 }
 
 /** 创建默认空行程（含一个空 Day 1） */
@@ -200,13 +318,17 @@ export function createEmptyTrip(): Trip {
     title: '',
     origin: '',
     travelMode: 'walking',
+    guideStyle: 'handbook',
     routeMapImage: null,
     poiMapImage: null,
     cityRouteMapImage: null,
+    mapViewport: null,
     food: [],
     tips: [],
     xhs: { title: '', body: '', tags: [] },
     intercity: null,
-    days: [{ id: genId('day'), index: 1, title: '', stops: [] }],
+    packingMust: [],
+    packingNotes: [],
+    days: [{ id: genId('day'), index: 1, title: '', stops: [], dayMood: 'citywalk', handbookSummary: '' }],
   }
 }

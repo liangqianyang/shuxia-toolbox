@@ -19,6 +19,11 @@ page {
   font-weight: 600;
   text-align: center;
   padding: 24rpx 0;
+  transition: opacity 0.15s;
+
+  &:active {
+    opacity: 0.75;
+  }
 
   &.disabled {
     opacity: 0.45;
@@ -33,6 +38,15 @@ page {
   font-size: $font-body;
   text-align: center;
   padding: 20rpx 0;
+  transition: opacity 0.15s;
+
+  &:active {
+    opacity: 0.6;
+  }
+
+  &.disabled {
+    opacity: 0.45;
+  }
 }
 
 .section-title {

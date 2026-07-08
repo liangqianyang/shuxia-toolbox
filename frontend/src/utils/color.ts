@@ -14,6 +14,36 @@ function srgbToLinear(channel: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
 }
 
+/**
+ * 线性光空间平均工具：sRGB 是非线性编码，直接对 0-255 原值做面积平均会偏暗发闷
+ * （经典缩放错误）。正确做法是 sRGB→线性→加权平均→回 sRGB。
+ *
+ * SRGB8_TO_LINEAR：256 项正向查表（字节→线性，0-1），采样热点里零开销。
+ * linearToSrgb8：线性(0-1)→sRGB 字节，反向 gamma。热点里用 4096 桶 LUT 近似避免每像素 Math.pow。
+ */
+export const SRGB8_TO_LINEAR: Float64Array = (() => {
+  const t = new Float64Array(256)
+  for (let i = 0; i < 256; i++) t[i] = srgbToLinear(i)
+  return t
+})()
+
+const LINEAR_TO_SRGB8_LUT: Uint8ClampedArray = (() => {
+  const n = 4096
+  const t = new Uint8ClampedArray(n + 1)
+  for (let i = 0; i <= n; i++) {
+    const c = i / n
+    const s = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055
+    t[i] = Math.round(s * 255)
+  }
+  return t
+})()
+
+/** 线性光(0-1) → sRGB 字节(0-255)，经 4096 桶 LUT，供采样热点使用 */
+export function linearToSrgb8(linear: number): number {
+  const idx = linear <= 0 ? 0 : linear >= 1 ? 4096 : (linear * 4096 + 0.5) | 0
+  return LINEAR_TO_SRGB8_LUT[idx]
+}
+
 /** sRGB → XYZ(D65) → CIELAB */
 export function rgbToLab(r: number, g: number, b: number): Lab {
   const lr = srgbToLinear(r)
@@ -45,6 +75,16 @@ export function deltaE76Sq(a: Lab, b: Lab): number {
   return dl * dl + da * da + db * db
 }
 
+/** x^7，整数幂用乘法展开（比 Math.pow 分数路径快很多，ΔE2000 热点里每次调用两处用到） */
+function pow7(x: number): number {
+  const x2 = x * x
+  const x4 = x2 * x2
+  return x4 * x2 * x
+}
+
+/** 常量 25^7，循环不变，提到模块级避免每次 ΔE2000 重算 */
+const POW_25_7 = pow7(25)
+
 /** CIEDE2000，用于聚类中心 → 色板的最终映射 */
 export function deltaE2000(lab1: Lab, lab2: Lab): number {
   const { l: l1, a: a1, b: b1 } = lab1
@@ -53,8 +93,8 @@ export function deltaE2000(lab1: Lab, lab2: Lab): number {
   const c1 = Math.sqrt(a1 * a1 + b1 * b1)
   const c2 = Math.sqrt(a2 * a2 + b2 * b2)
   const cAvg = (c1 + c2) / 2
-  const cAvg7 = Math.pow(cAvg, 7)
-  const g = 0.5 * (1 - Math.sqrt(cAvg7 / (cAvg7 + Math.pow(25, 7))))
+  const cAvg7 = pow7(cAvg)
+  const g = 0.5 * (1 - Math.sqrt(cAvg7 / (cAvg7 + POW_25_7)))
 
   const a1p = a1 * (1 + g)
   const a2p = a2 * (1 + g)
@@ -106,8 +146,8 @@ export function deltaE2000(lab1: Lab, lab2: Lab): number {
   const sh = 1 + 0.015 * cpAvg * t
 
   const dTheta = 30 * Math.exp(-((hpAvg - 275) / 25) * ((hpAvg - 275) / 25))
-  const cpAvg7 = Math.pow(cpAvg, 7)
-  const rc = 2 * Math.sqrt(cpAvg7 / (cpAvg7 + Math.pow(25, 7)))
+  const cpAvg7 = pow7(cpAvg)
+  const rc = 2 * Math.sqrt(cpAvg7 / (cpAvg7 + POW_25_7))
   const rt = -rc * Math.sin((2 * dTheta * Math.PI) / 180)
 
   const dl = dlp / sl

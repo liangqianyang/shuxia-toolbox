@@ -10,6 +10,7 @@ import {
   drawBanner,
   drawFooter,
   truncateText,
+  isVisitStop,
 } from './theme'
 
 /**
@@ -110,7 +111,10 @@ function buildRouteGroups(trip: Trip): RouteGroup[] {
     }
     const g = map.get(tag)!
     if (!g.dayNumbers.includes(day.index)) g.dayNumbers.push(day.index)
-    day.stops.forEach((stop) => g.items.push({ stop, dayIndex: day.index }))
+    day.stops.forEach((stop) => {
+      // transit 枢纽不作为路线上的景点
+      if (isVisitStop(stop)) g.items.push({ stop, dayIndex: day.index })
+    })
   })
 
   return Array.from(map.values())

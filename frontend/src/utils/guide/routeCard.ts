@@ -1,4 +1,4 @@
-import type { Trip } from '@/types/travel'
+import type { Trip, Stop } from '@/types/travel'
 import { projectRoute } from '@/utils/routeProject'
 import {
   CARD_W,
@@ -14,6 +14,10 @@ import {
   truncateText,
   modeIcon,
   modeLabel,
+  interStopModeIcon,
+  interStopModeLabel,
+  isVisitStop,
+  poiTrustLine,
 } from './theme'
 
 /** DAY N 对应色（与 timelineCard 保持一致）*/
@@ -41,7 +45,8 @@ export function renderRouteCard(
   }
 
   drawBackground(ctx, bgImage)
-  const allStops = trip.days.flatMap((d) => d.stops)
+  // transit（跨城枢纽）不算景点：不编号、不进清单，与后端 staticMap markers 过滤一致
+  const allStops = trip.days.flatMap((d) => d.stops).filter(isVisitStop)
   const intercity = trip.intercity ?? null
   const isOverview = variant === 'real' && intercity !== null
   const subtitle = intercity
@@ -89,7 +94,8 @@ export function renderRouteCard(
     ctx.font = `28px ${FONT}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText('抵达后市内景点分布见「景点分布图」，每日行程见「行程时间线」', CARD_W / 2, mapY + mapH + 28)
+    ctx.fillText('抵达后市内景点分布见「景点分布图」，每日行程见「行程时间线」', CARD_W / 2, mapY + mapH + 24)
+    drawOverviewTrustList(ctx, allStops, 80, mapY + mapH + 72, CARD_W - 160, CARD_H - 110)
     drawFooter(ctx)
     return
   }
@@ -97,14 +103,22 @@ export function renderRouteCard(
   // ---- 站点清单（紧凑单行：编号 + 名称 + 站间交通）----
   // 地图上每个点都要能在清单里对上号，故尽量列全；同时严格在落款上方收尾，绝不重叠。
   const listX = 80
-  const rowH = 48
+  const rowH = 66
   const dotR = 20
   const nameX = listX + dotR * 2 + 18
   const listBottom = CARD_H - 96 // 给底部落款留足空间，避免最后一行压到「枫叶小屋·出行攻略」
-  let y = mapY + mapH + 34
+
+  // 图例行：说明市内衔接是按距离自动推荐，避免与跨城方式（如火车）混淆
+  ctx.font = `24px ${FONT}`
+  ctx.fillStyle = C.note
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText('市内景点间按距离推荐 🚶步行 / 🚕打车', CARD_W / 2, mapY + mapH + 16)
+
+  let y = mapY + mapH + 58
   allStops.forEach((s, i) => {
     if (y + rowH > listBottom) return // 本行会越过落款区 → 停止
-    const cy = y + rowH / 2
+    const cy = y + 26
     drawNumberedDot(ctx, i + 1, listX + dotR, cy, dotR, s.type)
 
     // 名称（深色加粗，优先保证可读，限宽 ~60%）
@@ -118,14 +132,25 @@ export function renderRouteCard(
     const nameW = ctx.measureText(name).width
 
     // 站间交通（浅色小字，紧接名称后；「→」表示这是「去往下一站」的衔接段，而非本站属性）
+    // 形如「→ 🚇 地铁 · 1号线 · 30分钟」；无自定义 detail 时用距离
     if (s.travelToNext) {
       const t = s.travelToNext
+      const detail = t.detail ? t.detail.trim() : ''
       const dist = t.distanceM >= 1000 ? `${(t.distanceM / 1000).toFixed(1)}km` : `${t.distanceM}m`
-      const phrase = `→ ${modeIcon(t.mode)} ${t.durationMin}分钟·${dist}`
+      const mid = detail || dist
+      const phrase = `→ ${interStopModeIcon(t.mode)} ${interStopModeLabel(t.mode)}${mid ? ' · ' + mid : ''} · ${t.durationMin}分钟`
       ctx.font = `26px ${FONT}`
       ctx.fillStyle = C.note
       const cx = nameX + nameW + 12
       ctx.fillText(truncateText(ctx, phrase, CARD_W - 56 - cx), cx, cy)
+    }
+    const trust = poiTrustLine(s.poiInfo, { max: 3 })
+    if (trust) {
+      ctx.font = `22px ${FONT}`
+      ctx.fillStyle = C.primaryDark
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText(truncateText(ctx, trust, CARD_W - 56 - nameX), nameX, y + 44)
     }
     y += rowH
   })
@@ -141,7 +166,8 @@ function renderByDayCard(
   bgImage: CanvasImageSource | null,
 ): void {
   drawBackground(ctx, bgImage)
-  const days = trip.days.filter((d) => d.stops.length > 0)
+  // 仅含有非 transit 站点的天才进分日图（避免某天只剩枢纽）
+  const days = trip.days.filter((d) => d.stops.some(isVisitStop))
 
   const subtitleParts: string[] = []
   days.forEach((d, i) => {
@@ -207,17 +233,18 @@ function drawByDaySchematic(
   trip: Trip,
   box: { x: number; y: number; width: number; height: number },
 ): void {
-  const allStops = trip.days.flatMap((d) => d.stops)
-  const proj = projectRoute(allStops, box, { padding: 0.12 })
-
-  // 按 stopIndex 反查所属 day
-  let globalIdx = 0
+  // 过滤 transit，并同步建立 站点→所属 day 的索引（两者下标必须对齐）
+  const allStops: Stop[] = []
   const stopDayIdx: number[] = []
   trip.days.forEach((d, di) => {
-    d.stops.forEach(() => {
-      stopDayIdx[globalIdx++] = di
+    d.stops.forEach((s) => {
+      if (isVisitStop(s)) {
+        stopDayIdx.push(di)
+        allStops.push(s)
+      }
     })
   })
+  const proj = projectRoute(allStops, box, { padding: 0.12 })
 
   proj.segments.forEach((seg, si) => {
     const di = stopDayIdx[seg.points[0]?.stopIndex ?? 0] ?? 0
@@ -348,11 +375,12 @@ function drawDayListBlock(
   ctx.font = `bold 52px ${FONT}`
   ctx.fillText(String(di), x + sideW / 2, y + h / 2 + 18)
 
-  // 站点名列表（横排，超出省略）
+  // 站点名列表（横排，超出省略）—— transit 枢纽不显示
   const stopsX = x + sideW + 20
   const stopsW = w - sideW - 36
-  const stops = day.stops.slice(0, 5)
-  const slot = Math.min(180, Math.floor(stopsW / stops.length))
+  const allDayStops = day.stops.filter(isVisitStop)
+  const stops = allDayStops.slice(0, 5)
+  const slot = stops.length > 0 ? Math.min(180, Math.floor(stopsW / stops.length)) : stopsW
 
   stops.forEach((s, i) => {
     const sx = stopsX + slot * i
@@ -373,14 +401,64 @@ function drawDayListBlock(
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
     ctx.fillText(truncateText(ctx, s.name || '', slot - 8), sx + 4, cy + 4)
+    const trust = poiTrustLine(s.poiInfo, { max: 2, separator: ' / ' })
+    if (trust) {
+      ctx.fillStyle = C.note
+      ctx.font = `20px ${FONT}`
+      ctx.fillText(truncateText(ctx, trust, slot - 8), sx + 4, cy + 36)
+    }
   })
-  if (day.stops.length > 5) {
+  if (allDayStops.length > 5) {
     const moreX = stopsX + slot * 5
     ctx.fillStyle = C.note
     ctx.font = `26px ${FONT}`
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.fillText(`+${day.stops.length - 5}`, moreX, y + h / 2)
+    ctx.fillText(`+${allDayStops.length - 5}`, moreX, y + h / 2)
+  }
+}
+
+function drawOverviewTrustList(
+  ctx: CanvasRenderingContext2D,
+  stops: Stop[],
+  x: number,
+  y: number,
+  w: number,
+  bottomY: number,
+): void {
+  const rows = stops
+    .map((stop, index) => ({ stop, index, trust: poiTrustLine(stop.poiInfo, { max: 3 }) }))
+    .filter((item) => item.trust)
+    .slice(0, 4)
+  if (rows.length === 0 || y + 48 > bottomY) return
+
+  ctx.fillStyle = C.primaryDark
+  ctx.font = `bold 28px ${FONT}`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('市内关键提醒', x, y)
+
+  let rowY = y + 42
+  const rowH = 48
+  for (const item of rows) {
+    if (rowY + rowH > bottomY) return
+    drawNumberedDot(ctx, item.index + 1, x + 20, rowY + 22, 18, item.stop.type)
+    ctx.font = `bold 26px ${FONT}`
+    ctx.fillStyle = C.name
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    const nameX = x + 52
+    const name = truncateText(ctx, item.stop.name || '未命名', w * 0.34)
+    ctx.fillText(name, nameX, rowY + 22)
+    const nameW = ctx.measureText(name).width
+    ctx.font = `24px ${FONT}`
+    ctx.fillStyle = C.note
+    const trustX = nameX + nameW + 18
+    const trustW = x + w - trustX
+    if (trustW > 20) {
+      ctx.fillText(truncateText(ctx, item.trust, trustW), trustX, rowY + 22)
+    }
+    rowY += rowH
   }
 }
 
@@ -390,12 +468,13 @@ function drawDayListBlock(
  */
 function drawIntercityPanel(
   ctx: CanvasRenderingContext2D,
-  ic: { from: string; to: string; mode: string; distanceM: number; durationMin: number; roundTrip: boolean },
+  ic: { from: string; to: string; mode: string; distanceM: number; durationMin: number; roundTrip: boolean; note?: string },
   x: number,
   y: number,
   w: number,
 ): number {
-  const h = 128
+  const note = ic.note ? ic.note.trim() : ''
+  const h = note ? 172 : 128
   roundRect(ctx, x, y, w, h, 28)
   ctx.fillStyle = C.panel
   ctx.fill()
@@ -419,6 +498,13 @@ function drawIntercityPanel(
   // 往返时强调是「单程」时长，避免被当成全程
   const durLabel = ic.roundTrip ? `单程约 ${dur}` : `约 ${dur}`
   ctx.fillText(`${modeIcon(ic.mode)} ${modeLabel(ic.mode)} · 约 ${dist} · ${durLabel}`, x + w / 2, y + 80)
+
+  // AI/手动备注（如「建议合肥南出发，提前购票」），有才画，面板高度随之自适应
+  if (note) {
+    ctx.font = `24px ${FONT}`
+    ctx.fillStyle = C.note
+    ctx.fillText(truncateText(ctx, note, w - 56), x + w / 2, y + 128)
+  }
 
   return y + h + 24
 }
@@ -484,4 +570,3 @@ function drawSchematic(
     })
   })
 }
-

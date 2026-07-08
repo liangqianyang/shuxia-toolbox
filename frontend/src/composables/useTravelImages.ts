@@ -1,7 +1,8 @@
-import { nextTick, ref, shallowRef } from 'vue'
+import { nextTick, reactive, ref, shallowRef } from 'vue'
 import type { Trip } from '@/types/travel'
-import { canvasToFile, getCanvasNode, openAuthSetting, saveImageToAlbum, type CanvasNode } from '@/utils/canvasAdapter'
-import { GUIDE_CARDS, CARD_W, CARD_H, cardMapUrl, type GuideCard } from '@/utils/guide'
+import { canvasToFile, getCanvasNode, getWindowInfo, openAuthSetting, saveImageToAlbum, type CanvasNode } from '@/utils/canvasAdapter'
+import { GUIDE_CARDS, CARD_W, CARD_H, cardMapUrl, guideCardsForTrip, type GuideCard } from '@/utils/guide'
+import { setGuideStyle } from '@/utils/guide/theme'
 import { preloadMapImage } from '@/utils/stopImage'
 
 /**
@@ -16,7 +17,7 @@ import { preloadMapImage } from '@/utils/stopImage'
  * - 每次渲染前 clearRect 清空 canvas，防止鬼影
  */
 export function useTravelImages() {
-  const cards = GUIDE_CARDS
+  const cards = reactive<GuideCard[]>(GUIDE_CARDS.slice())
   const cssWidth = ref(0)
   const cssHeight = ref(0)
   const rendered = ref(false)
@@ -41,24 +42,34 @@ export function useTravelImages() {
 
   /** 计算预览 CSS 尺寸（页面可用宽度，按 3:4 定高） */
   function computeCss(): void {
-    const info = uni.getSystemInfoSync()
-    const availW = (info.windowWidth || 375) - 32
+    const availW = (getWindowInfo().windowWidth || 375) - 32
     cssWidth.value = availW
     cssHeight.value = Math.round((availW * CARD_H) / CARD_W)
   }
 
-  async function renderCard(
-    index: number,
+  // 最近一次渲染的 trip / 自定义底图，供 saveOne/saveAll 以 2x 重画导出时复用
+  let lastTrip: Trip | null = null
+  let lastCardBgs: Record<number, string> = {}
+
+  /**
+   * 在指定节点上以 scale 倍率绘制一张卡。
+   * 预览 scale=1（省内存：10 卡 × 1080×1440）；导出 scale=2（2160×2880，放大不糊）。
+   * 设置 canvas.width 会清空内容并重置 transform，故 scale≠1 时重新 ctx.scale；逻辑坐标系始终是 CARD_W×CARD_H。
+   */
+  async function drawCard(
+    node: CanvasNode,
     card: GuideCard,
     trip: Trip,
-    component: unknown,
     bgUrl: string | null,
+    scale: number,
   ): Promise<void> {
-    const { canvas, ctx } = await nodeOf(index, component)
-    canvas.width = CARD_W
-    canvas.height = CARD_H
-    // 清空画布防止上次内容鬼影
+    const { canvas, ctx } = node
+    canvas.width = CARD_W * scale
+    canvas.height = CARD_H * scale
+    if (scale !== 1) ctx.scale(scale, scale)
+    // 清空（scale 后逻辑坐标仍是 CARD_W×CARD_H，clearRect 覆盖整张）
     ctx.clearRect(0, 0, CARD_W, CARD_H)
+    setGuideStyle(trip.guideStyle)
 
     const mapImage = await preloadMapImage(canvas, cardMapUrl(trip, card))
     const bgImage = bgUrl ? await preloadMapImage(canvas, bgUrl) : null
@@ -80,6 +91,17 @@ export function useTravelImages() {
     card.render(ctx, trip, mapImage, bgImage, stopPhotos)
   }
 
+  async function renderCard(
+    index: number,
+    card: GuideCard,
+    trip: Trip,
+    component: unknown,
+    bgUrl: string | null,
+  ): Promise<void> {
+    const node = await nodeOf(index, component)
+    await drawCard(node, card, trip, bgUrl, 1)
+  }
+
   /**
    * 渲染全部卡片（顺序执行，避免 MP 并发取节点竞争）。
    * 画廊 <canvas> 由 v-if="rendered" 控制：必须先把 rendered 置 true 让节点挂载，
@@ -89,15 +111,18 @@ export function useTravelImages() {
    */
   async function renderAll(trip: Trip, component: unknown, cardBgs?: Record<number, string>): Promise<void> {
     computeCss()
+    syncCardsForTrip(cards, trip)
     if (!rendered.value) {
       rendered.value = true
-      await nextTick()
     }
+    await nextTick()
     renderErrors.value = []
+    lastTrip = trip
+    lastCardBgs = cardBgs ?? {}
     for (let i = 0; i < cards.length; i++) {
       loadingIndex.value = i
       try {
-        await renderCard(i, cards[i], trip, component, cardBgs?.[i] ?? null)
+        await renderCard(i, cards[i], trip, component, lastCardBgs[i] ?? null)
       } catch (err) {
         // 单张失败不阻断后续，记录供 UI 提示
         renderErrors.value.push(cards[i].key)
@@ -107,9 +132,10 @@ export function useTravelImages() {
     loadingIndex.value = cards.length
   }
 
-  /** 保存单张到相册；授权被拒引导去设置页 */
+  /** 保存单张到相册（直接导出预览画布当前像素，稳定可用）；授权被拒引导去设置页 */
   async function saveOne(index: number, component?: unknown): Promise<boolean> {
     if (saving.value) return false
+    if (!lastTrip) return false
     saving.value = true
     try {
       const { canvas } = await nodeOf(index, component)
@@ -125,35 +151,67 @@ export function useTravelImages() {
     }
   }
 
-  /** 顺序保存全部 */
-  async function saveAll(component?: unknown): Promise<void> {
+  /** 顺序保存指定卡片（未传 indexes 时保存全部）；授权被拒引导 */
+  async function saveAll(component?: unknown, indexes?: number[]): Promise<void> {
     if (saving.value) return
+    if (!lastTrip) return
+    const targets = indexes && indexes.length > 0 ? indexes : cards.map((_, i) => i)
     saving.value = true
-    uni.showLoading({ title: '正在保存全部…', mask: true })
+    uni.showLoading({ title: '正在保存图片…', mask: true })
     let ok = 0
+    let authFail = false
+    let firstError = ''
     try {
-      for (let i = 0; i < cards.length; i++) {
+      for (let pos = 0; pos < targets.length; pos++) {
+        const i = targets[pos]
+        uni.showLoading({ title: `保存 ${pos + 1}/${targets.length}`, mask: true })
         try {
           const { canvas } = await nodeOf(i, component)
           const file = await canvasToFile(canvas, CARD_W, CARD_H)
           await saveImageToAlbum(file)
           ok++
+          // 连续写相册在真机/开发者工具里都容易被系统节流，顺序保存时留一点喘息。
+          await sleep(160)
         } catch (err) {
-          // 授权类错误直接中断并引导
+          const message = errorMessage(err)
+          if (!firstError) firstError = message
+          console.warn(`[useTravelImages] 保存卡片 ${cards[i].key} 失败:`, err)
+          // 授权类错误：记下中断；其它错误继续尝试后续卡片，但最终给出首个失败原因
           if (isAuthError(err)) {
-            uni.hideLoading()
-            saving.value = false
-            promptAuth()
-            return
+            authFail = true
+            break
           }
         }
       }
-      uni.hideLoading()
-      uni.showToast({ title: `已保存 ${ok}/${cards.length} 张`, icon: ok === cards.length ? 'success' : 'none' })
     } finally {
+      // showLoading 必须且仅在这里 hide（配对）；之后再 showToast/promptAuth，
+      // 否则多余的 hideLoading 会把成功 toast 一并杀掉。
       uni.hideLoading()
       saving.value = false
     }
+    if (authFail) {
+      promptAuth()
+      return
+    }
+    if (ok === 0 && firstError) {
+      uni.showModal({
+        title: '保存失败',
+        content: `没有图片保存成功。\n${firstError}`,
+        showCancel: false,
+        confirmText: '知道了',
+      })
+      return
+    }
+    if (ok < targets.length && firstError) {
+      uni.showModal({
+        title: '部分保存成功',
+        content: `已保存 ${ok}/${targets.length} 张。\n未保存的图片可能需要重新生成后再试。\n${firstError}`,
+        showCancel: false,
+        confirmText: '知道了',
+      })
+      return
+    }
+    uni.showToast({ title: `已保存 ${ok}/${targets.length} 张`, icon: ok === targets.length ? 'success' : 'none' })
   }
 
   function release(): void {
@@ -166,9 +224,25 @@ export function useTravelImages() {
   return { cards, cssWidth, cssHeight, rendered, saving, loadingIndex, renderErrors, renderAll, saveOne, saveAll, release }
 }
 
+function syncCardsForTrip(target: GuideCard[], trip: Trip): void {
+  target.splice(0, target.length, ...guideCardsForTrip(trip))
+}
+
 function isAuthError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err)
+  const message = errorMessage(err)
   return /auth|deny|denied/i.test(message)
+}
+
+function isCancelError(err: unknown): boolean {
+  return /cancel/i.test(errorMessage(err))
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || '保存失败')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function promptAuth(): void {
@@ -183,10 +257,14 @@ function promptAuth(): void {
 }
 
 function handleSaveError(err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err)
   if (isAuthError(err)) {
     promptAuth()
-  } else if (!/cancel/i.test(message)) {
-    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+  } else if (!isCancelError(err)) {
+    uni.showModal({
+      title: '保存失败',
+      content: errorMessage(err),
+      showCancel: false,
+      confirmText: '知道了',
+    })
   }
 }
