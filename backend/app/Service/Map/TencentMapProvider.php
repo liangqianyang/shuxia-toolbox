@@ -26,6 +26,35 @@ final class TencentMapProvider implements MapProvider
         $this->client = new Client();
     }
 
+    /**
+     * 腾讯 SK 签名（SN 校验）：sn = MD5(urlencode(path + 排序参数 + sk))。
+     * path 为请求路径（如 /ws/place/v1/suggestion）；参数按 key 字典序、原始值（未 urlencode）拼接。
+     * 未配 TENCENT_MAP_SK 时返回空串（不加 sig，回退无签名——仅 key 未开 SN 校验时可用）。
+     */
+    private function sign(string $path, array $params): string
+    {
+        $sk = getenv('TENCENT_MAP_SK') ?: '';
+        if ($sk === '') {
+            return '';
+        }
+        ksort($params);
+        $pairs = [];
+        foreach ($params as $k => $v) {
+            $pairs[] = $k . '=' . $v;
+        }
+        return md5(urlencode($path . implode('&', $pairs) . $sk));
+    }
+
+    /** Guzzle query 场景（参数名唯一）：算 sig 后并入参数数组。 */
+    private function withSig(string $url, array $params): array
+    {
+        $sig = $this->sign((string) parse_url($url, PHP_URL_PATH), $params);
+        if ($sig !== '') {
+            $params['sig'] = $sig;
+        }
+        return $params;
+    }
+
     public function geocode(string $query): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
@@ -37,10 +66,10 @@ final class TencentMapProvider implements MapProvider
 
         try {
             $response = $this->client->get(self::GEOCODE_URL, [
-                'query' => [
+                'query' => $this->withSig(self::GEOCODE_URL, [
                     'keyword' => $query,
                     'key' => $key,
-                ],
+                ]),
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
@@ -85,25 +114,24 @@ final class TencentMapProvider implements MapProvider
         if ($key === '') {
             return '';
         }
+        $sk = getenv('TENCENT_MAP_SK') ?: '';
 
         $w = min(928, max(100, (int) ($size['width'] ?? 600)));
         $h = min(928, max(100, (int) ($size['height'] ?? 300)));
 
-        // base 参数：size + key；若调用方提供 center+zoom（无标注底图场景）则带上，
-        // 否则留空让腾讯按 markers/path 自动适配范围。
-        $base = [
-            'size' => $w . '*' . $h,
-            'key' => $key,
-        ];
+        // 收集参数为 [key, rawValue] 列表：markers/path 可多个同名，关联数组会覆盖，故用列表。
+        // base：size + key；若调用方提供 center+zoom（无标注底图场景）则带上，否则留空让腾讯按 markers/path 自动适配。
+        $params = [];
+        $params[] = ['size', $w . '*' . $h];
+        $params[] = ['key', $key];
         if (isset($size['centerLat'], $size['centerLng'])) {
-            $base['center'] = $size['centerLat'] . ',' . $size['centerLng'];
+            $params[] = ['center', $size['centerLat'] . ',' . $size['centerLng']];
         }
         if (isset($size['zoom'])) {
-            $base['zoom'] = $size['zoom'];
+            $params[] = ['zoom', (string) $size['zoom']];
         }
-        $url = 'https://apis.map.qq.com/ws/staticmap/v2/?' . http_build_query($base);
 
-        // 每站一个 marker 组（带类型色 + 序号 label），逐个 rawurlencode 拼到 URL
+        // 每站一个 marker 组（带类型色 + 序号 label）
         foreach ($markers as $m) {
             $lat = $m['lat'] ?? null;
             $lng = $m['lng'] ?? null;
@@ -111,15 +139,15 @@ final class TencentMapProvider implements MapProvider
                 continue;
             }
             $color = strtoupper(ltrim((string) ($m['color'] ?? 'C8956C'), '#'));
-            $size = in_array($m['size'] ?? '', ['tiny', 'small', 'mid', 'normal', 'large'], true)
+            $mSize = in_array($m['size'] ?? '', ['tiny', 'small', 'mid', 'normal', 'large'], true)
                 ? $m['size']
                 : 'large';
-            $style = 'size:' . $size . '|color:0x' . $color;
+            $style = 'size:' . $mSize . '|color:0x' . $color;
             if (! empty($m['label'])) {
                 // 腾讯 label 单字符（A-Z / 0-9）
                 $style .= '|label:' . substr((string) $m['label'], 0, 1);
             }
-            $url .= '&markers=' . rawurlencode($style . '|' . $lat . ',' . $lng);
+            $params[] = ['markers', $style . '|' . $lat . ',' . $lng];
         }
 
         // 折线：多段（如按天）。每段可自带 color；兼容旧形态（纯点列表，默认米色）。
@@ -138,11 +166,21 @@ final class TencentMapProvider implements MapProvider
                 }
             }
             if (count($pts) >= 2) {
-                $url .= '&path=' . rawurlencode('color:0x' . $color . '|weight:4|' . implode('|', $pts));
+                $params[] = ['path', 'color:0x' . $color . '|weight:4|' . implode('|', $pts)];
             }
         }
 
-        return $url;
+        // SK 签名（SN 校验）：多同名参数按 key 排序、同 key 按 value 排序后拼 key=value 参与签名
+        if ($sk !== '') {
+            $sorted = $params;
+            usort($sorted, static fn ($a, $b) => $a[0] <=> $b[0] ?: strcmp((string) $a[1], (string) $b[1]));
+            $basic = '/ws/staticmap/v2/' . implode('&', array_map(static fn ($p) => $p[0] . '=' . $p[1], $sorted));
+            $params[] = ['sig', md5(urlencode($basic . $sk))];
+        }
+
+        // 拼 URL：每个值 rawurlencode
+        return 'https://apis.map.qq.com/ws/staticmap/v2/?'
+            . implode('&', array_map(static fn ($p) => $p[0] . '=' . rawurlencode((string) $p[1]), $params));
     }
 
     public function directions(array $from, array $to, string $mode = 'walking'): array
@@ -167,12 +205,12 @@ final class TencentMapProvider implements MapProvider
 
         try {
             $response = $this->client->get($endpoint, [
-                'query' => [
+                'query' => $this->withSig($endpoint, [
                     // 腾讯 from/to 是「纬度,经度」（lat 在前）
                     'from' => $from['lat'] . ',' . $from['lng'],
                     'to' => $to['lat'] . ',' . $to['lng'],
                     'key' => $key,
-                ],
+                ]),
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
@@ -211,12 +249,12 @@ final class TencentMapProvider implements MapProvider
 
         try {
             $response = $this->client->get('http://apis.map.qq.com/ws/direction/v1/transit', [
-                'query' => [
+                'query' => $this->withSig('http://apis.map.qq.com/ws/direction/v1/transit', [
                     'from' => $from['lat'] . ',' . $from['lng'],
                     'to' => $to['lat'] . ',' . $to['lng'],
                     'policy' => 'LEAST_TIME',
                     'key' => $key,
-                ],
+                ]),
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
@@ -337,14 +375,14 @@ final class TencentMapProvider implements MapProvider
 
         try {
             $response = $this->client->get('http://apis.map.qq.com/ws/place/v1/explore', [
-                'query' => [
+                'query' => $this->withSig('http://apis.map.qq.com/ws/place/v1/explore', [
                     // boundary=nearby(纬度,经度,半径米)
                     'boundary' => sprintf('nearby(%f,%f,%d)', $center['lat'], $center['lng'], $radius),
                     'keyword' => $keyword,
                     'page_size' => 10,
                     'orderby' => '_distance',
                     'key' => $key,
-                ],
+                ]),
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
