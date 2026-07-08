@@ -14,5 +14,13 @@ return [
                 'level' => Level::Info,
             ],
         ],
+        'formatter' => [
+            'class' => Monolog\Formatter\LineFormatter::class,
+            'constructor' => [
+                'format' => null,
+                'dateFormat' => null,
+                'allowInlineLineBreaks' => true,
+            ],
+        ],
     ],
 ];
