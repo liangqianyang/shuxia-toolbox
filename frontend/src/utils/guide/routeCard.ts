@@ -329,10 +329,17 @@ function drawGeoRouteOverlay(
 
   // 标签最后画。点多时只标关键点，全部名称仍可在下方清单按编号对应，避免地图右侧挤成一团。
   const usedLabels: LabelRect[] = []
+  // 所有序号圆点都是障碍：文字标签不能压住任意站点的序号徽章（圆点半径 28，留 4 的余量）
+  const dotObstacles: LabelRect[] = allStops.map((item) => ({
+    x: item.drawX - 32,
+    y: item.drawY - 32,
+    w: 64,
+    h: 64,
+  }))
   const labelItems = pickMapLabelItems(allStops, byDay, allStops.length > 8 ? 8 : 12)
   labelItems.forEach((item) => {
     const color = byDay ? DAY_COLORS[item.dayIndex % DAY_COLORS.length] : '#C8956C'
-    drawMapLabel(ctx, item.stop.name || `地点${item.seq}`, item.drawX, item.drawY, box, color, usedLabels)
+    drawMapLabel(ctx, item.stop.name || `地点${item.seq}`, item.drawX, item.drawY, box, color, usedLabels, dotObstacles)
   })
 }
 
@@ -481,6 +488,7 @@ function drawMapLabel(
   box: { x: number; y: number; width: number; height: number },
   color: string,
   used: LabelRect[],
+  dots: LabelRect[],
 ): void {
   ctx.save()
   ctx.font = `bold 23px ${FONT}`
@@ -488,7 +496,7 @@ function drawMapLabel(
   const tw = ctx.measureText(text).width
   const w = tw + 22
   const h = 34
-  const rect = chooseLabelRect({ x, y, w, h }, box, used)
+  const rect = chooseLabelRect({ x, y, w, h }, box, used, dots)
   used.push(rect)
 
   const lineEndX = rect.x > x ? rect.x : rect.x + rect.w
@@ -519,6 +527,7 @@ function chooseLabelRect(
   anchor: { x: number; y: number; w: number; h: number },
   box: { x: number; y: number; width: number; height: number },
   used: LabelRect[],
+  dots: LabelRect[] = [],
 ): LabelRect {
   const preferLeft = anchor.x > box.x + box.width * 0.58
   const sideOrder = preferLeft ? ['left', 'right', 'bottom', 'top'] : ['right', 'left', 'bottom', 'top']
@@ -542,14 +551,19 @@ function chooseLabelRect(
     })
   })
 
+  // 排除锚点自身的圆点：标签本就贴着自己的序号，只需避开其他站点的序号徽章
+  const otherDots = dots.filter((d) => Math.hypot(d.x + d.w / 2 - anchor.x, d.y + d.h / 2 - anchor.y) > 6)
+
   let best = candidates[0]
   let bestScore = Number.POSITIVE_INFINITY
   candidates.forEach((candidate) => {
     const overlap = used.reduce((sum, old) => sum + rectOverlapArea(candidate, old), 0)
+    // 压住其他序号圆点的惩罚更重（盖住编号比标签互压更影响识别）
+    const dotOverlap = otherDots.reduce((sum, dot) => sum + rectOverlapArea(candidate, dot), 0)
     const cx = candidate.x + candidate.w / 2
     const cy = candidate.y + candidate.h / 2
     const distance = Math.hypot(cx - anchor.x, cy - anchor.y)
-    const score = overlap * 80 + distance
+    const score = overlap * 80 + dotOverlap * 200 + distance
     if (score < bestScore) {
       bestScore = score
       best = candidate

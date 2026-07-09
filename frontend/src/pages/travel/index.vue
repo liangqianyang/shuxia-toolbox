@@ -144,9 +144,25 @@
 
       <view class="travel__ai-date">
         <text class="caption">出发日期（可选，按目的地天气准备清单）</text>
-        <picker mode="date" :value="aiDepartureDate" @change="onDateChange">
+        <picker mode="date" :value="aiDepartureDate" :start="todayStr" @change="onDateChange">
           <view class="travel__ai-date-val">{{ aiDepartureDate || '点此选择日期（不选则按当季）' }}</view>
         </picker>
+      </view>
+
+      <view class="travel__ai-style">
+        <text class="caption">攻略图风格（影响所有攻略图的背景和标题氛围）</text>
+        <view class="travel__style-options">
+          <view
+            v-for="style in GUIDE_STYLE_ORDER"
+            :key="style"
+            class="travel__style-item"
+            :class="{ 'travel__style-item--active': trip.guideStyle === style }"
+            @tap="setGuideStyleChoice(style)"
+          >
+            <text class="travel__style-label">{{ GUIDE_STYLE_META[style].label }}</text>
+            <text class="travel__style-hint">{{ GUIDE_STYLE_META[style].hint }}</text>
+          </view>
+        </view>
       </view>
 
       <view v-if="planError" class="travel__ai-err caption">{{ planError }}</view>
@@ -167,25 +183,6 @@
         placeholder="给行程起个名字，如「3 天杭州行」"
         @input="markDirty"
       />
-    </view>
-
-    <view class="card travel__style">
-      <view class="travel__style-head">
-        <text class="section-title">攻略图风格</text>
-        <text class="caption">切换后会影响所有攻略图的背景和标题氛围</text>
-      </view>
-      <view class="travel__style-options">
-        <view
-          v-for="style in GUIDE_STYLE_ORDER"
-          :key="style"
-          class="travel__style-item"
-          :class="{ 'travel__style-item--active': trip.guideStyle === style }"
-          @tap="setGuideStyleChoice(style)"
-        >
-          <text class="travel__style-label">{{ GUIDE_STYLE_META[style].label }}</text>
-          <text class="travel__style-hint">{{ GUIDE_STYLE_META[style].hint }}</text>
-        </view>
-      </view>
     </view>
 
     <view class="card travel__cloud">
@@ -624,6 +621,12 @@ const aiHoursPerDay = ref<number[]>([8, 8, 8])
 const aiRoundTrip = ref(false)
 const aiPreferences = ref('')
 const aiDepartureDate = ref('')
+// 出发日期最早只能选今天：过去的日期没有备货意义
+const todayStr = computed(() => {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+})
 const aiSights = ref('')
 const aiFoods = ref('')
 const planning = ref(false)
@@ -1756,16 +1759,10 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     font-weight: 700;
   }
 
-  &__style {
+  &__ai-style {
     display: flex;
     flex-direction: column;
-    gap: 16rpx;
-  }
-
-  &__style-head {
-    display: flex;
-    flex-direction: column;
-    gap: 4rpx;
+    gap: 12rpx;
   }
 
   &__style-options {
