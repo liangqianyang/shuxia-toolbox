@@ -1054,13 +1054,16 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     height: 100%;
     box-sizing: border-box;
     background-color: rgba(255, 255, 255, 0.001);
-    touch-action: none;
+    // 默认允许纵横平移，否则覆盖层会吞掉单指拖动手势，放大后 scroll-view 拖不动（真机）。
+    // 仅在双指捏合时禁用原生手势，防止页面缩放干扰自定义 pinch。
+    touch-action: pan-x pan-y;
 
     &--active {
       border: 4rpx solid rgba(200, 149, 108, 0.55);
     }
 
     &--pinching {
+      touch-action: none;
       border: 4rpx solid rgba(168, 116, 75, 0.85);
     }
   }
