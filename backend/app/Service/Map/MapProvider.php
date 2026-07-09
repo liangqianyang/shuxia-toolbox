@@ -21,8 +21,10 @@ interface MapProvider
      *     city: string,
      *     adcode: string
      * }>
+     *
+     * @param string $region 目的地城市名，非空时硬约束只返回该城市内结果（避免同名 POI 命中外地）
      */
-    public function geocode(string $query): array;
+    public function geocode(string $query, string $region = ''): array;
 
     /**
      * 静态地图图片 URL。

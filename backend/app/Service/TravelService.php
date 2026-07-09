@@ -190,8 +190,8 @@ final class TravelService
                 $stop['lat'] = null;
                 $stop['travelToNext'] = null;
                 try {
-                    $keyword = $destination !== '' ? $stop['name'] . ' ' . $destination : $stop['name'];
-                    $candidates = $this->map->geocode($keyword);
+                    // 目的地作为 region 硬约束（region_fix），避免同名 POI 命中外地把地图视口撑大
+                    $candidates = $this->map->geocode($stop['name'], $destination);
                     if (! empty($candidates)) {
                         $this->applyGeocodeCandidate($stop, $candidates[0]);
                     }
@@ -370,8 +370,8 @@ final class TravelService
                 continue;
             }
             try {
-                $keyword = $destination !== '' ? $stop['name'] . ' ' . $destination : $stop['name'];
-                $candidates = $this->map->geocode($keyword);
+                // 目的地作为 region 硬约束，避免同名 POI 命中外地
+                $candidates = $this->map->geocode($stop['name'], $destination);
                 if (! empty($candidates)) {
                     $this->applyGeocodeCandidate($stop, $candidates[0]);
                 } else {
@@ -867,6 +867,9 @@ final class TravelService
         if ($lats === []) {
             return null;
         }
+        // 剔除离群点：单个坏坐标（同名 POI 命中外地）会把 bbox 撑大、zoom 压到很小，
+        // 使底图变成"半个华东"的大地图。以中位数中心为参照，丢弃远超其余点的极端点。
+        [$lats, $lngs] = $this->rejectViewportOutliers($lats, $lngs);
         $minLat = min($lats);
         $maxLat = max($lats);
         $minLng = min($lngs);
@@ -893,6 +896,56 @@ final class TravelService
             $zoom = max(3, min(17, $zoom));
         }
         return ['centerLat' => $cLat, 'centerLng' => $cLng, 'zoom' => $zoom];
+    }
+
+    /**
+     * 剔除视口离群点。以中位数经纬度为稳健中心，丢弃距其过远的极端点
+     * （通常是同名 POI 命中外地的坏坐标）。保守策略：至少 3 点才启用，
+     * 且仅当离群点远超其余点的分布时才丢，避免误删真实的远景点。
+     *
+     * @param array<int, float> $lats
+     * @param array<int, float> $lngs
+     * @return array{0: array<int, float>, 1: array<int, float>}
+     */
+    private function rejectViewportOutliers(array $lats, array $lngs): array
+    {
+        $n = count($lats);
+        if ($n < 3) {
+            return [$lats, $lngs];
+        }
+        $sortedLat = $lats;
+        $sortedLng = $lngs;
+        sort($sortedLat);
+        sort($sortedLng);
+        $median = static fn (array $a): float => $a[intdiv(count($a), 2)];
+        $medLat = $median($sortedLat);
+        $medLng = $median($sortedLng);
+
+        // 各点到中位数中心的直线距离
+        $dists = [];
+        for ($i = 0; $i < $n; $i++) {
+            $dists[$i] = $this->haversineM($lats[$i], $lngs[$i], $medLat, $medLng);
+        }
+        $sortedD = $dists;
+        sort($sortedD);
+        $medDist = $median($sortedD);
+
+        // 阈值：中位距离的 6 倍，且绝对值 ≥ 40km（避免市内正常跨区被误删）
+        $threshold = max($medDist * 6.0, 40000.0);
+
+        $keepLats = [];
+        $keepLngs = [];
+        for ($i = 0; $i < $n; $i++) {
+            if ($dists[$i] <= $threshold) {
+                $keepLats[] = $lats[$i];
+                $keepLngs[] = $lngs[$i];
+            }
+        }
+        // 若过滤后不足 2 点（阈值意外过严），退回原始集合
+        if (count($keepLats) < 2) {
+            return [$lats, $lngs];
+        }
+        return [$keepLats, $keepLngs];
     }
 
     /** 无标注地理底图（指定 center+zoom，由前端叠加 canvas 编号点，2x 导出也清晰）*/

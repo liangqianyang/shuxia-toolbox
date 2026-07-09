@@ -39,18 +39,24 @@ final class AmapMapProvider implements MapProvider
      *
      * inputtips 更适合前端「地图搜索」交互；geocode 作为兜底，保证普通地址仍能解析。
      */
-    public function geocode(string $query): array
+    public function geocode(string $query, string $region = ''): array
     {
         $key = $this->key();
         $timeout = $this->timeout();
         $candidates = [];
 
         try {
+            $tipsParams = [
+                'keywords' => $query,
+                'key' => $key,
+            ];
+            // city + citylimit=true：把输入提示硬约束在目的地城市，避免同名 POI 命中外地
+            if ($region !== '') {
+                $tipsParams['city'] = $region;
+                $tipsParams['citylimit'] = 'true';
+            }
             $response = $this->client->get(self::INPUT_TIPS_URL, [
-                'query' => [
-                    'keywords' => $query,
-                    'key' => $key,
-                ],
+                'query' => $tipsParams,
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
@@ -87,11 +93,15 @@ final class AmapMapProvider implements MapProvider
         }
 
         try {
+            $geoParams = [
+                'address' => $query,
+                'key' => $key,
+            ];
+            if ($region !== '') {
+                $geoParams['city'] = $region;
+            }
             $response = $this->client->get(self::GEOCODE_URL, [
-                'query' => [
-                    'address' => $query,
-                    'key' => $key,
-                ],
+                'query' => $geoParams,
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);

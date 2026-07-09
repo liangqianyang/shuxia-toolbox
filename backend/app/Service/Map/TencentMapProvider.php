@@ -65,7 +65,7 @@ final class TencentMapProvider implements MapProvider
      *
      * 当前使用 suggestion 而非 geocoder，因为它更适合前端输入框候选列表，并且返回多个带坐标 POI。
      */
-    public function geocode(string $query): array
+    public function geocode(string $query, string $region = ''): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
         if ($key === '') {
@@ -74,12 +74,19 @@ final class TencentMapProvider implements MapProvider
 
         $timeout = (int) (getenv('MAP_TIMEOUT') ?: 5);
 
+        // region + region_fix=1：把联想结果硬约束在目的地城市内，避免同名 POI 命中外地（坐标离群会撑大地图视口）
+        $params = [
+            'keyword' => $query,
+            'key' => $key,
+        ];
+        if ($region !== '') {
+            $params['region'] = $region;
+            $params['region_fix'] = '1';
+        }
+
         try {
             $response = $this->client->get(self::GEOCODE_URL, [
-                'query' => $this->withSig(self::GEOCODE_URL, [
-                    'keyword' => $query,
-                    'key' => $key,
-                ]),
+                'query' => $this->withSig(self::GEOCODE_URL, $params),
                 'timeout' => $timeout,
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
