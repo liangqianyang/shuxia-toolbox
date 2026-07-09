@@ -57,6 +57,20 @@ docker exec -w /var/www/html/shuxia-toolbox/backend php84-fpm php bin/hyperf.php
 curl http://127.0.0.1:9501/health
 ```
 
+地图服务默认走腾讯。如需尝试高德，给后端环境配置：
+
+```bash
+MAP_PROVIDER=amap
+AMAP_WEB_SERVICE_KEY=你的高德 Web 服务 Key
+# 兼容旧变量名：AMAP_MAP_KEY / GAODE_MAP_KEY 也会被读取，但建议服务端 REST key 单独配置
+# 高德静态图 key 不可用时默认用腾讯静态图兜底；如需关闭：
+# AMAP_STATIC_MAP_FALLBACK=none
+# 可选兜底：公交/地铁规划城市，正常会优先使用目的地
+AMAP_TRANSIT_CITY=杭州
+```
+
+高德这里必须是控制台里“Web 服务”类型的 Key；JS API、小程序 SDK 等平台类型的 Key 调用 `restapi.amap.com` 会返回 `USERKEY_PLAT_NOMATCH`，地图底图会加载失败。若前端直接下载高德静态图，还需要在微信小程序后台把 `https://restapi.amap.com` 加入 `downloadFile` 合法域名。
+
 ## 第一版范围
 
 - 工具箱首页

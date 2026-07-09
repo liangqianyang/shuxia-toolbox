@@ -146,6 +146,24 @@
           <input class="stop__leg-dur" type="number" v-model="legDur" @blur="commitLegDur" />
           <text class="caption">分钟</text>
         </view>
+        <view v-if="stop.travelToNext?.reason" class="stop__leg-reason">
+          <text class="stop__leg-reason-label">推荐理由</text>
+          <text class="stop__leg-reason-text">{{ stop.travelToNext.reason }}</text>
+        </view>
+        <view v-if="legAlternatives.length" class="stop__leg-alts">
+          <text class="stop__leg-alts-title">备选方案</text>
+          <view
+            v-for="alt in legAlternatives"
+            :key="`${alt.mode}-${alt.durationMin}-${alt.distanceM}`"
+            class="stop__leg-alt"
+            @tap="pickAlternative(alt)"
+          >
+            <text class="stop__leg-alt-main"
+              >{{ modeIcon(alt.mode) }} {{ modeLabel(alt.mode) }} · {{ alt.durationMin }}分钟</text
+            >
+            <text class="stop__leg-alt-sub">{{ alt.reason || alt.detail || formatDistance(alt.distanceM) }}</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -181,6 +199,7 @@ import {
   type PoiInfo,
   type Stop,
   type GeocodeCandidate,
+  type TravelAlternative,
 } from '@/types/travel'
 
 const props = defineProps<{
@@ -210,6 +229,7 @@ const legOpen = ref(false)
 const legDetail = ref(props.stop.travelToNext?.detail ?? '')
 const legDur = ref(props.stop.travelToNext?.durationMin ? String(props.stop.travelToNext.durationMin) : '')
 const legMode = computed(() => props.stop.travelToNext?.mode ?? 'walking')
+const legAlternatives = computed(() => props.stop.travelToNext?.alternatives ?? [])
 watch(
   () => props.stop.travelToNext,
   (t) => {
@@ -217,7 +237,7 @@ watch(
     legDur.value = t?.durationMin ? String(t.durationMin) : ''
   },
 )
-function patchLeg(patch: Partial<{ mode: string; distanceM: number; durationMin: number; detail: string }>): void {
+function patchLeg(patch: Partial<NonNullable<Stop['travelToNext']>>): void {
   const cur = props.stop.travelToNext ?? { mode: 'walking', distanceM: 0, durationMin: 0, detail: '' }
   emit('update', { travelToNext: { ...cur, ...patch } })
 }
@@ -229,6 +249,20 @@ function commitLegDetail(): void {
 }
 function commitLegDur(): void {
   patchLeg({ durationMin: Math.max(0, Math.round(Number(legDur.value) || 0)) })
+}
+function pickAlternative(alt: TravelAlternative): void {
+  patchLeg({
+    mode: alt.mode,
+    distanceM: alt.distanceM,
+    durationMin: alt.durationMin,
+    detail: alt.detail ?? '',
+    reason: alt.reason,
+  })
+  legDetail.value = alt.detail ?? ''
+  legDur.value = alt.durationMin ? String(alt.durationMin) : ''
+}
+function formatDistance(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${m}m`
 }
 
 // 父组件替换 stop（如 geocode 命中）时同步本地输入
@@ -645,6 +679,57 @@ async function pickPhoto(): Promise<void> {
     border: 2rpx solid $color-border;
     font-size: $font-body;
     font-weight: 600;
+  }
+
+  &__leg-reason {
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+    padding: 14rpx 18rpx;
+    border-radius: $radius-md;
+    background-color: #fff8ef;
+    border: 2rpx solid #ead6bf;
+  }
+
+  &__leg-reason-label,
+  &__leg-alts-title {
+    font-size: 22rpx;
+    font-weight: 700;
+    color: $color-primary-dark;
+  }
+
+  &__leg-reason-text {
+    font-size: $font-caption;
+    line-height: 1.45;
+    color: $color-text-secondary;
+  }
+
+  &__leg-alts {
+    display: flex;
+    flex-direction: column;
+    gap: 10rpx;
+  }
+
+  &__leg-alt {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    padding: 12rpx 16rpx;
+    border-radius: $radius-md;
+    background-color: #ffffff;
+    border: 2rpx solid $color-border;
+  }
+
+  &__leg-alt-main {
+    font-size: $font-caption;
+    font-weight: 700;
+    color: $color-text;
+  }
+
+  &__leg-alt-sub {
+    font-size: 22rpx;
+    line-height: 1.35;
+    color: $color-text-secondary;
   }
 }
 </style>

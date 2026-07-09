@@ -580,43 +580,79 @@ export function useTravelEditor() {
     }
   }
 
+  async function saveTripToCloud(): Promise<{ ok: boolean; code?: string; sharePath?: string; error?: string }> {
+    try {
+      const plainTrip = JSON.parse(JSON.stringify(trip)) as Trip
+      const res = await uniRequest<{ code: string; sharePath: string }>(
+        `${API_BASE}/api/travel/share`,
+        'POST',
+        { trip: plainTrip },
+      )
+      if (res.code !== 0) return { ok: false, error: res.message || '云保存失败' }
+      dirty.value = false
+      return { ok: true, code: res.data.code, sharePath: res.data.sharePath }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : '网络错误' }
+    }
+  }
+
+  async function loadSharedTrip(code: string): Promise<{ ok: boolean; error?: string }> {
+    const shareCode = code.trim()
+    if (!shareCode) return { ok: false, error: '请输入分享码' }
+    try {
+      const res = await uniRequest<{ trip: Partial<Trip> }>(
+        `${API_BASE}/api/travel/share/${encodeURIComponent(shareCode)}`,
+      )
+      if (res.code !== 0) return { ok: false, error: res.message || '导入失败' }
+      if (!applyTripData(res.data.trip)) return { ok: false, error: '分享行程数据不完整' }
+      dirty.value = true
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : '网络错误' }
+    }
+  }
+
   // ---- 本地草稿 ----
   function loadFromStorage(): void {
     try {
       const raw = uni.getStorageSync(STORAGE_KEY)
       if (!raw) return
       const saved = JSON.parse(raw) as Partial<Trip>
-      if (saved && Array.isArray(saved.days) && saved.days.length) {
-        const empty = createEmptyTrip()
-        trip.title = saved.title || ''
-        trip.origin = saved.origin || ''
-        trip.travelMode = saved.travelMode || 'walking'
-        trip.guideStyle = saved.guideStyle || 'handbook'
-        trip.routeMapImage = saved.routeMapImage ?? null
-        trip.poiMapImage = saved.poiMapImage ?? null
-        trip.cityRouteMapImage = saved.cityRouteMapImage ?? null
-        trip.mapViewport = saved.mapViewport ?? null
-        trip.food = saved.food ?? []
-        trip.tips = saved.tips ?? []
-        trip.xhs = saved.xhs ?? empty.xhs
-        trip.intercity = saved.intercity ?? null
-        // 出行清单：新模型 packingMust/packingNotes 两组；兼容旧版单数组 packingTips（对半拆迁移）
-        if (Array.isArray(saved.packingMust) && Array.isArray(saved.packingNotes)) {
-          trip.packingMust = saved.packingMust
-          trip.packingNotes = saved.packingNotes
-        } else {
-          const legacy = (saved as { packingTips?: unknown }).packingTips
-          const arr = Array.isArray(legacy) ? legacy.filter((t): t is string => typeof t === 'string') : []
-          const half = Math.ceil(arr.length / 2)
-          trip.packingMust = arr.slice(0, half)
-          trip.packingNotes = arr.slice(half)
-        }
-        trip.days = saved.days
+      if (applyTripData(saved)) {
         dirty.value = false
       }
     } catch {
       /* 草稿损坏则忽略 */
     }
+  }
+
+  function applyTripData(saved: Partial<Trip> | undefined): boolean {
+    if (!saved || !Array.isArray(saved.days) || saved.days.length === 0) return false
+    const empty = createEmptyTrip()
+    trip.title = saved.title || ''
+    trip.origin = saved.origin || ''
+    trip.travelMode = saved.travelMode || 'walking'
+    trip.guideStyle = saved.guideStyle || 'handbook'
+    trip.routeMapImage = saved.routeMapImage ?? null
+    trip.poiMapImage = saved.poiMapImage ?? null
+    trip.cityRouteMapImage = saved.cityRouteMapImage ?? null
+    trip.mapViewport = saved.mapViewport ?? null
+    trip.food = saved.food ?? []
+    trip.tips = saved.tips ?? []
+    trip.xhs = saved.xhs ?? empty.xhs
+    trip.intercity = saved.intercity ?? null
+    if (Array.isArray(saved.packingMust) && Array.isArray(saved.packingNotes)) {
+      trip.packingMust = saved.packingMust
+      trip.packingNotes = saved.packingNotes
+    } else {
+      const legacy = (saved as { packingTips?: unknown }).packingTips
+      const arr = Array.isArray(legacy) ? legacy.filter((t): t is string => typeof t === 'string') : []
+      const half = Math.ceil(arr.length / 2)
+      trip.packingMust = arr.slice(0, half)
+      trip.packingNotes = arr.slice(half)
+    }
+    trip.days = saved.days
+    return true
   }
   function saveToStorage(): void {
     try {
@@ -675,6 +711,8 @@ export function useTravelEditor() {
     planWithAi,
     refineDayWithAi,
     replaceStopWithAi,
+    saveTripToCloud,
+    loadSharedTrip,
     loadFromStorage,
     saveToStorage,
     reset,

@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Exception\BizException;
 use App\Middleware\ApiKeyMiddleware;
+use App\Service\TravelShareService;
 use App\Service\TravelService;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\RateLimit\Annotation\RateLimit;
@@ -13,10 +14,16 @@ use Throwable;
 
 class TravelController extends AbstractController
 {
-    public function __construct(private readonly TravelService $travel)
+    public function __construct(
+        private readonly TravelService $travel,
+        private readonly TravelShareService $shares,
+    )
     {
     }
 
+    /**
+     * 地点搜索代理：前端输入地点名，后端走当前地图服务商返回候选坐标。
+     */
     #[RateLimit(create: 5, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function geocode(RequestInterface $request): array
     {
@@ -201,5 +208,40 @@ class TravelController extends AbstractController
         }
 
         return $this->ok($result);
+    }
+
+    /**
+     * 云保存当前行程。
+     *
+     * 前端传完整 trip JSON，后端只做轻量校验和持久化，返回短分享码；
+     * 分享码可用于手动导入，也可拼成小程序路径 pages/travel/index?share=xxxx。
+     */
+    public function saveShare(RequestInterface $request): array
+    {
+        $trip = $request->input('trip', []);
+        if (! is_array($trip) || $trip === []) {
+            throw new BizException(422, '缺少行程数据');
+        }
+
+        try {
+            return $this->ok($this->shares->save($trip));
+        } catch (Throwable $e) {
+            throw new BizException(500, '云保存失败：' . $e->getMessage(), null, $e);
+        }
+    }
+
+    /**
+     * 按分享码读取行程。
+     *
+     * 当前没有账号权限模型，知道分享码即可读取；正式上线若涉及隐私行程，应加 owner/过期时间/访问控制。
+     */
+    public function getShare(RequestInterface $request, string $code): array
+    {
+        $record = $this->shares->find($code);
+        if ($record === null) {
+            throw new BizException(404, '分享行程不存在或已失效');
+        }
+
+        return $this->ok($record);
     }
 }

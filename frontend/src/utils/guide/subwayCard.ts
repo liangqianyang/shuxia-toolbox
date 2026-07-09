@@ -14,7 +14,7 @@ import {
 
 /**
  * 地铁/公交换乘图（1080×1440）。
- * 数据源为后端调用腾讯 transit 路线规划后写入的 stop.travelToNext.transit。
+ * 数据源为后端调用地图服务 transit 路线规划后写入的 stop.travelToNext.transit。
  * 没有真实 transit 数据时不伪造线路，只给出明确空态，避免误导用户。
  */
 export function renderSubwayCard(
@@ -29,7 +29,7 @@ export function renderSubwayCard(
     drawTransitBackground(ctx)
   }
 
-  const bannerBottom = drawBanner(ctx, trip.title || '地铁公交换乘图', '腾讯公共交通规划', '🚇')
+  const bannerBottom = drawBanner(ctx, trip.title || '地铁公交换乘图', '地图公共交通规划', '🚇')
   const groups = buildTransitGroups(trip)
   const top = bannerBottom + 32
   const bottom = CARD_H - 96
@@ -98,8 +98,8 @@ function buildTransitGroups(trip: Trip): TransitGroup[] {
 }
 
 function segmentHeight(segment: TransitSegment): number {
-  const lines = Math.min(segment.route.lines.length, 3)
-  return 132 + lines * 44 + (segment.route.lines.length > 3 ? 26 : 0)
+  const lines = Math.min(segment.route.lines.length, 2)
+  return 154 + lines * 58 + (segment.route.lines.length > 2 ? 34 : 0)
 }
 
 function drawTransitBackground(ctx: CanvasRenderingContext2D): void {
@@ -172,20 +172,20 @@ function drawTransitSegment(
   ctx.textAlign = 'right'
   ctx.fillText(`${fmtMin(route.durationMin)} · 换乘${route.transferCount}次`, x + w - 24, y + 28)
 
-  drawLineSummary(ctx, route, x + 24, y + 68, w - 48)
+  drawLineSummary(ctx, route, x + 24, y + 72, w - 48)
 
-  let rowY = y + 112
-  route.lines.slice(0, 3).forEach((line, i) => {
+  let rowY = y + 124
+  route.lines.slice(0, 2).forEach((line, i) => {
     const color = LINE_COLORS[i % LINE_COLORS.length]
     drawRouteLine(ctx, line, color, x + 28, rowY, w - 56)
-    rowY += 44
+    rowY += 58
   })
-  if (route.lines.length > 3) {
+  if (route.lines.length > 2) {
     ctx.fillStyle = C.note
     ctx.font = `22px ${FONT}`
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText(`另有 ${route.lines.length - 3} 段换乘，建议出发前打开地图确认`, x + 28, rowY)
+    ctx.fillText(`另有 ${route.lines.length - 2} 段换乘，建议出发前打开地图确认`, x + 28, rowY + 2)
   }
 
   const meta = [`步行约 ${route.walkingM}m`, `总距 ${fmtDistance(route.distanceM)}`]
@@ -197,10 +197,13 @@ function drawTransitSegment(
 }
 
 function drawLineSummary(ctx: CanvasRenderingContext2D, route: TransitRoute, x: number, y: number, w: number): void {
-  ctx.font = `24px ${FONT}`
+  ctx.font = `23px ${FONT}`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  const summary = route.lines.map((line) => `${vehicleIcon(line.vehicle, line.title)} ${line.title}`).join('  →  ')
+  const summary = route.lines
+    .slice(0, 3)
+    .map((line) => `${vehicleIcon(line.vehicle, line.title)} ${line.title}`)
+    .join('  →  ')
   ctx.fillStyle = C.primaryDark
   ctx.fillText(truncateText(ctx, summary, w), x, y)
 }
@@ -217,13 +220,13 @@ function drawRouteLine(
   ctx.lineWidth = 8
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(x + 8, y + 20)
-  ctx.lineTo(x + w - 8, y + 20)
+  ctx.moveTo(x + 8, y + 28)
+  ctx.lineTo(x + w - 8, y + 28)
   ctx.stroke()
 
   ctx.beginPath()
-  ctx.arc(x + 8, y + 20, 13, 0, Math.PI * 2)
-  ctx.arc(x + w - 8, y + 20, 13, 0, Math.PI * 2)
+  ctx.arc(x + 8, y + 28, 13, 0, Math.PI * 2)
+  ctx.arc(x + w - 8, y + 28, 13, 0, Math.PI * 2)
   ctx.fillStyle = '#FFFFFF'
   ctx.fill()
   ctx.strokeStyle = color
@@ -233,20 +236,20 @@ function drawRouteLine(
   const stationText = [line.geton, line.getoff].filter(Boolean).join(' → ')
   const stationCount = line.stationCount > 0 ? ` · ${line.stationCount}站` : ''
   const text = `${vehicleIcon(line.vehicle, line.title)} ${line.title}${stationText ? ' · ' + stationText : ''}${stationCount}`
-  ctx.font = `24px ${FONT}`
+  ctx.font = `23px ${FONT}`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   const label = truncateText(ctx, text, w - 48)
   const labelX = x + 24
   const labelW = Math.min(w - 48, ctx.measureText(label).width + 18)
-  roundRect(ctx, labelX - 9, y + 2, labelW, 36, 18)
+  roundRect(ctx, labelX - 9, y + 10, labelW, 36, 18)
   ctx.fillStyle = 'rgba(255,255,255,0.96)'
   ctx.fill()
   ctx.strokeStyle = 'rgba(216,184,146,0.45)'
   ctx.lineWidth = 1.5
   ctx.stroke()
   ctx.fillStyle = C.name
-  ctx.fillText(label, labelX, y + 20)
+  ctx.fillText(label, labelX, y + 28)
 }
 
 function vehicleIcon(vehicle: string, title: string): string {

@@ -7,8 +7,51 @@
         <text class="caption">填出发地、目的地和出行方式，AI 联网生成路线 + 多张攻略图（约 10-30s）</text>
       </view>
 
-      <input class="travel__ai-input" v-model="aiOrigin" placeholder="出发地（可选），如「杭州东站」" />
-      <input class="travel__ai-input" v-model="aiDestination" placeholder="目的地，如「杭州」" />
+      <view class="travel__ai-place">
+        <input
+          class="travel__ai-place-input"
+          v-model="aiOrigin"
+          placeholder="出发地（可选），如「杭州东站」"
+          @confirm="searchAiPlace('origin')"
+        />
+        <view class="travel__ai-place-btn" @tap="searchAiPlace('origin')">{{
+          aiPlaceSearching === 'origin' ? '…' : '地图'
+        }}</view>
+      </view>
+      <view v-if="aiOriginCandidates.length" class="travel__ai-candidates">
+        <view
+          v-for="(c, i) in aiOriginCandidates"
+          :key="`origin-${i}`"
+          class="travel__ai-candidate"
+          @tap="pickAiPlace('origin', c)"
+        >
+          <text class="travel__ai-cand-name">{{ c.title || c.name }}</text>
+          <text class="travel__ai-cand-addr">{{ c.province }}{{ c.city }}</text>
+        </view>
+      </view>
+
+      <view class="travel__ai-place">
+        <input
+          class="travel__ai-place-input"
+          v-model="aiDestination"
+          placeholder="目的地，如「杭州」"
+          @confirm="searchAiPlace('destination')"
+        />
+        <view class="travel__ai-place-btn" @tap="searchAiPlace('destination')">{{
+          aiPlaceSearching === 'destination' ? '…' : '地图'
+        }}</view>
+      </view>
+      <view v-if="aiDestinationCandidates.length" class="travel__ai-candidates">
+        <view
+          v-for="(c, i) in aiDestinationCandidates"
+          :key="`destination-${i}`"
+          class="travel__ai-candidate"
+          @tap="pickAiPlace('destination', c)"
+        >
+          <text class="travel__ai-cand-name">{{ c.title || c.name }}</text>
+          <text class="travel__ai-cand-addr">{{ c.province }}{{ c.city }}</text>
+        </view>
+      </view>
 
       <view class="travel__modes">
         <view
@@ -145,11 +188,43 @@
       </view>
     </view>
 
-    <!-- 行程体检：把可执行性和可信提醒前置，避免用户只看到漂亮图却忽略风险 -->
+    <view class="card travel__cloud">
+      <view class="travel__cloud-head">
+        <view>
+          <text class="section-title">云保存与分享</text>
+          <text class="caption">保存当前行程到后端，分享码可发给同行人导入</text>
+        </view>
+        <view class="btn-primary travel__cloud-save" :class="{ disabled: cloudSaving }" @tap="onCloudSave">{{
+          cloudSaving ? '保存中…' : '云保存'
+        }}</view>
+      </view>
+      <view v-if="lastShareCode" class="travel__cloud-code">
+        <text class="travel__cloud-code-label">分享码</text>
+        <text class="travel__cloud-code-val">{{ lastShareCode }}</text>
+        <text class="travel__cloud-copy" @tap="onCopyShareCode">复制</text>
+      </view>
+      <view class="travel__cloud-import">
+        <input class="travel__cloud-input" v-model="shareCodeInput" placeholder="输入分享码导入行程" />
+        <view class="btn-ghost travel__cloud-import-btn" @tap="onImportShareCode()">导入</view>
+      </view>
+    </view>
+
+    <!-- 规划确认台：把可执行性和可信提醒前置，避免用户只看到漂亮图却忽略风险 -->
     <view v-if="tripReviewItems.length" class="card travel__review">
       <view class="travel__review-head">
-        <text class="section-title">行程体检</text>
-        <text class="caption">生成后先看这几项，出发前再确认开放与预约</text>
+        <view>
+          <text class="section-title">规划确认台</text>
+          <text class="caption">生成后先确认地点、交通和出发前待办</text>
+        </view>
+        <text class="travel__review-status" :class="`travel__review-status--${tripReadiness.level}`">{{
+          tripReadiness.label
+        }}</text>
+      </view>
+      <view class="travel__review-metrics">
+        <view v-for="metric in tripReviewMetrics" :key="metric.key" class="travel__review-metric">
+          <text class="travel__review-metric-val">{{ metric.value }}</text>
+          <text class="travel__review-metric-label">{{ metric.label }}</text>
+        </view>
       </view>
       <view v-for="item in tripReviewItems" :key="item.key" class="travel__review-item">
         <text class="travel__review-mark" :class="`travel__review-mark--${item.level}`">{{
@@ -231,6 +306,15 @@
         <text class="travel__day-sort" @tap="onReorderDay(day.id)">重排</text>
         <text v-if="trip.days.length > 1" class="travel__day-del" @tap="removeDay(day.id)">删除</text>
       </view>
+      <view class="travel__day-check">
+        <text
+          v-for="item in dayCheckMap[day.id] || []"
+          :key="item.key"
+          class="travel__day-check-chip"
+          :class="`travel__day-check-chip--${item.level}`"
+          >{{ item.text }}</text
+        >
+      </view>
 
       <view class="travel__day-handbook">
         <textarea
@@ -283,6 +367,18 @@
           <view class="btn-primary travel__save-all" @tap="onSaveAll">保存选中</view>
         </view>
       </view>
+      <view class="travel__suite-list">
+        <view
+          v-for="suite in CARD_SUITES"
+          :key="suite.id"
+          class="travel__suite"
+          :class="{ 'travel__suite--active': selectedCardPreset === suite.id }"
+          @tap="selectCardSuite(suite.id)"
+        >
+          <text class="travel__suite-label">{{ suite.label }}</text>
+          <text class="travel__suite-hint">{{ suite.hint }}</text>
+        </view>
+      </view>
 
       <template v-for="(card, i) in cards" :key="card.key">
         <view class="travel__gitem">
@@ -294,7 +390,13 @@
                 @tap="toggleCardSelected(card.key)"
                 >{{ isCardSelected(card.key) ? '已选' : '未选' }}</text
               >
-              <text class="travel__gitem-label">{{ card.label }}</text>
+              <view class="travel__gitem-copy">
+                <view class="travel__gitem-name">
+                  <text class="travel__gitem-label">{{ card.label }}</text>
+                  <text class="travel__gitem-group">{{ cardGroupLabel(card.group) }}</text>
+                </view>
+                <text class="travel__gitem-hint">{{ card.hint }}</text>
+              </view>
             </view>
             <view class="travel__gitem-tools">
               <text class="travel__gitem-bg" @tap="onPickBg(i)">{{ cardBgs[i] ? '换底图' : '自定义底图' }}</text>
@@ -458,6 +560,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import TravelStopCard from '@/components/TravelStopCard.vue'
 import { useTravelEditor } from '@/composables/useTravelEditor'
 import { useTravelImages } from '@/composables/useTravelImages'
@@ -471,6 +574,7 @@ import {
   TRAVEL_MODE_META,
   TRAVEL_MODE_ORDER,
   type DayMood,
+  type GeocodeCandidate,
   type GuideStyle,
   type TravelIntensity,
   type TravelMode,
@@ -501,12 +605,17 @@ const {
   planWithAi,
   refineDayWithAi,
   replaceStopWithAi,
+  saveTripToCloud,
+  loadSharedTrip,
   loadFromStorage,
   saveToStorage,
 } = useTravelEditor()
 
 const aiOrigin = ref('')
 const aiDestination = ref('')
+const aiOriginCandidates = ref<GeocodeCandidate[]>([])
+const aiDestinationCandidates = ref<GeocodeCandidate[]>([])
+const aiPlaceSearching = ref<'origin' | 'destination' | ''>('')
 const aiMode = ref<TravelMode>('walking')
 const aiIntensity = ref<TravelIntensity>('standard')
 const aiDays = ref(3)
@@ -521,6 +630,11 @@ const planning = ref(false)
 const planError = ref('')
 const refiningDayId = ref('')
 const replacingStopId = ref('')
+const cloudSaving = ref(false)
+const shareCodeInput = ref('')
+const lastShareCode = ref('')
+const lastSharePath = ref('')
+const pendingShareCode = ref('')
 
 type TripReviewLevel = 'warn' | 'info'
 interface TripReviewItem {
@@ -528,41 +642,125 @@ interface TripReviewItem {
   level: TripReviewLevel
   text: string
 }
+interface TripReviewMetric {
+  key: string
+  label: string
+  value: string
+}
+interface DayCheckItem {
+  key: string
+  level: 'ok' | 'warn' | 'info'
+  text: string
+}
+interface TripReviewStats {
+  totalStops: number
+  geocodedStops: number
+  missingCoords: number
+  longLegs: number
+  denseDayLabels: string[]
+  missingTimes: number
+  missingPoiInfo: number
+}
+
+const tripReviewStats = computed<TripReviewStats>(() => {
+  const namedStops = trip.days.flatMap((day) => day.stops.filter((stop) => stop.name.trim()))
+  const missingCoords = namedStops.filter((stop) => stop.lng === null || stop.lat === null).length
+  const longLegs = namedStops.filter((stop) => {
+    const leg = stop.travelToNext
+    return leg !== null && (leg.durationMin >= 45 || leg.distanceM >= 12000)
+  }).length
+  const denseDayLabels = trip.days
+    .map((day) => ({ label: `Day ${day.index}`, count: day.stops.filter((stop) => stop.name.trim()).length }))
+    .filter((day) => day.count >= 6)
+    .map((day) => day.label)
+  const missingPoiInfo = namedStops.filter((stop) => {
+    const info = stop.poiInfo
+    return !info || !info.openHours || !info.reservation || !info.ticket || !info.duration
+  }).length
+
+  return {
+    totalStops: namedStops.length,
+    geocodedStops: namedStops.length - missingCoords,
+    missingCoords,
+    longLegs,
+    denseDayLabels,
+    missingTimes: namedStops.filter((stop) => !stop.time.trim()).length,
+    missingPoiInfo,
+  }
+})
+
+const tripReadiness = computed(() => {
+  const s = tripReviewStats.value
+  if (s.totalStops === 0) return { level: 'info', label: '待规划' }
+  if (s.missingCoords > 0 || s.longLegs > 0 || s.denseDayLabels.length > 0) {
+    return { level: 'warn', label: '需校验' }
+  }
+  if (s.missingTimes > 0 || s.missingPoiInfo > 0) return { level: 'info', label: '可优化' }
+  return { level: 'good', label: '可出行' }
+})
+
+const tripReviewMetrics = computed<TripReviewMetric[]>(() => {
+  const s = tripReviewStats.value
+  return [
+    { key: 'coords', label: '已定位地点', value: `${s.geocodedStops}/${s.totalStops}` },
+    { key: 'long-legs', label: '长移动', value: `${s.longLegs}` },
+    { key: 'todo', label: '待确认', value: `${s.missingTimes + s.missingPoiInfo}` },
+  ]
+})
+
+const dayCheckMap = computed<Record<string, DayCheckItem[]>>(() => {
+  const out: Record<string, DayCheckItem[]> = {}
+  trip.days.forEach((day) => {
+    const stops = day.stops.filter((stop) => stop.name.trim())
+    const missingCoords = stops.filter((stop) => stop.lng === null || stop.lat === null).length
+    const longLegs = stops.filter((stop) => {
+      const leg = stop.travelToNext
+      return leg !== null && (leg.durationMin >= 45 || leg.distanceM >= 12000)
+    }).length
+    const hasFood = stops.some((stop) => stop.type === 'food')
+    out[day.id] = [
+      { key: 'count', level: 'info', text: `${stops.length} 个地点` },
+      missingCoords > 0
+        ? { key: 'coords', level: 'warn', text: `${missingCoords} 个未定位` }
+        : { key: 'coords', level: 'ok', text: '坐标完整' },
+      longLegs > 0
+        ? { key: 'legs', level: 'warn', text: `${longLegs} 段长移动` }
+        : { key: 'legs', level: 'ok', text: '交通可控' },
+      hasFood || stops.length < 4
+        ? { key: 'food', level: 'ok', text: hasFood ? '有用餐点' : '轻量行程' }
+        : { key: 'food', level: 'info', text: '待补用餐' },
+    ]
+  })
+  return out
+})
 
 const tripReviewItems = computed<TripReviewItem[]>(() => {
   const items: TripReviewItem[] = []
   const namedStops = trip.days.flatMap((day) => day.stops.filter((stop) => stop.name.trim()))
   if (namedStops.length === 0) return items
+  const stats = tripReviewStats.value
 
-  const missingCoords = namedStops.filter((stop) => stop.lng === null || stop.lat === null).length
-  if (missingCoords > 0) {
+  if (stats.missingCoords > 0) {
     items.push({
       key: 'missing-coords',
       level: 'warn',
-      text: `${missingCoords} 个地点还没有坐标，地图和站间交通可能不够准确。`,
+      text: `${stats.missingCoords} 个地点还没有坐标，地图和站间交通可能不够准确。`,
     })
   }
 
-  const denseDays = trip.days
-    .map((day) => ({ index: day.index, count: day.stops.filter((stop) => stop.name.trim()).length }))
-    .filter((day) => day.count >= 6)
-  if (denseDays.length > 0) {
+  if (stats.denseDayLabels.length > 0) {
     items.push({
       key: 'dense-days',
       level: 'warn',
-      text: `${denseDays.map((day) => `Day ${day.index}`).join('、')} 地点较多，建议确认体力、排队和交通缓冲。`,
+      text: `${stats.denseDayLabels.join('、')} 地点较多，建议确认体力、排队和交通缓冲。`,
     })
   }
 
-  const longLegs = namedStops.filter((stop) => {
-    const leg = stop.travelToNext
-    return leg !== null && (leg.durationMin >= 45 || leg.distanceM >= 12000)
-  }).length
-  if (longLegs > 0) {
+  if (stats.longLegs > 0) {
     items.push({
       key: 'long-legs',
       level: 'warn',
-      text: `${longLegs} 段站间移动偏长，可考虑换顺序或拆到不同天。`,
+      text: `${stats.longLegs} 段站间移动偏长，可考虑换顺序或拆到不同天。`,
     })
   }
 
@@ -578,24 +776,19 @@ const tripReviewItems = computed<TripReviewItem[]>(() => {
     })
   }
 
-  const missingTimes = namedStops.filter((stop) => !stop.time.trim()).length
-  if (missingTimes > 0) {
+  if (stats.missingTimes > 0) {
     items.push({
       key: 'missing-times',
       level: 'info',
-      text: `${missingTimes} 个地点没有时间段，生成分享图前可补上，读起来会更像真实攻略。`,
+      text: `${stats.missingTimes} 个地点没有时间段，生成分享图前可补上，读起来会更像真实攻略。`,
     })
   }
 
-  const missingPoiInfo = namedStops.filter((stop) => {
-    const info = stop.poiInfo
-    return !info || !info.openHours || !info.reservation || !info.ticket || !info.duration
-  }).length
-  if (missingPoiInfo > 0) {
+  if (stats.missingPoiInfo > 0) {
     items.push({
       key: 'missing-poi-info',
       level: 'info',
-      text: `${missingPoiInfo} 个地点缺少开放/预约/门票/停留时长信息，出发前建议补齐。`,
+      text: `${stats.missingPoiInfo} 个地点缺少开放/预约/门票/停留时长信息，出发前建议补齐。`,
     })
   }
 
@@ -629,49 +822,154 @@ function incHour(i: number): void {
   aiHoursPerDay.value[i] = Math.min(16, aiHoursPerDay.value[i] + 1)
 }
 
+async function searchAiPlace(field: 'origin' | 'destination'): Promise<void> {
+  const query = (field === 'origin' ? aiOrigin.value : aiDestination.value).trim()
+  if (!query) {
+    uni.showToast({ title: field === 'origin' ? '先填出发地' : '先填目的地', icon: 'none' })
+    return
+  }
+
+  aiPlaceSearching.value = field
+  if (field === 'origin') {
+    aiOriginCandidates.value = []
+  } else {
+    aiDestinationCandidates.value = []
+  }
+
+  try {
+    const candidates = await geocodeStop('', '', query)
+    if (field === 'origin') {
+      aiOriginCandidates.value = candidates
+    } else {
+      aiDestinationCandidates.value = candidates
+    }
+    if (candidates.length === 0) {
+      uni.showToast({ title: '没找到地点', icon: 'none' })
+    }
+  } finally {
+    aiPlaceSearching.value = ''
+  }
+}
+
+function pickAiPlace(field: 'origin' | 'destination', candidate: GeocodeCandidate): void {
+  const name = candidate.name || candidate.title
+  if (field === 'origin') {
+    aiOrigin.value = name
+    aiOriginCandidates.value = []
+  } else {
+    aiDestination.value = name
+    aiDestinationCandidates.value = []
+  }
+}
+
 const { cards, cssWidth, cssHeight, rendered, saving, renderAll, saveOne, saveAll, release } = useTravelImages()
 const instance = getCurrentInstance()?.proxy
-const BASE_RECOMMENDED_CARD_KEYS = ['route-real', 'route-by-day', 'poi', 'timeline', 'food', 'packing']
+const BASE_RECOMMENDED_CARD_KEYS = ['route-real', 'route-by-day', 'multi-route', 'poi', 'timeline', 'food', 'packing']
+type CardPresetId = 'recommended' | 'daily' | 'share' | 'map' | 'custom'
+const CARD_SUITES: Array<{ id: Exclude<CardPresetId, 'recommended' | 'custom'>; label: string; hint: string }> = [
+  { id: 'daily', label: '自用套装', hint: '路线、每日海报、时间线' },
+  { id: 'share', label: '分享套装', hint: '每日海报、手帐、美食' },
+  { id: 'map', label: '地图套装', hint: '分布、分日、多路线' },
+]
 const selectedCardKeys = ref<string[]>(BASE_RECOMMENDED_CARD_KEYS.slice())
-const usingRecommendedSelection = ref(true)
-const selectedCardCount = computed(() => selectedCardKeys.value.length)
+const selectedCardPreset = ref<CardPresetId>('recommended')
+const selectedCardCount = computed(() => cards.filter((card) => selectedCardKeys.value.includes(card.key)).length)
 
 function isCardSelected(key: string): boolean {
   return selectedCardKeys.value.includes(key)
 }
 
 function toggleCardSelected(key: string): void {
-  usingRecommendedSelection.value = false
+  selectedCardPreset.value = 'custom'
   selectedCardKeys.value = isCardSelected(key)
     ? selectedCardKeys.value.filter((item) => item !== key)
     : [...selectedCardKeys.value, key]
 }
 
-function recommendedCardKeys(): string[] {
+function firstAvailable(keys: string[]): string[] {
+  const available = new Set(cards.map((card) => card.key))
+  return keys.filter((key) => available.has(key))
+}
+
+function dailyPosterKeys(limit = 5): string[] {
   return cards
-    .filter((card) => BASE_RECOMMENDED_CARD_KEYS.includes(card.key) || card.key.startsWith('handbook-day-'))
+    .filter((card) => card.key.startsWith('daily-poster-'))
+    .slice(0, limit)
+    .map((card) => card.key)
+}
+
+function handbookKeys(limit = 2): string[] {
+  return cards
+    .filter((card) => card.key.startsWith('handbook-day-'))
+    .slice(0, limit)
+    .map((card) => card.key)
+}
+
+function recommendedCardKeys(): string[] {
+  let handbookCount = 0
+  const handbookLimit = trip.days.length <= 2 ? 2 : 0
+  let dailyPosterCount = 0
+  const dailyPosterLimit = Math.min(5, trip.days.filter((day) => day.stops.some((stop) => stop.name.trim())).length)
+  return cards
+    .filter((card) => {
+      if (BASE_RECOMMENDED_CARD_KEYS.includes(card.key)) return true
+      if (card.key.startsWith('daily-poster-')) {
+        if (dailyPosterCount >= dailyPosterLimit) return false
+        dailyPosterCount++
+        return true
+      }
+      if (!card.key.startsWith('handbook-day-')) return false
+      if (handbookCount >= handbookLimit) return false
+      handbookCount++
+      return true
+    })
     .map((card) => card.key)
 }
 
 function syncRecommendedCardSelection(): void {
-  if (!usingRecommendedSelection.value) return
-  selectedCardKeys.value = recommendedCardKeys()
+  if (selectedCardPreset.value === 'custom') return
+  if (selectedCardPreset.value === 'recommended') {
+    selectedCardKeys.value = recommendedCardKeys()
+    return
+  }
+  selectedCardKeys.value = cardSuiteKeys(selectedCardPreset.value)
 }
 
 function selectAllCards(): void {
-  usingRecommendedSelection.value = false
+  selectedCardPreset.value = 'custom'
   selectedCardKeys.value = cards.map((card) => card.key)
 }
 
 function selectRecommendedCards(): void {
-  usingRecommendedSelection.value = true
+  selectedCardPreset.value = 'recommended'
   selectedCardKeys.value = recommendedCardKeys()
+}
+
+function cardSuiteKeys(id: Exclude<CardPresetId, 'recommended' | 'custom'>): string[] {
+  if (id === 'daily') {
+    return firstAvailable(['route-real', 'route-by-day', ...dailyPosterKeys(), 'timeline', 'packing'])
+  }
+  if (id === 'share') {
+    return firstAvailable([...dailyPosterKeys(), ...handbookKeys(), 'photo-timeline', 'food'])
+  }
+  return firstAvailable(['route-real', 'route-by-day', 'multi-route', 'poi', 'subway'])
+}
+
+function selectCardSuite(id: Exclude<CardPresetId, 'recommended' | 'custom'>): void {
+  selectedCardPreset.value = id
+  selectedCardKeys.value = cardSuiteKeys(id)
 }
 
 function selectedCardIndexes(): number[] {
   return cards
     .map((card, index) => (selectedCardKeys.value.includes(card.key) ? index : -1))
     .filter((index) => index >= 0)
+}
+function cardGroupLabel(group: string): string {
+  if (group === 'core') return '自用'
+  if (group === 'map') return '地图'
+  if (group === 'share') return '分享'
+  return '扩展'
 }
 // 每张卡的自定义底图临时路径（下标 → 路径）；未设置则用内置水彩主题
 const cardBgs = ref<Record<number, string>>({})
@@ -809,13 +1107,92 @@ watch(
   },
 )
 
+onLoad((query) => {
+  const raw = query?.share
+  pendingShareCode.value = Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
+})
+
+onShareAppMessage(() => ({
+  title: trip.title || '旅游攻略',
+  path: lastSharePath.value || '/pages/travel/index',
+}))
+
 onMounted(() => {
-  loadFromStorage()
+  const share = pendingShareCode.value.trim()
+  if (share) {
+    shareCodeInput.value = share
+    void onImportShareCode(share)
+  } else {
+    loadFromStorage()
+  }
 })
 
 function onSave(): void {
   saveToStorage()
   uni.showToast({ title: '已保存草稿', icon: 'success' })
+}
+
+async function onCloudSave(): Promise<void> {
+  if (cloudSaving.value) return
+  cloudSaving.value = true
+  uni.showLoading({ title: '云保存中…', mask: true })
+  try {
+    const result = await saveTripToCloud()
+    if (!result.ok || !result.code) {
+      uni.showToast({ title: result.error || '云保存失败', icon: 'none' })
+      return
+    }
+    lastShareCode.value = result.code
+    lastSharePath.value = result.sharePath || `/pages/travel/index?share=${result.code}`
+    uni.setClipboardData({
+      data: result.code,
+      success: () => uni.showToast({ title: '已保存并复制分享码', icon: 'success' }),
+    })
+  } finally {
+    uni.hideLoading()
+    cloudSaving.value = false
+  }
+}
+
+function onCopyShareCode(): void {
+  const code = lastShareCode.value.trim()
+  if (!code) {
+    uni.showToast({ title: '请先云保存', icon: 'none' })
+    return
+  }
+  uni.setClipboardData({
+    data: code,
+    success: () => uni.showToast({ title: '分享码已复制', icon: 'success' }),
+  })
+}
+
+async function onImportShareCode(code = shareCodeInput.value): Promise<void> {
+  const share = code.trim()
+  if (!share) {
+    uni.showToast({ title: '请输入分享码', icon: 'none' })
+    return
+  }
+  const confirmed = await confirmImportShare()
+  if (!confirmed) return
+  uni.showLoading({ title: '导入中…', mask: true })
+  try {
+    const result = await loadSharedTrip(share)
+    if (!result.ok) {
+      uni.showToast({ title: result.error || '导入失败', icon: 'none' })
+      return
+    }
+    lastShareCode.value = share
+    lastSharePath.value = `/pages/travel/index?share=${share}`
+    shareCodeInput.value = ''
+    saveToStorage()
+    if (rendered.value) {
+      await renderAll(trip, instance, cardBgs.value)
+      syncRecommendedCardSelection()
+    }
+    uni.showToast({ title: '已导入行程', icon: 'success' })
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 async function onPlan(): Promise<void> {
@@ -939,6 +1316,19 @@ function confirmSaveCards(labels: string[]): Promise<boolean> {
       content: `将保存 ${labels.length} 张：\n${labels.join('、')}`,
       confirmText: '保存',
       cancelText: '再看看',
+      success: (res) => resolve(!!res.confirm),
+      fail: () => resolve(false),
+    })
+  })
+}
+
+function confirmImportShare(): Promise<boolean> {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: '导入分享行程',
+      content: '导入后会替换当前编辑中的行程，建议先保存草稿或云保存当前版本。',
+      confirmText: '导入',
+      cancelText: '取消',
       success: (res) => resolve(!!res.confirm),
       fail: () => resolve(false),
     })
@@ -1102,6 +1492,69 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     border: 2rpx solid $color-border;
     font-size: $font-body;
     font-weight: 600;
+  }
+
+  &__ai-place {
+    display: flex;
+    gap: 12rpx;
+  }
+
+  &__ai-place-input {
+    min-width: 0;
+    flex: 1;
+    padding: 20rpx 28rpx;
+    border-radius: $radius-md;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+    font-size: $font-body;
+    font-weight: 600;
+  }
+
+  &__ai-place-btn {
+    flex-shrink: 0;
+    min-width: 108rpx;
+    padding: 0 20rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-md;
+    background-color: $color-primary;
+    color: #ffffff;
+    font-size: $font-body;
+    font-weight: 700;
+  }
+
+  &__ai-candidates {
+    margin-top: -6rpx;
+    display: flex;
+    flex-direction: column;
+    border: 2rpx solid $color-border;
+    border-radius: $radius-md;
+    overflow: hidden;
+    background-color: #ffffff;
+  }
+
+  &__ai-candidate {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    padding: 16rpx 22rpx;
+    border-bottom: 2rpx solid $color-border;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__ai-cand-name {
+    font-size: $font-body;
+    color: $color-text;
+    font-weight: 700;
+  }
+
+  &__ai-cand-addr {
+    font-size: $font-caption;
+    color: $color-text-secondary;
   }
 
   &__modes {
@@ -1349,6 +1802,81 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     line-height: 1.3;
   }
 
+  &__cloud {
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+  }
+
+  &__cloud-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18rpx;
+  }
+
+  &__cloud-save {
+    flex-shrink: 0;
+    padding: 12rpx 24rpx;
+    font-size: $font-caption;
+    font-weight: 700;
+    border-radius: $radius-md;
+  }
+
+  &__cloud-code {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    padding: 14rpx 18rpx;
+    border-radius: $radius-md;
+    background-color: #fff8ef;
+    border: 2rpx solid #ead6bf;
+  }
+
+  &__cloud-code-label {
+    font-size: $font-caption;
+    color: $color-text-secondary;
+  }
+
+  &__cloud-code-val {
+    flex: 1;
+    min-width: 0;
+    font-size: $font-body;
+    color: $color-primary-dark;
+    font-weight: 800;
+    letter-spacing: 1rpx;
+  }
+
+  &__cloud-copy {
+    flex-shrink: 0;
+    color: $color-primary;
+    font-size: $font-caption;
+    font-weight: 700;
+  }
+
+  &__cloud-import {
+    display: flex;
+    gap: 12rpx;
+  }
+
+  &__cloud-input {
+    flex: 1;
+    min-width: 0;
+    padding: 18rpx 22rpx;
+    border-radius: $radius-md;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+    font-size: $font-body;
+  }
+
+  &__cloud-import-btn {
+    flex-shrink: 0;
+    padding: 16rpx 26rpx;
+    font-size: $font-caption;
+    font-weight: 700;
+    border-radius: $radius-md;
+  }
+
   &__review {
     display: flex;
     flex-direction: column;
@@ -1357,8 +1885,62 @@ function confirmReplaceStop(name: string): Promise<boolean> {
 
   &__review-head {
     display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16rpx;
+  }
+
+  &__review-status {
+    flex-shrink: 0;
+    padding: 8rpx 18rpx;
+    border-radius: 999rpx;
+    font-size: $font-caption;
+    font-weight: 700;
+  }
+
+  &__review-status--good {
+    background-color: #edf8ef;
+    color: #2f7d46;
+  }
+
+  &__review-status--info {
+    background-color: #fff3e6;
+    color: $color-primary-dark;
+  }
+
+  &__review-status--warn {
+    background-color: #fff0ee;
+    color: #d9534f;
+  }
+
+  &__review-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12rpx;
+  }
+
+  &__review-metric {
+    min-width: 0;
+    display: flex;
     flex-direction: column;
     gap: 4rpx;
+    padding: 16rpx 12rpx;
+    border-radius: $radius-md;
+    background-color: #fff8ef;
+    border: 2rpx solid #ead6bf;
+  }
+
+  &__review-metric-val {
+    font-size: 34rpx;
+    font-weight: 800;
+    color: $color-primary-dark;
+    text-align: center;
+  }
+
+  &__review-metric-label {
+    font-size: 22rpx;
+    color: $color-text-secondary;
+    text-align: center;
   }
 
   &__review-item {
@@ -1452,6 +2034,34 @@ function confirmReplaceStop(name: string): Promise<boolean> {
 
   &__day-ai--disabled {
     color: $color-text-secondary;
+  }
+
+  &__day-check {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10rpx;
+  }
+
+  &__day-check-chip {
+    padding: 6rpx 14rpx;
+    border-radius: 999rpx;
+    font-size: 22rpx;
+    font-weight: 700;
+  }
+
+  &__day-check-chip--ok {
+    background-color: #edf8ef;
+    color: #2f7d46;
+  }
+
+  &__day-check-chip--info {
+    background-color: #f4f5f7;
+    color: $color-text-secondary;
+  }
+
+  &__day-check-chip--warn {
+    background-color: #fff0ee;
+    color: #d9534f;
   }
 
   &__day-handbook {
@@ -1572,6 +2182,42 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     border-radius: $radius-md;
   }
 
+  &__suite-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12rpx;
+  }
+
+  &__suite {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    padding: 16rpx 14rpx;
+    border-radius: $radius-md;
+    background-color: $color-bg;
+    border: 2rpx solid $color-border;
+  }
+
+  &__suite--active {
+    border-color: $color-primary;
+    background-color: #fff3e6;
+  }
+
+  &__suite-label {
+    font-size: $font-caption;
+    color: $color-text;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  &__suite-hint {
+    font-size: 20rpx;
+    line-height: 1.25;
+    color: $color-text-secondary;
+    text-align: center;
+  }
+
   &__gitem {
     display: flex;
     flex-direction: column;
@@ -1590,6 +2236,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     display: flex;
     align-items: center;
     gap: 12rpx;
+    flex: 1;
   }
 
   &__gitem-check {
@@ -1617,6 +2264,37 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__gitem-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+  }
+
+  &__gitem-name {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+  }
+
+  &__gitem-group {
+    flex-shrink: 0;
+    padding: 3rpx 10rpx;
+    border-radius: 999rpx;
+    background-color: #fff3e6;
+    color: $color-primary-dark;
+    font-size: 20rpx;
+    font-weight: 700;
+  }
+
+  &__gitem-hint {
+    font-size: 22rpx;
+    line-height: 1.35;
+    color: $color-text-secondary;
+    white-space: normal;
   }
 
   &__gitem-tools {

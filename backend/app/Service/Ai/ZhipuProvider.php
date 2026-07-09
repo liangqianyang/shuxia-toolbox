@@ -15,16 +15,16 @@ use Throwable;
  */
 final class ZhipuProvider implements AiProvider
 {
-    private const URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+    private const string URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
     /** 对齐前端 PoiType；AI 返回的非法 type 一律回退 sight */
-    private const ALLOWED_TYPES = ['sight', 'food', 'stay', 'shop', 'transit'];
+    private const array ALLOWED_TYPES = ['sight', 'food', 'stay', 'shop', 'transit'];
 
     /** 对齐前端 DayMood；AI 返回非法值时回退城市漫游 */
-    private const ALLOWED_DAY_MOODS = ['citywalk', 'nature', 'culture', 'food', 'family', 'couple', 'classic'];
+    private const array ALLOWED_DAY_MOODS = ['citywalk', 'nature', 'culture', 'food', 'family', 'couple', 'classic'];
 
     /** 出行方式中文标签（写进 prompt，让 AI 按此规划路线与站间衔接） */
-    private const MODE_LABELS = [
+    private const array MODE_LABELS = [
         'walking' => '步行',
         'cycling' => '骑行',
         'driving' => '驾车/打车',
@@ -33,14 +33,14 @@ final class ZhipuProvider implements AiProvider
     ];
 
     /** 旅行强度中文标签（影响每天排点密度与休息缓冲） */
-    private const INTENSITY_LABELS = [
+    private const array INTENSITY_LABELS = [
         'relaxed' => '轻松慢游',
         'standard' => '标准舒适',
         'packed' => '充实打卡',
     ];
 
     /** 旅行强度规则：避免所有行程都被固定成同一种节奏 */
-    private const INTENSITY_RULES = [
+    private const array INTENSITY_RULES = [
         'relaxed' => '旅行强度=轻松慢游：每天优先 3-4 个 stop，少跨区，必须留足午餐/休息/拍照缓冲，不安排过早或过晚的高强度节点；',
         'standard' => '旅行强度=标准舒适：每天优先 4-5 个 stop，兼顾顺路与体验，保留用餐和交通缓冲，避免明显赶场；',
         'packed' => '旅行强度=充实打卡：每天可排 5-6 个 stop，但仍必须按真实交通、开放时间和用餐需求留缓冲，不能为了多打卡牺牲可执行性；',

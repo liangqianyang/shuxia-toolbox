@@ -61,6 +61,8 @@ export interface Stop {
     distanceM: number
     durationMin: number
     detail?: string
+    reason?: string
+    alternatives?: TravelAlternative[]
     transit?: TransitRoute | null
   } | null
   /** 配图临时路径（chooseImage 返回）；可空 */
@@ -75,6 +77,14 @@ export interface Stop {
   handbookText?: string
   /** 小时粒度子活动（时间线升级后使用，AI 规划时返回）；可空 */
   activities?: ActivityItem[]
+}
+
+export interface TravelAlternative {
+  mode: string
+  distanceM: number
+  durationMin: number
+  detail?: string
+  reason?: string
 }
 
 export interface TransitLine {

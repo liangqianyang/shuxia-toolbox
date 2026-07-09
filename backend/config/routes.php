@@ -17,4 +17,6 @@ Router::addGroup('/api', function (): void {
     Router::post('/travel/plan', [TravelController::class, 'plan']);
     Router::post('/travel/refine-day', [TravelController::class, 'refineDay']);
     Router::post('/travel/replace-stop', [TravelController::class, 'replaceStop']);
+    Router::post('/travel/share', [TravelController::class, 'saveShare']);
+    Router::get('/travel/share/{code}', [TravelController::class, 'getShare']);
 });

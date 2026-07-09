@@ -6,7 +6,7 @@ namespace App\Service;
 
 final class BeadPaletteService
 {
-    private const BASIC_24_COLORS = [
+    private const array BASIC_24_COLORS = [
         ['code' => 'A01', 'name' => '白色', 'hex' => '#F7F7F2', 'rgb' => [247, 247, 242]],
         ['code' => 'A02', 'name' => '奶油', 'hex' => '#F2DDA4', 'rgb' => [242, 221, 164]],
         ['code' => 'A05', 'name' => '蜜桃', 'hex' => '#F1B08A', 'rgb' => [241, 176, 138]],
@@ -33,7 +33,7 @@ final class BeadPaletteService
         ['code' => 'H05', 'name' => '藏蓝', 'hex' => '#253858', 'rgb' => [37, 56, 88]],
     ];
 
-    private const MARD_291_COLORS = [
+    private const array MARD_291_COLORS = [
         ['code' => 'A01', 'name' => 'MARD A01', 'hex' => '#FAF4C8', 'rgb' => [250, 244, 200]],
         ['code' => 'A02', 'name' => 'MARD A02', 'hex' => '#FFFFD5', 'rgb' => [255, 255, 213]],
         ['code' => 'A03', 'name' => 'MARD A03', 'hex' => '#FEFF8B', 'rgb' => [254, 255, 139]],

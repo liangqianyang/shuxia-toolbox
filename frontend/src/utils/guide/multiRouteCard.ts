@@ -1,4 +1,5 @@
 import type { Trip } from '@/types/travel'
+import { projectLatLngOnCoveredMap } from './mapProject'
 import {
   CARD_W,
   CARD_H,
@@ -12,6 +13,16 @@ import {
   truncateText,
   isVisitStop,
 } from './theme'
+
+interface MapPoint {
+  stop: StopRef['stop']
+  routeIndex: number
+  seq: number
+  x: number
+  y: number
+  drawX: number
+  drawY: number
+}
 
 /**
  * 多路线分区地图（1080×1440）：按天的 routeTag 分色展示路线。
@@ -45,14 +56,11 @@ export function renderMultiRouteCard(
     drawImageCover(ctx, mapImage, mapX, mapY, mapW, mapH)
     ctx.fillStyle = 'rgba(255, 252, 245, 0.18)'
     ctx.fillRect(mapX, mapY, mapW, mapH)
+    drawMultiRouteOverlay(ctx, trip, routes, mapImage, { x: mapX, y: mapY, width: mapW, height: mapH })
   } else {
     ctx.fillStyle = C.panelSoft
     ctx.fillRect(mapX, mapY, mapW, mapH)
-    ctx.fillStyle = C.note
-    ctx.font = `32px ${FONT}`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('（地图需生成后加载）', CARD_W / 2, mapY + mapH / 2)
+    drawMultiRouteFallback(ctx, routes, { x: mapX, y: mapY, width: mapW, height: mapH })
   }
   ctx.restore()
   roundRect(ctx, mapX, mapY, mapW, mapH, 36)
@@ -121,6 +129,256 @@ function buildRouteGroups(trip: Trip): RouteGroup[] {
 }
 
 // ---- 绘制子函数 ----
+
+function drawMultiRouteOverlay(
+  ctx: CanvasRenderingContext2D,
+  trip: Trip,
+  routes: RouteGroup[],
+  mapImage: CanvasImageSource | null,
+  box: { x: number; y: number; width: number; height: number },
+): void {
+  const vp = trip.mapViewport
+  if (!vp) {
+    drawMultiRouteFallback(ctx, routes, box)
+    return
+  }
+
+  const raw: MapPoint[] = []
+  routes.forEach((route, routeIndex) => {
+    route.items.forEach((item, itemIndex) => {
+      const { lat, lng } = item.stop
+      if (lat == null || lng == null) return
+      const p = projectLatLngOnCoveredMap(lat, lng, vp, box.width, box.height, mapImage)
+      const x = box.x + p.x
+      const y = box.y + p.y
+      raw.push({ stop: item.stop, routeIndex, seq: itemIndex + 1, x, y, drawX: x, drawY: y })
+    })
+  })
+  if (raw.length === 0) {
+    drawMultiRouteFallback(ctx, routes, box)
+    return
+  }
+
+  const points = spreadRoutePoints(raw, box)
+  drawRouteLeaders(ctx, points)
+
+  routes.forEach((route, routeIndex) => {
+    const pts = points.filter((p) => p.routeIndex === routeIndex)
+    if (pts.length < 2) return
+    const linePts = pts.map((p) => ({ x: p.drawX, y: p.drawY }))
+    drawRouteLine(ctx, linePts, 'rgba(255,255,255,0.92)', 13)
+    drawRouteLine(ctx, linePts, route.color, 8)
+  })
+
+  points.forEach((point) => {
+    const route = routes[point.routeIndex]
+    drawRouteDot(ctx, point.drawX, point.drawY, point.seq, route?.color ?? C.primary)
+  })
+
+  drawKeyRouteLabels(ctx, points, routes, box)
+}
+
+function drawMultiRouteFallback(
+  ctx: CanvasRenderingContext2D,
+  routes: RouteGroup[],
+  box: { x: number; y: number; width: number; height: number },
+): void {
+  const top = box.y + box.height * 0.2
+  const gapY = routes.length > 1 ? box.height * 0.26 : box.height * 0.34
+  routes.slice(0, 3).forEach((route, routeIndex) => {
+    const items = route.items.slice(0, 6)
+    if (items.length === 0) return
+    const y = top + routeIndex * gapY
+    const left = box.x + 70
+    const right = box.x + box.width - 70
+    const step = items.length > 1 ? (right - left) / (items.length - 1) : 0
+    const pts = items.map((item, i) => ({
+      x: left + step * i,
+      y: y + (i % 2 === 0 ? -18 : 18),
+      item,
+    }))
+    drawRouteLine(ctx, pts, 'rgba(255,255,255,0.9)', 13)
+    drawRouteLine(ctx, pts, route.color, 8)
+    pts.forEach((p, i) => {
+      drawRouteDot(ctx, p.x, p.y, i + 1, route.color)
+    })
+  })
+}
+
+function spreadRoutePoints(points: MapPoint[], box: { x: number; y: number; width: number; height: number }): MapPoint[] {
+  const out = points.map((p) => ({ ...p }))
+  const minGap = 56
+  const margin = 30
+  const maxMove = 88
+  for (let iter = 0; iter < 52; iter++) {
+    for (let i = 0; i < out.length; i++) {
+      for (let j = i + 1; j < out.length; j++) {
+        const a = out[i]
+        const b = out[j]
+        let dx = b.drawX - a.drawX
+        let dy = b.drawY - a.drawY
+        let dist = Math.hypot(dx, dy)
+        if (dist >= minGap) continue
+        if (dist < 0.01) {
+          const angle = (i * 2.17 + j * 0.91) % (Math.PI * 2)
+          dx = Math.cos(angle)
+          dy = Math.sin(angle)
+          dist = 1
+        }
+        const push = (minGap - dist) * 0.5
+        a.drawX -= (dx / dist) * push
+        a.drawY -= (dy / dist) * push
+        b.drawX += (dx / dist) * push
+        b.drawY += (dy / dist) * push
+      }
+    }
+    out.forEach((point) => {
+      const dx = point.drawX - point.x
+      const dy = point.drawY - point.y
+      const moved = Math.hypot(dx, dy)
+      if (moved > maxMove) {
+        point.drawX = point.x + (dx / moved) * maxMove
+        point.drawY = point.y + (dy / moved) * maxMove
+      }
+      point.drawX = Math.max(box.x + margin, Math.min(box.x + box.width - margin, point.drawX))
+      point.drawY = Math.max(box.y + margin, Math.min(box.y + box.height - margin, point.drawY))
+    })
+  }
+  return out
+}
+
+function drawRouteLeaders(ctx: CanvasRenderingContext2D, points: MapPoint[]): void {
+  ctx.save()
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(90,70,50,0.34)'
+  ctx.setLineDash([8, 8])
+  points.forEach((p) => {
+    if (Math.hypot(p.drawX - p.x, p.drawY - p.y) < 12) return
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+    ctx.lineTo(p.drawX, p.drawY)
+    ctx.stroke()
+  })
+  ctx.restore()
+}
+
+function drawRouteLine(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  color: string,
+  width: number,
+): void {
+  if (points.length < 2) return
+  ctx.save()
+  ctx.lineWidth = width
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = color
+  ctx.beginPath()
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawRouteDot(ctx: CanvasRenderingContext2D, x: number, y: number, seq: number, color: string): void {
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(x, y, 23, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'
+  ctx.fill()
+  ctx.lineWidth = 5
+  ctx.strokeStyle = color
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(x, y, 17, 0, Math.PI * 2)
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `bold ${seq >= 10 ? 18 : 22}px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(seq), x, y + 1)
+  ctx.restore()
+}
+
+function drawKeyRouteLabels(
+  ctx: CanvasRenderingContext2D,
+  points: MapPoint[],
+  routes: RouteGroup[],
+  box: { x: number; y: number; width: number; height: number },
+): void {
+  const selected = new Map<string, MapPoint>()
+  routes.forEach((_route, routeIndex) => {
+    const pts = points.filter((p) => p.routeIndex === routeIndex)
+    if (pts.length === 0) return
+    selected.set(`${routeIndex}-first`, pts[0])
+    selected.set(`${routeIndex}-last`, pts[pts.length - 1])
+  })
+
+  const used: Array<{ x: number; y: number; w: number; h: number }> = []
+  Array.from(selected.values()).forEach((point) => {
+    const route = routes[point.routeIndex]
+    drawRouteLabel(ctx, point.stop.name || route?.tag || '', point.drawX, point.drawY, route?.color ?? C.primary, box, used)
+  })
+}
+
+function drawRouteLabel(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  x: number,
+  y: number,
+  color: string,
+  box: { x: number; y: number; width: number; height: number },
+  used: Array<{ x: number; y: number; w: number; h: number }>,
+): void {
+  ctx.save()
+  ctx.font = `bold 22px ${FONT}`
+  const text = truncateText(ctx, name, 132)
+  const w = ctx.measureText(text).width + 20
+  const h = 32
+  const preferLeft = x > box.x + box.width * 0.58
+  const raw = preferLeft
+    ? { x: x - w - 28, y: y - h / 2, w, h }
+    : { x: x + 28, y: y - h / 2, w, h }
+  const rect = clampRect(raw, box)
+  if (used.some((old) => rectsOverlap(rect, old))) {
+    ctx.restore()
+    return
+  }
+  used.push(rect)
+
+  roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 9)
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = color
+  ctx.stroke()
+  ctx.fillStyle = C.name
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, rect.x + 10, rect.y + rect.h / 2)
+  ctx.restore()
+}
+
+function clampRect(
+  rect: { x: number; y: number; w: number; h: number },
+  box: { x: number; y: number; width: number; height: number },
+): { x: number; y: number; w: number; h: number } {
+  const pad = 8
+  return {
+    ...rect,
+    x: Math.max(box.x + pad, Math.min(box.x + box.width - rect.w - pad, rect.x)),
+    y: Math.max(box.y + pad, Math.min(box.y + box.height - rect.h - pad, rect.y)),
+  }
+}
+
+function rectsOverlap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+): boolean {
+  const gap = 5
+  return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y
+}
 
 /** 地图右上角路线图例（小胶囊，右对齐堆叠） */
 function drawRouteLegendOverlay(

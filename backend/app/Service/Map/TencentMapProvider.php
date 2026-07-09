@@ -15,10 +15,13 @@ final class TencentMapProvider implements MapProvider
 {
     // 腾讯地点联想 suggestion（该 key 开通了 suggestion、未开通 geocoder；且 suggestion 更贴合
     // 「搜索→候选列表」场景，返回多个含坐标的候选）。HTTP（Swoole 无 openssl）+ StreamHandler（curl 钩子不完整）。
-    private const GEOCODE_URL = 'http://apis.map.qq.com/ws/place/v1/suggestion';
+    private const string GEOCODE_URL = 'http://apis.map.qq.com/ws/place/v1/suggestion';
 
     private readonly Client $client;
 
+    /**
+     * 创建 HTTP 客户端；禁用 Swoole curl hook 后走系统 libcurl，HTTPS 行为更稳定。
+     */
     public function __construct()
     {
         // bin/hyperf.php 已禁用 SWOOLE_HOOK_CURL，Guzzle 默认 CurlHandler 走原生 PHP curl 扩展
@@ -57,6 +60,11 @@ final class TencentMapProvider implements MapProvider
         return $params;
     }
 
+    /**
+     * 地点搜索候选。
+     *
+     * 当前使用 suggestion 而非 geocoder，因为它更适合前端输入框候选列表，并且返回多个带坐标 POI。
+     */
     public function geocode(string $query): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
@@ -110,6 +118,11 @@ final class TencentMapProvider implements MapProvider
         return $candidates;
     }
 
+    /**
+     * 生成腾讯静态图 URL。
+     *
+     * 支持 marker/path 栅格图，也支持 center/zoom 无标注底图；多同名参数用列表保存，避免 PHP 数组覆盖。
+     */
     public function staticMap(array $markers, array $paths, array $size): string
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
@@ -185,6 +198,11 @@ final class TencentMapProvider implements MapProvider
             . implode('&', array_map(static fn ($p) => $p[0] . '=' . rawurlencode((string) $p[1]), $params));
     }
 
+    /**
+     * 两点路线规划。
+     *
+     * 步行/驾车/骑行接口返回结构相近，这里统一转换为 MapProvider 的 distanceM、durationMin、polyline。
+     */
     public function directions(array $from, array $to, string $mode = 'walking'): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
@@ -240,7 +258,12 @@ final class TencentMapProvider implements MapProvider
         ];
     }
 
-    public function transit(array $from, array $to): array
+    /**
+     * 公共交通规划。
+     *
+     * 腾讯 transit 不单独要求 city；服务端会从多方案里重新评分，避免默认第一条公交压过更合理的地铁方案。
+     */
+    public function transit(array $from, array $to, ?string $city = null): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';
         if ($key === '') {
@@ -270,7 +293,8 @@ final class TencentMapProvider implements MapProvider
             throw new RuntimeException('公共交通规划返回错误: ' . $message);
         }
 
-        $route = $body['result']['routes'][0] ?? null;
+        $routes = $body['result']['routes'] ?? [];
+        $route = $this->pickBestTransitRoute(is_array($routes) ? $routes : []);
         if (! is_array($route)) {
             throw new RuntimeException('公共交通规划无结果');
         }
@@ -322,6 +346,71 @@ final class TencentMapProvider implements MapProvider
     }
 
     /**
+     * 腾讯 transit 会返回多方案。不能只拿第 1 条，否则容易出现“公交排第一，但地铁实际更合理”的体验。
+     * 这里按总耗时、步行距离、换乘次数做轻量评分，并在耗时接近时优先地铁方案。
+     *
+     * @param array<int, mixed> $routes
+     */
+    private function pickBestTransitRoute(array $routes): ?array
+    {
+        $best = null;
+        $bestScore = PHP_FLOAT_MAX;
+        foreach ($routes as $route) {
+            if (! is_array($route)) {
+                continue;
+            }
+            $lines = [];
+            $walkingM = 0;
+            $hasMetro = false;
+            foreach ($this->flattenTransitSteps($route['steps'] ?? []) as $step) {
+                $mode = strtoupper((string) ($step['mode'] ?? ''));
+                if ($mode === 'WALKING' || $mode === 'WALK') {
+                    $walkingM += (int) ($step['distance'] ?? 0);
+                }
+                foreach (($step['lines'] ?? []) as $line) {
+                    if (! is_array($line)) {
+                        continue;
+                    }
+                    $title = $this->stringField($line, ['title', 'name', 'line_name']);
+                    if ($title === '') {
+                        continue;
+                    }
+                    $vehicle = strtoupper($this->stringField($line, ['vehicle', 'type', 'mode']) ?: $mode ?: 'TRANSIT');
+                    $lines[] = ['title' => $title, 'vehicle' => $vehicle];
+                    if ($this->isMetroLine($title, $vehicle)) {
+                        $hasMetro = true;
+                    }
+                }
+            }
+            if ($lines === []) {
+                continue;
+            }
+            $duration = (int) ($route['duration'] ?? 0);
+            if ($duration <= 0) {
+                continue;
+            }
+            $transferCount = max(0, count($lines) - 1);
+            $score = $duration + $walkingM / 90.0 + $transferCount * 6.0;
+            if ($hasMetro) {
+                $score -= 8.0;
+            }
+            if ($score < $bestScore) {
+                $bestScore = $score;
+                $best = $route;
+            }
+        }
+        return $best;
+    }
+
+    /**
+     * 通过线路标题和 vehicle 字段判断是否为地铁/轨道交通。
+     */
+    private function isMetroLine(string $title, string $vehicle): bool
+    {
+        return preg_match('/地铁|轨道|轻轨|subway|metro/i', $title . ' ' . $vehicle) === 1;
+    }
+
+    /**
      * 腾讯 transit steps 在不同城市/方案里可能是一层或多层数组，这里统一摊平成 step 列表。
      *
      * @return array<int, array>
@@ -344,6 +433,8 @@ final class TencentMapProvider implements MapProvider
     }
 
     /**
+     * 从多个候选字段里安全取第一个非空字符串，兼容腾讯不同接口字段差异。
+     *
      * @param array<int, string> $keys
      */
     private function stringField(array $source, array $keys): string
@@ -356,6 +447,9 @@ final class TencentMapProvider implements MapProvider
         return '';
     }
 
+    /**
+     * 统一读取上下车站点名；腾讯有时给字符串，有时给对象。
+     */
     private function stationName(mixed $station): string
     {
         if (is_string($station)) {
@@ -367,6 +461,9 @@ final class TencentMapProvider implements MapProvider
         return $this->stringField($station, ['title', 'name', 'station_name']);
     }
 
+    /**
+     * 周边搜索，用于根据中心点探索附近 POI。
+     */
     public function explore(array $center, int $radius, string $keyword): array
     {
         $key = getenv('TENCENT_MAP_KEY') ?: '';

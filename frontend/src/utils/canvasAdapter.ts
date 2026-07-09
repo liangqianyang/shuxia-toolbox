@@ -24,6 +24,8 @@ export interface ElementRect {
   height: number
 }
 
+const downloadedImageSources = new Map<string, Promise<string>>()
+
 /**
  * 取窗口信息。uni.getSystemInfoSync 已废弃（控制台告警），优先用 uni.getWindowInfo；
  * 老版本/不支持时回退 getSystemInfoSync。
@@ -68,21 +70,7 @@ export function loadDrawableImage(canvas: any, src: string): Promise<CanvasImage
 
     // 微信 2D canvas 对远程图直载不稳定；先下载成临时文件再绘制，地图底图会稳很多。
     if (/^https?:\/\//i.test(src) && typeof wx !== 'undefined' && typeof wx.downloadFile === 'function') {
-      wx.downloadFile({
-        url: src,
-        success: (res: { statusCode?: number; tempFilePath?: string }) => {
-          if ((res.statusCode ?? 200) >= 400 || !res.tempFilePath) {
-            console.warn('[canvasAdapter] 图片下载失败:', src, res.statusCode)
-            load(src)
-            return
-          }
-          load(res.tempFilePath)
-        },
-        fail: (err: { errMsg?: string }) => {
-          console.warn('[canvasAdapter] 图片下载失败:', src, err.errMsg)
-          load(src)
-        },
-      })
+      downloadImageSource(src).then(load)
       return
     }
 
@@ -98,6 +86,30 @@ export function loadDrawableImage(canvas: any, src: string): Promise<CanvasImage
     img.src = src
   })
   // #endif
+}
+
+function downloadImageSource(src: string): Promise<string> {
+  const cached = downloadedImageSources.get(src)
+  if (cached) return cached
+  const task = new Promise<string>((resolve) => {
+    wx.downloadFile({
+      url: src,
+      success: (res: { statusCode?: number; tempFilePath?: string }) => {
+        if ((res.statusCode ?? 200) >= 400 || !res.tempFilePath) {
+          console.warn('[canvasAdapter] 图片下载失败:', src, res.statusCode)
+          resolve(src)
+          return
+        }
+        resolve(res.tempFilePath)
+      },
+      fail: (err: { errMsg?: string }) => {
+        console.warn('[canvasAdapter] 图片下载失败:', src, err.errMsg)
+        resolve(src)
+      },
+    })
+  })
+  downloadedImageSources.set(src, task)
+  return task
 }
 
 /** 选一张图，返回临时路径（H5 下是 blob/objectURL） */

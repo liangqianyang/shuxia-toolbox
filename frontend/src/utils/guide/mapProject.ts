@@ -24,3 +24,42 @@ export function projectLatLng(
   const pY = tileY(lat)
   return { x: (pX - cX) * 256 + mapW / 2, y: (pY - cY) * 256 + mapH / 2 }
 }
+
+/**
+ * 静态底图通常先按服务商返回尺寸渲染，再用 cover 填入卡片地图容器。
+ * 直接用容器宽高投影会忽略 cover 裁切，导致点线在宽屏地图里纵向偏挤。
+ * 这里先投影到原图像素，再按 cover 的缩放/裁切映射到容器坐标。
+ */
+export function projectLatLngOnCoveredMap(
+  lat: number,
+  lng: number,
+  vp: MapViewport,
+  mapW: number,
+  mapH: number,
+  img: CanvasImageSource | null,
+): { x: number; y: number } {
+  const size = imageSize(img)
+  if (!size) return projectLatLng(lat, lng, vp, mapW, mapH)
+
+  const p = projectLatLng(lat, lng, vp, size.width, size.height)
+  const scale = Math.max(mapW / size.width, mapH / size.height)
+  return {
+    x: (mapW - size.width * scale) / 2 + p.x * scale,
+    y: (mapH - size.height * scale) / 2 + p.y * scale,
+  }
+}
+
+function imageSize(img: CanvasImageSource | null): { width: number; height: number } | null {
+  if (!img) return null
+  const source = img as {
+    width?: number
+    naturalWidth?: number
+    videoWidth?: number
+    height?: number
+    naturalHeight?: number
+    videoHeight?: number
+  }
+  const width = source.width || source.naturalWidth || source.videoWidth || 0
+  const height = source.height || source.naturalHeight || source.videoHeight || 0
+  return width > 0 && height > 0 ? { width, height } : null
+}

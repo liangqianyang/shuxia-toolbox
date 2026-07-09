@@ -65,8 +65,8 @@ final class TravelService
             $days[] = $day;
         }
 
-        $cityRouteMap = $this->buildMapImage($days, true, true);
         $viewport = $this->computeViewport($days);
+        $cityRouteMap = $viewport !== null ? $this->buildBaseMap($viewport) : $this->buildMapImage($days, true, true);
         $intercity = is_array($input['intercity'] ?? null) ? $input['intercity'] : null;
         $destCenter = $this->destinationCenter($days);
         $hasOverviewCoords = $intercity !== null && ($intercity['lat'] ?? null) !== null && ($intercity['lng'] ?? null) !== null;
@@ -136,8 +136,8 @@ final class TravelService
             $days[] = $day;
         }
 
-        $cityRouteMap = $this->buildMapImage($days, true, true);
         $viewport = $this->computeViewport($days);
+        $cityRouteMap = $viewport !== null ? $this->buildBaseMap($viewport) : $this->buildMapImage($days, true, true);
         $intercity = is_array($input['intercity'] ?? null) ? $input['intercity'] : null;
         $destCenter = $this->destinationCenter($days);
         $hasOverviewCoords = $intercity !== null && ($intercity['lat'] ?? null) !== null && ($intercity['lng'] ?? null) !== null;
@@ -193,8 +193,7 @@ final class TravelService
                     $keyword = $destination !== '' ? $stop['name'] . ' ' . $destination : $stop['name'];
                     $candidates = $this->map->geocode($keyword);
                     if (! empty($candidates)) {
-                        $stop['lng'] = $candidates[0]['lng'];
-                        $stop['lat'] = $candidates[0]['lat'];
+                        $this->applyGeocodeCandidate($stop, $candidates[0]);
                     }
                 } catch (RuntimeException $_) {
                     // 无腾讯 key / 查询失败：留 null，前端路线图走线性兜底
@@ -211,25 +210,9 @@ final class TravelService
                     continue;
                 }
                 $roughM = $this->haversineM((float) $a['lat'], (float) $a['lng'], (float) $b['lat'], (float) $b['lng']);
-                $legMode = $roughM < 1500 ? 'walking' : 'driving'; // directions 用（腾讯仅支持 walking/driving/cycling）
-                try {
-                    $r = $this->map->directions(
-                        ['lat' => $a['lat'], 'lng' => $a['lng']],
-                        ['lat' => $b['lat'], 'lng' => $b['lng']],
-                        $legMode,
-                    );
-                    $stops[$i]['travelToNext'] = [
-                        // 展示用：远距段对游客=打车（taxi），不是自驾；directions 走 driving 路网估时
-                        'mode' => $roughM < 1500 ? 'walking' : 'taxi',
-                        'distanceM' => $r['distanceM'],
-                        'durationMin' => $r['durationMin'],
-                    ];
-                    $transit = $this->tryTransitRoute($a, $b, $roughM);
-                    if ($transit !== null) {
-                        $stops[$i]['travelToNext']['transit'] = $transit;
-                    }
-                } catch (RuntimeException $_) {
-                    // 留 null
+                $leg = $this->recommendLeg($a, $b, $roughM, $destination);
+                if ($leg !== null) {
+                    $stops[$i]['travelToNext'] = $leg;
                 }
             }
             unset($stops);
@@ -301,21 +284,21 @@ final class TravelService
         }
         $itinerary['intercity'] = $intercity;
 
-        // 市内路线图：编号 markers + 按天连线（游玩顺序），按天上色（与分日清单配色一致），始终生成
-        $cityRouteMap = $this->buildMapImage($itinerary['days'], true, true);
+        // 景点分布图：无标注地理底图（按视口 center+zoom）+ 前端 canvas 叠加清晰编号点。
+        // 腾讯 staticMap 栅格 marker 在 2x 导出会糊；改为前端画编号点（矢量，导出清晰，且与底图同视口严格对齐）。
+        // 无视口（无有效坐标）时退回旧的带 marker 栅格图。
+        $viewport = $this->computeViewport($itinerary['days']);
+        // 市内路线图同样使用无标注底图，前端叠加清晰编号点和按天路线色。
+        $cityRouteMap = $viewport !== null ? $this->buildBaseMap($viewport) : $this->buildMapImage($itinerary['days'], true, true);
         // 路线规划图：有跨城段且有出发地坐标时画「出发地→目的地」概览（用户所选方式），否则复用市内路线图。
         // 无坐标 intercity（geocode 失败兜底）不能进 buildOverviewMap——staticMap 收 null 经纬度会失败。
         $hasOverviewCoords = $intercity !== null && ($intercity['lat'] ?? null) !== null;
         $itinerary['routeMapImage'] = $hasOverviewCoords
             ? $this->buildOverviewMap($intercity, $destCenter)
             : $cityRouteMap;
-        // 景点分布图：无标注地理底图（按视口 center+zoom）+ 前端 canvas 叠加清晰编号点。
-        // 腾讯 staticMap 栅格 marker 在 2x 导出会糊；改为前端画编号点（矢量，导出清晰，且与底图同视口严格对齐）。
-        // 无视口（无有效坐标）时退回旧的带 marker 栅格图。
-        $viewport = $this->computeViewport($itinerary['days']);
         $itinerary['poiMapImage'] = $viewport !== null ? $this->buildBaseMap($viewport) : $this->buildMapImage($itinerary['days'], false);
         $itinerary['mapViewport'] = $viewport;
-        // 游玩顺序图底图（真实市内地图 + 编号点 + 按天连线）
+        // 游玩顺序图底图（真实市内地图；编号点 + 按天连线由前端 Canvas 叠加，保证清晰可控）
         $itinerary['cityRouteMapImage'] = $cityRouteMap;
 
         return $itinerary;
@@ -390,8 +373,7 @@ final class TravelService
                 $keyword = $destination !== '' ? $stop['name'] . ' ' . $destination : $stop['name'];
                 $candidates = $this->map->geocode($keyword);
                 if (! empty($candidates)) {
-                    $stop['lng'] = $candidates[0]['lng'];
-                    $stop['lat'] = $candidates[0]['lat'];
+                    $this->applyGeocodeCandidate($stop, $candidates[0]);
                 } else {
                     $stop['lng'] = null;
                     $stop['lat'] = null;
@@ -411,30 +393,280 @@ final class TravelService
                 continue;
             }
             $roughM = $this->haversineM((float) $a['lat'], (float) $a['lng'], (float) $b['lat'], (float) $b['lng']);
-            $legMode = $roughM < 1500 ? 'walking' : 'driving';
-            try {
-                $r = $this->map->directions(
-                    ['lat' => $a['lat'], 'lng' => $a['lng']],
-                    ['lat' => $b['lat'], 'lng' => $b['lng']],
-                    $legMode,
-                );
-                $stops[$i]['travelToNext'] = [
-                    'mode' => $roughM < 1500 ? 'walking' : 'taxi',
-                    'distanceM' => $r['distanceM'],
-                    'durationMin' => $r['durationMin'],
-                ];
-                $transit = $this->tryTransitRoute($a, $b, $roughM);
-                if ($transit !== null) {
-                    $stops[$i]['travelToNext']['transit'] = $transit;
-                }
-            } catch (RuntimeException $_) {
-                // 留 null
+            $leg = $this->recommendLeg($a, $b, $roughM, $destination);
+            if ($leg !== null) {
+                $stops[$i]['travelToNext'] = $leg;
             }
         }
         unset($stops);
     }
 
-    private function tryTransitRoute(array $a, array $b, float $roughM): ?array
+    private function applyGeocodeCandidate(array &$stop, array $candidate): void
+    {
+        $stop['lng'] = (float) $candidate['lng'];
+        $stop['lat'] = (float) $candidate['lat'];
+        $stop['_mapCity'] = (string) ($candidate['city'] ?? '');
+        $stop['_mapAdcode'] = (string) ($candidate['adcode'] ?? '');
+    }
+
+    private function recommendLeg(array $a, array $b, float $roughM, string $cityHint = ''): ?array
+    {
+        $from = $this->pointOf($a);
+        $to = $this->pointOf($b);
+        if ($from === null || $to === null) {
+            return null;
+        }
+
+        $candidates = [];
+        $walking = $this->tryDirectionCandidate($from, $to, 'walking', 'walking', '步行直达');
+        if ($walking !== null && ($roughM <= 2600 || $walking['durationMin'] <= 35)) {
+            $candidates[] = $walking;
+        }
+
+        $cycling = $this->tryDirectionCandidate($from, $to, 'cycling', 'cycling', '共享单车');
+        if ($cycling === null && $roughM >= 700 && $roughM <= 9000) {
+            $cycling = $this->estimatedCyclingCandidate($roughM);
+        }
+        if ($cycling !== null && $roughM >= 700 && $roughM <= 9000) {
+            $candidates[] = $cycling;
+        }
+
+        $taxi = $this->tryDirectionCandidate($from, $to, 'driving', 'taxi', '打车');
+        if ($taxi !== null && $roughM >= 1000) {
+            $candidates[] = $taxi;
+        }
+
+        $transit = $this->tryTransitRoute($a, $b, $roughM, $cityHint);
+        if ($transit !== null) {
+            $mainMode = $this->transitMainMode($transit);
+            $candidates[] = [
+                'mode' => $mainMode,
+                'distanceM' => (int) ($transit['distanceM'] ?: $roughM),
+                'durationMin' => (int) $transit['durationMin'],
+                'detail' => $this->transitDetail($transit),
+                'transit' => $transit,
+            ];
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        $ranked = $this->rankLegCandidates($candidates, $roughM);
+        $best = $ranked[0];
+        $best['reason'] = $this->legReason($best, $ranked, $roughM);
+        $best['alternatives'] = $this->legAlternatives($ranked, (string) $best['mode']);
+        if ($transit !== null && ! isset($best['transit'])) {
+            // 备用公共交通详情仍挂上去，让“地铁公交换乘图”可用，也方便用户手动改成公交/地铁。
+            $best['transit'] = $transit;
+        }
+        return $best;
+    }
+
+    private function pointOf(array $stop): ?array
+    {
+        if (($stop['lng'] ?? null) === null || ($stop['lat'] ?? null) === null) {
+            return null;
+        }
+        return ['lat' => (float) $stop['lat'], 'lng' => (float) $stop['lng']];
+    }
+
+    private function tryDirectionCandidate(array $from, array $to, string $requestMode, string $displayMode, string $detail): ?array
+    {
+        try {
+            $route = $this->map->directions($from, $to, $requestMode);
+        } catch (RuntimeException $_) {
+            return null;
+        }
+        $duration = (int) ($route['durationMin'] ?? 0);
+        $distance = (int) ($route['distanceM'] ?? 0);
+        if ($duration <= 0 || $distance <= 0) {
+            return null;
+        }
+        return [
+            'mode' => $displayMode,
+            'distanceM' => $distance,
+            'durationMin' => $duration,
+            'detail' => $detail,
+        ];
+    }
+
+    private function estimatedCyclingCandidate(float $roughM): array
+    {
+        // 骑行 API 偶尔不可用时的兜底：按实际路网绕行 1.18 倍、共享单车均速约 13km/h，再加取还车缓冲。
+        $distanceM = (int) round($roughM * 1.18);
+        $duration = (int) ceil(($distanceM / 1000.0) / 13.0 * 60.0 + 4);
+        return [
+            'mode' => 'cycling',
+            'distanceM' => $distanceM,
+            'durationMin' => $duration,
+            'detail' => '共享单车',
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $candidates
+     */
+    private function rankLegCandidates(array $candidates, float $roughM): array
+    {
+        usort($candidates, function (array $a, array $b) use ($roughM): int {
+            return $this->legScore($a, $roughM) <=> $this->legScore($b, $roughM);
+        });
+        return $candidates;
+    }
+
+    private function legScore(array $candidate, float $roughM): float
+    {
+        $mode = (string) ($candidate['mode'] ?? '');
+        $duration = max(1, (int) ($candidate['durationMin'] ?? 0));
+        $distanceKm = $roughM / 1000.0;
+        $score = (float) $duration;
+
+        if ($mode === 'walking') {
+            if ($roughM <= 900) {
+                $score -= 8.0;
+            } elseif ($roughM > 1800) {
+                $score += 12.0;
+            } elseif ($duration <= 22) {
+                $score -= 3.0;
+            }
+        } elseif ($mode === 'cycling') {
+            $score += 4.0; // 找车/停车的真实摩擦
+            if ($roughM >= 1200 && $roughM <= 4500) {
+                $score -= 5.0;
+            }
+        } elseif ($mode === 'taxi') {
+            $score += 8.0 + min(12.0, $distanceKm * 1.4); // 成本、等车、拥堵不确定性
+        } elseif ($mode === 'metro' || $mode === 'bus') {
+            $transit = is_array($candidate['transit'] ?? null) ? $candidate['transit'] : [];
+            $walkingM = (int) ($transit['walkingM'] ?? 0);
+            $transferCount = (int) ($transit['transferCount'] ?? 0);
+            $score += $walkingM / 120.0 + $transferCount * 6.0;
+            if ($mode === 'metro') {
+                $score -= $roughM >= 2200 ? 9.0 : 3.0;
+            } else {
+                $score += 5.0; // 公交受拥堵/等车影响更大
+            }
+        }
+
+        return $score;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $ranked
+     */
+    private function legReason(array $best, array $ranked, float $roughM): string
+    {
+        $mode = (string) ($best['mode'] ?? '');
+        $duration = (int) ($best['durationMin'] ?? 0);
+        $fastest = $ranked[0] ?? $best;
+        foreach ($ranked as $candidate) {
+            if ((int) ($candidate['durationMin'] ?? PHP_INT_MAX) < (int) ($fastest['durationMin'] ?? PHP_INT_MAX)) {
+                $fastest = $candidate;
+            }
+        }
+        $fastestDuration = (int) ($fastest['durationMin'] ?? $duration);
+        $saved = max(0, $fastestDuration - $duration);
+        $distanceText = $roughM >= 1000 ? sprintf('约 %.1fkm', $roughM / 1000.0) : '约 ' . (int) round($roughM) . 'm';
+
+        return match ($mode) {
+            'walking' => $roughM <= 900
+                ? "{$distanceText}，距离很近，步行最省心。"
+                : "步行 {$duration} 分钟可控，省去等车和换乘。",
+            'cycling' => "{$distanceText}，适合共享单车，通常比步行省时且不受拥堵影响。",
+            'taxi' => $saved > 0
+                ? "打车总体最快，适合跨区移动或保留体力。"
+                : "打车耗时短，换乘和步行成本最低。",
+            'metro' => "地铁/轨道交通更稳定，换乘和步行成本可接受。",
+            'bus' => "公共交通整体更合适，适合控制费用和减少打车。",
+            default => "综合耗时、距离和换乘成本后推荐。",
+        };
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $ranked
+     * @return array<int, array{mode: string, distanceM: int, durationMin: int, detail: string, reason: string}>
+     */
+    private function legAlternatives(array $ranked, string $bestMode): array
+    {
+        $out = [];
+        $seen = [$bestMode => true];
+        $best = $ranked[0] ?? null;
+        foreach ($ranked as $candidate) {
+            $mode = (string) ($candidate['mode'] ?? '');
+            if ($mode === '' || isset($seen[$mode])) {
+                continue;
+            }
+            $seen[$mode] = true;
+            $out[] = [
+                'mode' => $mode,
+                'distanceM' => (int) ($candidate['distanceM'] ?? 0),
+                'durationMin' => (int) ($candidate['durationMin'] ?? 0),
+                'detail' => (string) ($candidate['detail'] ?? ''),
+                'reason' => $this->alternativeReason($candidate, is_array($best) ? $best : null),
+            ];
+            if (count($out) >= 3) {
+                break;
+            }
+        }
+        return $out;
+    }
+
+    private function alternativeReason(array $candidate, ?array $best): string
+    {
+        $mode = (string) ($candidate['mode'] ?? '');
+        $duration = (int) ($candidate['durationMin'] ?? 0);
+        $bestDuration = is_array($best) ? (int) ($best['durationMin'] ?? 0) : 0;
+        $delta = $bestDuration > 0 ? $duration - $bestDuration : 0;
+        if ($delta > 0) {
+            return match ($mode) {
+                'walking' => "慢约 {$delta} 分钟，但最省心。",
+                'cycling' => "慢约 {$delta} 分钟，适合天气好时。",
+                'metro', 'bus' => "慢约 {$delta} 分钟，但费用更可控。",
+                'taxi' => "慢约 {$delta} 分钟，可作为少走路备选。",
+                default => "慢约 {$delta} 分钟，可按现场情况选择。",
+            };
+        }
+        return match ($mode) {
+            'taxi' => '可能更快，但成本和拥堵不确定性更高。',
+            'metro' => '稳定性更好，适合高峰期。',
+            'bus' => '费用更低，但等车和拥堵更不确定。',
+            'cycling' => '适合天气好、行李少时。',
+            'walking' => '适合不赶时间时。',
+            default => '可按现场情况选择。',
+        };
+    }
+
+    private function transitMainMode(array $transit): string
+    {
+        foreach (($transit['lines'] ?? []) as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            $text = strtoupper((string) ($line['vehicle'] ?? '')) . ' ' . (string) ($line['title'] ?? '');
+            if (preg_match('/地铁|轨道|轻轨|SUBWAY|METRO/i', $text) === 1) {
+                return 'metro';
+            }
+        }
+        return 'bus';
+    }
+
+    private function transitDetail(array $transit): string
+    {
+        $titles = [];
+        foreach (($transit['lines'] ?? []) as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            $title = trim((string) ($line['title'] ?? ''));
+            if ($title !== '') {
+                $titles[] = preg_replace('/\([^)]+\)/', '', $title) ?: $title;
+            }
+        }
+        return implode(' → ', array_slice($titles, 0, 3));
+    }
+
+    private function tryTransitRoute(array $a, array $b, float $roughM, string $cityHint = ''): ?array
     {
         if ($roughM < 1200) {
             return null;
@@ -446,10 +678,31 @@ final class TravelService
             return $this->map->transit(
                 ['lat' => $a['lat'], 'lng' => $a['lng']],
                 ['lat' => $b['lat'], 'lng' => $b['lng']],
+                $this->transitCity($a, $b, $cityHint),
             );
         } catch (RuntimeException $_) {
             return null;
         }
+    }
+
+    private function transitCity(array $a, array $b, string $cityHint = ''): ?string
+    {
+        $hint = trim($cityHint);
+        if ($hint !== '') {
+            return $hint;
+        }
+        foreach ([$a, $b] as $stop) {
+            $adcode = trim((string) ($stop['_mapAdcode'] ?? ''));
+            if ($adcode !== '') {
+                return $adcode;
+            }
+            $city = trim((string) ($stop['_mapCity'] ?? ''));
+            if ($city !== '') {
+                return $city;
+            }
+        }
+        $fallback = trim((string) (getenv('AMAP_TRANSIT_CITY') ?: ''));
+        return $fallback !== '' ? $fallback : null;
     }
 
     /** 目的地中心 = 所有已 geocode 站点的经纬度均值（无有效点返回 null） */

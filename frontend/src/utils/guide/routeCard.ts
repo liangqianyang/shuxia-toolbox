@@ -1,5 +1,6 @@
 import type { Trip, Stop } from '@/types/travel'
 import { projectRoute } from '@/utils/routeProject'
+import { projectLatLngOnCoveredMap } from './mapProject'
 import {
   CARD_W,
   CARD_H,
@@ -22,6 +23,22 @@ import {
 
 /** DAY N 对应色（与 timelineCard 保持一致）*/
 const DAY_COLORS = ['#F6A6A1', '#A8D5A2', '#9FC3F0', '#F3C98B', '#C9A8E0']
+interface RouteMapPoint {
+  stop: Stop
+  dayIndex: number
+  seq: number
+  x: number
+  y: number
+  drawX: number
+  drawY: number
+}
+
+interface LabelRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
 
 /**
  * 路线规划图（1080×1440）。
@@ -73,8 +90,11 @@ export function renderRouteCard(
   roundRect(ctx, mapX, mapY, mapW, mapH, 36)
   ctx.clip()
   if (mapImage) {
-    // 真实底图：真实图/概览图/市内路线图（编号点+连线均由腾讯 staticmap 画好，无需叠加）
+    // 真实底图：跨城概览保留静态图标注；市内路线用前端叠加清晰编号点和连线。
     drawImageCover(ctx, mapImage, mapX, mapY, mapW, mapH)
+    if (!isOverview) {
+      drawGeoRouteOverlay(ctx, trip, { x: mapX, y: mapY, width: mapW, height: mapH }, false, mapImage)
+    }
   } else {
     // 无底图兜底：示意底 + routeProject 投影（编号点 + 连线 + 名称）
     ctx.fillStyle = C.panelSoft
@@ -100,38 +120,36 @@ export function renderRouteCard(
     return
   }
 
-  // ---- 站点清单（紧凑单行：编号 + 名称 + 站间交通）----
+  // ---- 站点清单（两行舒展：编号 + 地点名 + 下一站交通）----
   // 地图上每个点都要能在清单里对上号，故尽量列全；同时严格在落款上方收尾，绝不重叠。
   const listX = 80
-  const rowH = 66
+  const rowH = 88
   const dotR = 20
   const nameX = listX + dotR * 2 + 18
   const listBottom = CARD_H - 96 // 给底部落款留足空间，避免最后一行压到「枫叶小屋·出行攻略」
 
-  // 图例行：说明市内衔接是按距离自动推荐，避免与跨城方式（如火车）混淆
+  // 图例行：说明市内衔接是综合推荐，避免与跨城方式（如火车）混淆
   ctx.font = `24px ${FONT}`
   ctx.fillStyle = C.note
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('市内景点间按距离推荐 🚶步行 / 🚕打车', CARD_W / 2, mapY + mapH + 16)
+  ctx.fillText('市内景点间综合推荐 🚶步行 / 🚴骑行 / 🚇地铁公交 / 🚕打车', CARD_W / 2, mapY + mapH + 16)
 
   let y = mapY + mapH + 58
+  let shown = 0
   allStops.forEach((s, i) => {
     if (y + rowH > listBottom) return // 本行会越过落款区 → 停止
-    const cy = y + 26
+    const cy = y + 34
     drawNumberedDot(ctx, i + 1, listX + dotR, cy, dotR, s.type)
 
-    // 名称（深色加粗，优先保证可读，限宽 ~60%）
+    // 名称（深色加粗，第一行独占，避免和交通说明互相挤压）
     ctx.fillStyle = C.name
-    ctx.font = `bold 34px ${FONT}`
+    ctx.font = `bold 32px ${FONT}`
     ctx.textAlign = 'left'
-    ctx.textBaseline = 'middle'
-    const name = truncateText(ctx, s.name || '未命名', (CARD_W - nameX - 56) * 0.62)
-    ctx.fillText(name, nameX, cy)
-    // ⚠️ 必须在还是 34px 时量名称宽度，否则换小字后会量窄、把交通文案画到名称上
-    const nameW = ctx.measureText(name).width
+    ctx.textBaseline = 'top'
+    ctx.fillText(truncateText(ctx, s.name || '未命名', CARD_W - 56 - nameX), nameX, y + 14)
 
-    // 站间交通（浅色小字，紧接名称后；「→」表示这是「去往下一站」的衔接段，而非本站属性）
+    // 站间交通（第二行展示；「→」表示这是「去往下一站」的衔接段，而非本站属性）
     // 形如「→ 🚇 地铁 · 1号线 · 30分钟」；无自定义 detail 时用距离
     if (s.travelToNext) {
       const t = s.travelToNext
@@ -139,21 +157,39 @@ export function renderRouteCard(
       const dist = t.distanceM >= 1000 ? `${(t.distanceM / 1000).toFixed(1)}km` : `${t.distanceM}m`
       const mid = detail || dist
       const phrase = `→ ${interStopModeIcon(t.mode)} ${interStopModeLabel(t.mode)}${mid ? ' · ' + mid : ''} · ${t.durationMin}分钟`
-      ctx.font = `26px ${FONT}`
+      ctx.font = `24px ${FONT}`
       ctx.fillStyle = C.note
-      const cx = nameX + nameW + 12
-      ctx.fillText(truncateText(ctx, phrase, CARD_W - 56 - cx), cx, cy)
+      ctx.fillText(truncateText(ctx, phrase, CARD_W - 56 - nameX), nameX, y + 52)
+    } else {
+      const trust = poiTrustLine(s.poiInfo, { max: 2, separator: ' / ' })
+      if (trust) {
+        ctx.font = `23px ${FONT}`
+        ctx.fillStyle = C.note
+        ctx.fillText(truncateText(ctx, trust, CARD_W - 56 - nameX), nameX, y + 52)
+      }
     }
-    const trust = poiTrustLine(s.poiInfo, { max: 3 })
-    if (trust) {
-      ctx.font = `22px ${FONT}`
-      ctx.fillStyle = C.primaryDark
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'top'
-      ctx.fillText(truncateText(ctx, trust, CARD_W - 56 - nameX), nameX, y + 44)
+    if (i < allStops.length - 1) {
+      ctx.strokeStyle = 'rgba(216,184,146,0.36)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(nameX, y + rowH - 8)
+      ctx.lineTo(CARD_W - 72, y + rowH - 8)
+      ctx.stroke()
     }
     y += rowH
+    shown++
   })
+
+  if (shown < allStops.length) {
+    const more = allStops.length - shown
+    if (y + 30 < listBottom) {
+      ctx.font = `22px ${FONT}`
+      ctx.fillStyle = C.note
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText(`+${more} 个地点见每日攻略海报`, nameX, y + 8)
+    }
+  }
 
   drawFooter(ctx)
 }
@@ -191,8 +227,9 @@ function renderByDayCard(
   if (mapImage) {
     drawImageCover(ctx, mapImage, mapX, mapY, mapW, mapH)
     // 叠加半透明蒙层，让按天色标注更清晰
-    ctx.fillStyle = 'rgba(255, 252, 245, 0.35)'
+    ctx.fillStyle = 'rgba(255, 252, 245, 0.16)'
     ctx.fillRect(mapX, mapY, mapW, mapH)
+    drawGeoRouteOverlay(ctx, trip, { x: mapX, y: mapY, width: mapW, height: mapH }, true, mapImage)
   } else {
     ctx.fillStyle = C.panelSoft
     ctx.fillRect(mapX, mapY, mapW, mapH)
@@ -225,6 +262,320 @@ function renderByDayCard(
   })
 
   drawFooter(ctx)
+}
+
+function drawGeoRouteOverlay(
+  ctx: CanvasRenderingContext2D,
+  trip: Trip,
+  box: { x: number; y: number; width: number; height: number },
+  byDay: boolean,
+  mapImage: CanvasImageSource | null,
+): void {
+  const vp = trip.mapViewport
+  if (!vp) return
+
+  const rawStops: RouteMapPoint[] = []
+  let seq = 0
+  trip.days.forEach((day, di) => {
+    day.stops.forEach((stop) => {
+      if (stop.lng == null || stop.lat == null || !isVisitStop(stop)) return
+      seq++
+      const p = projectLatLngOnCoveredMap(stop.lat, stop.lng, vp, box.width, box.height, mapImage)
+      const x = box.x + p.x
+      const y = box.y + p.y
+      rawStops.push({ stop, dayIndex: di, seq, x, y, drawX: x, drawY: y })
+    })
+  })
+  if (rawStops.length === 0) return
+  const allStops = spreadMapPoints(rawStops, box)
+
+  drawMapLeaders(ctx, allStops)
+
+  // 每天独立连线；先画白色描边，再画彩色线，保证压在真实地图上仍清楚。
+  trip.days.forEach((day, di) => {
+    const pts = allStops.filter((item) => item.dayIndex === di)
+    if (pts.length < 2) return
+    const color = byDay ? DAY_COLORS[di % DAY_COLORS.length] : '#C8956C'
+    const displayPts = pts.map((p) => ({ x: p.drawX, y: p.drawY }))
+    drawMapLine(ctx, displayPts, 'rgba(255,255,255,0.92)', 14)
+    drawMapLine(ctx, displayPts, color, byDay ? 8 : 7)
+  })
+
+  if (byDay) {
+    // 天与天之间的衔接用虚线，避免被误读成同一天连续路线。
+    for (let i = 0; i < trip.days.length - 1; i++) {
+      const cur = allStops.filter((item) => item.dayIndex === i)
+      const next = allStops.filter((item) => item.dayIndex === i + 1)
+      if (!cur.length || !next.length) continue
+      const a = cur[cur.length - 1]
+      const b = next[0]
+      ctx.save()
+      ctx.setLineDash([14, 12])
+      ctx.lineWidth = 6
+      ctx.lineCap = 'round'
+      ctx.strokeStyle = 'rgba(90,70,50,0.5)'
+      ctx.beginPath()
+      ctx.moveTo(a.drawX, a.drawY)
+      ctx.lineTo(b.drawX, b.drawY)
+      ctx.stroke()
+      ctx.restore()
+    }
+  }
+
+  allStops.forEach((item) => {
+    const color = byDay ? DAY_COLORS[item.dayIndex % DAY_COLORS.length] : '#C8956C'
+    drawMapDot(ctx, item.drawX, item.drawY, item.seq, color)
+  })
+
+  // 标签最后画。点多时只标关键点，全部名称仍可在下方清单按编号对应，避免地图右侧挤成一团。
+  const usedLabels: LabelRect[] = []
+  const labelItems = pickMapLabelItems(allStops, byDay, allStops.length > 8 ? 8 : 12)
+  labelItems.forEach((item) => {
+    const color = byDay ? DAY_COLORS[item.dayIndex % DAY_COLORS.length] : '#C8956C'
+    drawMapLabel(ctx, item.stop.name || `地点${item.seq}`, item.drawX, item.drawY, box, color, usedLabels)
+  })
+}
+
+function pickMapLabelItems(points: RouteMapPoint[], byDay: boolean, maxLabels: number): RouteMapPoint[] {
+  if (points.length <= maxLabels) return points
+
+  const selected = new Map<number, RouteMapPoint>()
+  const add = (item?: RouteMapPoint) => {
+    if (item) selected.set(item.seq, item)
+  }
+
+  add(points[0])
+  add(points[points.length - 1])
+
+  if (byDay) {
+    const groups = new Map<number, RouteMapPoint[]>()
+    points.forEach((item) => {
+      const group = groups.get(item.dayIndex) ?? []
+      group.push(item)
+      groups.set(item.dayIndex, group)
+    })
+    groups.forEach((group) => {
+      add(group[0])
+      add(group[group.length - 1])
+    })
+  }
+
+  for (let i = 0; selected.size < maxLabels && i < maxLabels; i++) {
+    const idx = Math.round((i * (points.length - 1)) / Math.max(1, maxLabels - 1))
+    add(points[idx])
+  }
+
+  return Array.from(selected.values())
+    .sort((a, b) => a.seq - b.seq)
+    .slice(0, maxLabels)
+}
+
+function spreadMapPoints(points: RouteMapPoint[], box: { x: number; y: number; width: number; height: number }): RouteMapPoint[] {
+  const out = points.map((p) => ({ ...p }))
+  const minGap = 68
+  const margin = 34
+  const maxMove = 118
+  for (let iter = 0; iter < 70; iter++) {
+    for (let i = 0; i < out.length; i++) {
+      for (let j = i + 1; j < out.length; j++) {
+        const a = out[i]
+        const b = out[j]
+        let dx = b.drawX - a.drawX
+        let dy = b.drawY - a.drawY
+        let dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist >= minGap) continue
+        if (dist < 0.01) {
+          const angle = (i * 2.399 + j * 0.73) % (Math.PI * 2)
+          dx = Math.cos(angle)
+          dy = Math.sin(angle)
+          dist = 1
+        }
+        const push = (minGap - dist) * 0.5
+        const ux = dx / dist
+        const uy = dy / dist
+        a.drawX -= ux * push
+        a.drawY -= uy * push
+        b.drawX += ux * push
+        b.drawY += uy * push
+      }
+    }
+    out.forEach((p) => {
+      limitPointMove(p, maxMove)
+      p.drawX = Math.max(box.x + margin, Math.min(box.x + box.width - margin, p.drawX))
+      p.drawY = Math.max(box.y + margin, Math.min(box.y + box.height - margin, p.drawY))
+    })
+  }
+  return out
+}
+
+function limitPointMove(p: RouteMapPoint, maxMove: number): void {
+  const dx = p.drawX - p.x
+  const dy = p.drawY - p.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  if (dist <= maxMove || dist < 0.01) return
+  const scale = maxMove / dist
+  p.drawX = p.x + dx * scale
+  p.drawY = p.y + dy * scale
+}
+
+function drawMapLeaders(ctx: CanvasRenderingContext2D, points: RouteMapPoint[]): void {
+  ctx.save()
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(90,70,50,0.38)'
+  ctx.setLineDash([8, 8])
+  points.forEach((p) => {
+    const dx = p.drawX - p.x
+    const dy = p.drawY - p.y
+    if (Math.sqrt(dx * dx + dy * dy) < 14) return
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+    ctx.lineTo(p.drawX, p.drawY)
+    ctx.stroke()
+  })
+  ctx.restore()
+}
+
+function drawMapLine(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  color: string,
+  width: number,
+): void {
+  ctx.save()
+  ctx.lineWidth = width
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = color
+  ctx.beginPath()
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawMapDot(ctx: CanvasRenderingContext2D, x: number, y: number, seq: number, color: string): void {
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(x, y, 28, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'
+  ctx.fill()
+  ctx.lineWidth = 6
+  ctx.strokeStyle = color
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(x, y, 21, 0, Math.PI * 2)
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `bold ${seq >= 10 ? 22 : 26}px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(seq), x, y + 1)
+  ctx.restore()
+}
+
+function drawMapLabel(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  x: number,
+  y: number,
+  box: { x: number; y: number; width: number; height: number },
+  color: string,
+  used: LabelRect[],
+): void {
+  ctx.save()
+  ctx.font = `bold 23px ${FONT}`
+  const text = truncateText(ctx, name, 150)
+  const tw = ctx.measureText(text).width
+  const w = tw + 22
+  const h = 34
+  const rect = chooseLabelRect({ x, y, w, h }, box, used)
+  used.push(rect)
+
+  const lineEndX = rect.x > x ? rect.x : rect.x + rect.w
+  const lineEndY = Math.max(rect.y + 8, Math.min(rect.y + rect.h - 8, y))
+  if (Math.abs(lineEndX - x) > 30 || Math.abs(lineEndY - y) > 22) {
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(lineEndX, lineEndY)
+    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(90,70,50,0.34)'
+    ctx.stroke()
+  }
+
+  roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10)
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = color
+  ctx.stroke()
+  ctx.fillStyle = C.name
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, rect.x + 11, rect.y + rect.h / 2)
+  ctx.restore()
+}
+
+function chooseLabelRect(
+  anchor: { x: number; y: number; w: number; h: number },
+  box: { x: number; y: number; width: number; height: number },
+  used: LabelRect[],
+): LabelRect {
+  const preferLeft = anchor.x > box.x + box.width * 0.58
+  const sideOrder = preferLeft ? ['left', 'right', 'bottom', 'top'] : ['right', 'left', 'bottom', 'top']
+  const offsets = [0, -42, 42, -84, 84, -126, 126]
+  const candidates: LabelRect[] = []
+
+  sideOrder.forEach((side) => {
+    offsets.forEach((offset) => {
+      let x = anchor.x + 34
+      let y = anchor.y - anchor.h / 2 + offset
+      if (side === 'left') {
+        x = anchor.x - anchor.w - 34
+      } else if (side === 'bottom') {
+        x = anchor.x - anchor.w / 2 + offset * 0.45
+        y = anchor.y + 38
+      } else if (side === 'top') {
+        x = anchor.x - anchor.w / 2 + offset * 0.45
+        y = anchor.y - anchor.h - 38
+      }
+      candidates.push(clampLabelRect({ x, y, w: anchor.w, h: anchor.h }, box))
+    })
+  })
+
+  let best = candidates[0]
+  let bestScore = Number.POSITIVE_INFINITY
+  candidates.forEach((candidate) => {
+    const overlap = used.reduce((sum, old) => sum + rectOverlapArea(candidate, old), 0)
+    const cx = candidate.x + candidate.w / 2
+    const cy = candidate.y + candidate.h / 2
+    const distance = Math.hypot(cx - anchor.x, cy - anchor.y)
+    const score = overlap * 80 + distance
+    if (score < bestScore) {
+      bestScore = score
+      best = candidate
+    }
+  })
+  return best
+}
+
+function clampLabelRect(rect: LabelRect, box: { x: number; y: number; width: number; height: number }): LabelRect {
+  const pad = 8
+  return {
+    ...rect,
+    x: Math.max(box.x + pad, Math.min(box.x + box.width - rect.w - pad, rect.x)),
+    y: Math.max(box.y + pad, Math.min(box.y + box.height - rect.h - pad, rect.y)),
+  }
+}
+
+function rectsOverlap(a: LabelRect, b: LabelRect): boolean {
+  const gap = 6
+  return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x && a.y < b.y + b.h + gap && a.y + a.h + gap > b.y
+}
+
+function rectOverlapArea(a: LabelRect, b: LabelRect): number {
+  const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+  const y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y))
+  return x * y
 }
 
 /** 按天分色示意图（无底图兜底）：每天一种颜色，连线 + 编号点 */

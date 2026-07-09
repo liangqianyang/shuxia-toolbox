@@ -25,11 +25,14 @@ interface MapProvider
     public function geocode(string $query): array;
 
     /**
-     * 静态地图图片 URL：markers + 路径折线，自动适配范围（无需 center/zoom）。
+     * 静态地图图片 URL。
+     *
+     * - 传 markers/paths：服务商按点线自动适配范围，适合旧版栅格 marker 图。
+     * - 传 centerLat/centerLng/zoom：生成无标注底图，前端 Canvas 再叠加高清编号点和路线。
      *
      * @param array<int, array{lat: float, lng: float, color?: string, label?: string}> $markers
      * @param array<int, array<int, array{lat: float, lng: float}>> $paths 多段折线（如按天），每段至少 2 点
-     * @param array{width: int, height: int} $size
+     * @param array{width: int, height: int, centerLat?: float, centerLng?: float, zoom?: int} $size
      * @return string 图片 URL（空字符串表示不支持 / 无有效点）
      */
     public function staticMap(array $markers, array $paths, array $size): string;
@@ -69,7 +72,7 @@ interface MapProvider
      *     }>
      * }
      */
-    public function transit(array $from, array $to): array;
+    public function transit(array $from, array $to, ?string $city = null): array;
 
     /**
      * 周边搜索（探索）：中心点 radius 米内、匹配 keyword 的 POI。
