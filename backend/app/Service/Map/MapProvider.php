@@ -27,6 +27,14 @@ interface MapProvider
     public function geocode(string $query, string $region = ''): array;
 
     /**
+     * 坐标 → 地址/城市信息，用于定位后约束地点搜索城市。
+     *
+     * @param array{lat: float, lng: float} $center
+     * @return array{address: string, province: string, city: string, adcode: string}
+     */
+    public function reverseGeocode(array $center): array;
+
+    /**
      * 静态地图图片 URL。
      *
      * - 传 markers/paths：服务商按点线自动适配范围，适合旧版栅格 marker 图。

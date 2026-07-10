@@ -16,6 +16,7 @@ final class TencentMapProvider implements MapProvider
     // 腾讯地点联想 suggestion（该 key 开通了 suggestion、未开通 geocoder；且 suggestion 更贴合
     // 「搜索→候选列表」场景，返回多个含坐标的候选）。HTTP（Swoole 无 openssl）+ StreamHandler（curl 钩子不完整）。
     private const string GEOCODE_URL = 'http://apis.map.qq.com/ws/place/v1/suggestion';
+    private const string REGEOCODE_URL = 'https://apis.map.qq.com/ws/geocoder/v1/';
 
     private readonly Client $client;
 
@@ -123,6 +124,48 @@ final class TencentMapProvider implements MapProvider
         }
 
         return $candidates;
+    }
+
+    /**
+     * 反向地理编码：把坐标转成地址/城市信息。
+     */
+    public function reverseGeocode(array $center): array
+    {
+        $key = getenv('TENCENT_MAP_KEY') ?: '';
+        if ($key === '') {
+            throw new RuntimeException('地图服务未配置 TENCENT_MAP_KEY');
+        }
+
+        $params = [
+            'location' => $center['lat'] . ',' . $center['lng'],
+            'key' => $key,
+        ];
+
+        try {
+            $response = $this->client->get(self::REGEOCODE_URL, [
+                'query' => $this->withSig(self::REGEOCODE_URL, $params),
+                'timeout' => (int) (getenv('MAP_TIMEOUT') ?: 5),
+            ]);
+            $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable $e) {
+            throw new RuntimeException('腾讯逆地理编码请求失败: ' . $e->getMessage(), 0, $e);
+        }
+
+        $status = $body['status'] ?? -1;
+        if ($status !== 0) {
+            $message = is_string($body['message'] ?? null) ? $body['message'] : "status={$status}";
+            throw new RuntimeException('腾讯逆地理编码返回错误: ' . $message);
+        }
+
+        $result = is_array($body['result'] ?? null) ? $body['result'] : [];
+        $adInfo = is_array($result['ad_info'] ?? null) ? $result['ad_info'] : [];
+
+        return [
+            'address' => is_string($result['address'] ?? null) ? $result['address'] : '',
+            'province' => is_string($adInfo['province'] ?? null) ? $adInfo['province'] : '',
+            'city' => is_string($adInfo['city'] ?? null) ? $adInfo['city'] : '',
+            'adcode' => isset($adInfo['adcode']) ? (string) $adInfo['adcode'] : '',
+        ];
     }
 
     /**
@@ -469,7 +512,12 @@ final class TencentMapProvider implements MapProvider
     }
 
     /**
-     * 周边搜索，用于根据中心点探索附近 POI。
+     * 周边搜索：中心点 radius 米内、匹配 keyword 的 POI。
+     *
+     * 走 place/v1/search（关键词搜索 + boundary=nearby）而非 place/v1/explore：该 key 下 explore
+     * 不按 keyword 过滤（实测 keyword=火锅 / 烧烤 / category=美食 都返回同一批住宅小区），会把附近无关
+     * POI 混进结果；search 才真正按关键词命中（keyword=火锅 全部返回 category=美食:火锅 的店家）。
+     * 两个接口 data 元素结构一致（title/address/_distance/location），解析逻辑无需改动。
      */
     public function explore(array $center, int $radius, string $keyword): array
     {
@@ -479,9 +527,10 @@ final class TencentMapProvider implements MapProvider
         }
         $timeout = max((int) (getenv('MAP_TIMEOUT') ?: 5), 8);
 
+        $url = 'http://apis.map.qq.com/ws/place/v1/search';
         try {
-            $response = $this->client->get('http://apis.map.qq.com/ws/place/v1/explore', [
-                'query' => $this->withSig('http://apis.map.qq.com/ws/place/v1/explore', [
+            $response = $this->client->get($url, [
+                'query' => $this->withSig($url, [
                     // boundary=nearby(纬度,经度,半径米)
                     'boundary' => sprintf('nearby(%f,%f,%d)', $center['lat'], $center['lng'], $radius),
                     'keyword' => $keyword,

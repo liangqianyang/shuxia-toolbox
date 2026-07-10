@@ -21,9 +21,9 @@ final class TravelService
     /**
      * @return array<int, array{name: string, title: string, lng: float, lat: float, province: string, city: string, adcode: string}>
      */
-    public function geocode(string $query): array
+    public function geocode(string $query, string $region = ''): array
     {
-        return $this->map->geocode($query);
+        return $this->map->geocode($query, $region);
     }
 
     /**

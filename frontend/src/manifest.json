@@ -13,12 +13,14 @@
       "minified": true
     },
     "usingComponents": true,
-    "lazyCodeLoading": "requiredComponents",
     "permission": {
-      "scope.writePhotosAlbum": {
-        "desc": "用于保存生成的攻略图到相册"
+      "scope.userLocation": {
+        "desc": "用于根据当前位置搜索附近美食"
       }
-    }
+    },
+    "requiredPrivateInfos": [
+      "getLocation"
+    ]
   },
   "h5": {
     "router": {

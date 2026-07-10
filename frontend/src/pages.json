@@ -17,6 +17,12 @@
       "style": {
         "navigationBarTitleText": "旅游攻略图生成器"
       }
+    },
+    {
+      "path": "pages/food/index",
+      "style": {
+        "navigationBarTitleText": "今天吃什么"
+      }
     }
   ],
   "globalStyle": {

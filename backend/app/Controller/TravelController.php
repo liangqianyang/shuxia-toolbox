@@ -33,7 +33,7 @@ class TravelController extends AbstractController
         }
 
         try {
-            $candidates = $this->travel->geocode($q);
+            $candidates = $this->travel->geocode($q, trim((string) $request->input('region', '')));
         } catch (Throwable $e) {
             throw new BizException(500, $e->getMessage(), null, $e);
         }

@@ -6,7 +6,10 @@
   "require": {
     "php": ">=8.4",
     "guzzlehttp/guzzle": "^7.9",
+    "hyperf/command": "^3.2@beta",
     "hyperf/config": "^3.2@beta",
+    "hyperf/database": "^3.2@beta",
+    "hyperf/db-connection": "^3.2@beta",
     "hyperf/di": "^3.2@beta",
     "hyperf/engine": "^2.11",
     "hyperf/framework": "^3.2@beta",

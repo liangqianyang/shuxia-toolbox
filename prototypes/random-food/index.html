@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>今天吃什么 - 原型</title>
+  <style>
+    :root {
+      --bg: #f6f7f8;
+      --ink: #202326;
+      --muted: #69717a;
+      --line: #e3e7ea;
+      --paper: #ffffff;
+      --soft: #f1f4f3;
+      --red: #df513f;
+      --red-dark: #b73c2e;
+      --green: #2f8f72;
+      --teal: #238a9a;
+      --amber: #d38b2d;
+      --blue: #4267b2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #f8faf9 0%, #eef2f2 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .board {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(280px, 390px) minmax(280px, 1fr);
+      gap: 28px;
+      align-items: start;
+      padding: 36px;
+    }
+
+    .phone {
+      width: min(390px, calc(100vw - 48px));
+      min-height: 844px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid rgba(17, 24, 39, .12);
+      border-radius: 28px;
+      background: var(--bg);
+      box-shadow: 0 24px 60px rgba(21, 38, 46, .18);
+    }
+
+    .app {
+      position: relative;
+      min-height: 844px;
+      padding: 20px 18px 88px;
+    }
+
+    .status {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #3b4248;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .signal {
+      display: flex;
+      gap: 4px;
+      align-items: end;
+    }
+
+    .signal i {
+      width: 4px;
+      border-radius: 2px;
+      background: #3b4248;
+      display: block;
+    }
+
+    .signal i:nth-child(1) { height: 6px; }
+    .signal i:nth-child(2) { height: 9px; }
+    .signal i:nth-child(3) { height: 12px; }
+
+    .screen {
+      display: none;
+    }
+
+    .screen.is-active {
+      display: block;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      margin-bottom: 18px;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.3;
+      margin-bottom: 3px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 28px;
+      line-height: 1.15;
+      font-weight: 850;
+    }
+
+    h2 {
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 820;
+    }
+
+    h3 {
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 780;
+    }
+
+    .icon-btn {
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--paper);
+      color: var(--ink);
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .icon {
+      width: 19px;
+      height: 19px;
+      display: inline-block;
+    }
+
+    .hero-pick {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    .location-row,
+    .filter-row,
+    .result-meta,
+    .pool-meta,
+    .room-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .field-chip,
+    .tag,
+    .mini-chip {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 0 12px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .tag {
+      cursor: pointer;
+    }
+
+    .tag.is-on {
+      color: var(--red-dark);
+      border-color: rgba(223, 81, 63, .28);
+      background: #fff2ef;
+      font-weight: 700;
+    }
+
+    .mini-chip {
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+      color: var(--muted);
+      background: #f8faf9;
+    }
+
+    .section {
+      margin-top: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 780;
+    }
+
+    .section-link {
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #edf1f1;
+    }
+
+    .segmented button {
+      min-height: 36px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .segmented button.is-on {
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 0 1px 4px rgba(27, 35, 42, .08);
+    }
+
+    .big-action {
+      width: 100%;
+      min-height: 72px;
+      border: 0;
+      border-radius: 8px;
+      color: white;
+      background: var(--red);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 20px;
+      cursor: pointer;
+      box-shadow: 0 12px 22px rgba(223, 81, 63, .25);
+      text-align: left;
+    }
+
+    .big-action strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .big-action span {
+      display: block;
+      margin-top: 4px;
+      color: rgba(255, 255, 255, .84);
+      font-size: 13px;
+    }
+
+    .arrow-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, .18);
+      flex: 0 0 auto;
+    }
+
+    .map-box {
+      height: 174px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, transparent 0 48px, rgba(35, 138, 154, .12) 48px 50px, transparent 50px 100px),
+        linear-gradient(0deg, transparent 0 42px, rgba(47, 143, 114, .12) 42px 44px, transparent 44px 92px),
+        #edf4f2;
+    }
+
+    .map-road {
+      position: absolute;
+      height: 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .9);
+      transform-origin: left center;
+      box-shadow: 0 0 0 1px rgba(188, 197, 199, .5);
+    }
+
+    .map-road.r1 { left: 34px; top: 64px; width: 250px; transform: rotate(-12deg); }
+    .map-road.r2 { left: 70px; top: 128px; width: 210px; transform: rotate(18deg); }
+    .map-road.r3 { left: 188px; top: 20px; width: 170px; transform: rotate(78deg); }
+
+    .map-pin {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      border: 4px solid var(--paper);
+      border-radius: 50%;
+      background: var(--red);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: 0 8px 18px rgba(34, 48, 56, .18);
+    }
+
+    .map-pin.p1 { left: 74px; top: 58px; background: var(--teal); }
+    .map-pin.p2 { left: 176px; top: 96px; background: var(--red); }
+    .map-pin.p3 { left: 282px; top: 52px; background: var(--amber); }
+
+    .map-label {
+      position: absolute;
+      left: 122px;
+      top: 42px;
+      max-width: 140px;
+      padding: 7px 10px;
+      border: 1px solid rgba(22, 30, 36, .1);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .94);
+      font-size: 12px;
+      font-weight: 750;
+      box-shadow: 0 8px 18px rgba(26, 39, 48, .08);
+    }
+
+    .quick-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .quick-item,
+    .pool-row,
+    .candidate-row,
+    .result-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    .quick-item {
+      min-height: 68px;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .item-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: white;
+      background: var(--teal);
+      font-weight: 850;
+    }
+
+    .item-icon.green { background: var(--green); }
+    .item-icon.amber { background: var(--amber); }
+    .item-icon.blue { background: var(--blue); }
+
+    .item-copy {
+      min-width: 0;
+    }
+
+    .item-copy strong,
+    .pool-copy strong,
+    .candidate-copy strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-copy span,
+    .pool-copy span,
+    .candidate-copy span {
+      display: block;
+      overflow: hidden;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .right-note {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ticket {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(223, 81, 63, .24);
+      border-radius: 8px;
+      background: #fff8f6;
+      padding: 18px;
+    }
+
+    .ticket::before,
+    .ticket::after {
+      content: "";
+      position: absolute;
+      top: 82px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 1px solid rgba(223, 81, 63, .2);
+    }
+
+    .ticket::before { left: -12px; }
+    .ticket::after { right: -12px; }
+
+    .ticket-label {
+      color: var(--red-dark);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .shop-name {
+      margin-top: 8px;
+      font-size: 27px;
+      line-height: 1.12;
+      font-weight: 880;
+    }
+
+    .reason-box {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--paper);
+      color: #394149;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .action-grid button,
+    .full-button,
+    .ghost-button {
+      min-height: 46px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .full-button {
+      width: 100%;
+      border: 0;
+      color: white;
+      background: var(--ink);
+    }
+
+    .ghost-button {
+      width: 100%;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    .action-primary {
+      border: 0;
+      color: white;
+      background: var(--red);
+    }
+
+    .action-secondary {
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    .pool-row,
+    .candidate-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 76px;
+      padding: 13px;
+    }
+
+    .pool-meter {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #eef8f5;
+      color: var(--green);
+      font-size: 15px;
+      font-weight: 850;
+    }
+
+    .candidate-score {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #fff4e3;
+      color: #9a5d08;
+      font-weight: 850;
+    }
+
+    .room-code {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px dashed rgba(35, 138, 154, .5);
+      border-radius: 8px;
+      background: #eef8fa;
+      color: #1d6671;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .avatar-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: var(--teal);
+      font-size: 13px;
+      font-weight: 850;
+      border: 3px solid var(--paper);
+      box-shadow: 0 2px 8px rgba(22, 36, 44, .12);
+    }
+
+    .avatar:nth-child(2) { background: var(--red); }
+    .avatar:nth-child(3) { background: var(--green); }
+    .avatar:nth-child(4) { background: var(--amber); }
+
+    .bottom-nav {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      height: 58px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 12px 28px rgba(31, 44, 52, .12);
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-btn {
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 760;
+      display: grid;
+      place-items: center;
+      gap: 1px;
+    }
+
+    .nav-btn.is-active {
+      color: var(--red-dark);
+      background: #fff2ef;
+    }
+
+    .nav-symbol {
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .notes {
+      align-self: stretch;
+      min-height: 844px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+    }
+
+    .prototype-title {
+      padding-top: 12px;
+    }
+
+    .prototype-title h2 {
+      font-size: 28px;
+    }
+
+    .prototype-title p {
+      max-width: 640px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .screen-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      align-content: start;
+    }
+
+    .mini-screen {
+      min-height: 210px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      padding: 15px;
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .mini-screen.is-active {
+      border-color: rgba(223, 81, 63, .45);
+      box-shadow: 0 12px 28px rgba(223, 81, 63, .12);
+    }
+
+    .mini-screen:hover {
+      transform: translateY(-2px);
+    }
+
+    .mini-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .mini-index {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--ink);
+      color: white;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .mini-screen p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .flow-line {
+      margin-top: 12px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .flow-line span {
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: #f2f5f5;
+      color: #4d5860;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    @media (max-width: 960px) {
+      .board {
+        grid-template-columns: 1fr;
+        padding: 24px;
+      }
+
+      .notes {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .board {
+        padding: 16px;
+      }
+
+      .phone {
+        width: calc(100vw - 32px);
+        border-radius: 22px;
+      }
+
+      .app {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      .screen-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="phone" aria-label="小程序原型">
+      <div class="app">
+        <div class="status">
+          <span>09:41</span>
+          <div class="signal" aria-hidden="true"><i></i><i></i><i></i></div>
+        </div>
+
+        <section class="screen is-active" data-screen="home">
+          <div class="topbar">
+            <div class="title-block">
+              <span class="eyebrow">下班前 10 秒做决定</span>
+              <h1>今天吃什么</h1>
+            </div>
+            <button class="icon-btn" aria-label="定位">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="hero-pick">
+            <div class="location-row">
+              <span class="field-chip">当前位置：武林门</span>
+              <span class="field-chip">晚餐</span>
+            </div>
+            <div class="section">
+              <div class="section-head">
+                <span class="section-title">随机范围</span>
+                <span class="section-link">换地点</span>
+              </div>
+              <div class="segmented" data-group="radius">
+                <button>500m</button>
+                <button class="is-on">1km</button>
+                <button>3km</button>
+                <button>5km</button>
+              </div>
+            </div>
+            <div class="section">
+              <div class="section-head">
+                <span class="section-title">今天想要</span>
+                <span class="section-link">重置</span>
+              </div>
+              <div class="filter-row">
+                <span class="tag is-on">快速</span>
+                <span class="tag">辣一点</span>
+                <span class="tag">便宜</span>
+                <span class="tag">热乎</span>
+                <span class="tag">奖励自己</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <button class="big-action" data-open="result">
+              <span>
+                <strong>帮我决定</strong>
+                <span>从附近 32 家可选餐厅里抽一家</span>
+              </span>
+              <span class="arrow-mark">→</span>
+            </button>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <span class="section-title">常用饭池</span>
+              <span class="section-link" data-open="pool">管理</span>
+            </div>
+            <div class="quick-list">
+              <div class="quick-item">
+                <span class="item-icon">午</span>
+                <span class="item-copy">
+                  <strong>公司午餐池</strong>
+                  <span>18 家店，最近 2 天已自动避开</span>
+                </span>
+                <span class="right-note">抽</span>
+              </div>
+              <div class="quick-item">
+                <span class="item-icon green">夜</span>
+                <span class="item-copy">
+                  <strong>家附近晚餐</strong>
+                  <span>12 家店，适合一个人快速解决</span>
+                </span>
+                <span class="right-note">抽</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="result">
+          <div class="topbar">
+            <div class="title-block">
+              <span class="eyebrow">本次从 32 家中抽取</span>
+              <h1>今日饭票</h1>
+            </div>
+            <button class="icon-btn" data-open="home" aria-label="关闭">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="ticket">
+            <div class="ticket-label">抽中了</div>
+            <div class="shop-name" id="resultName">阿里王椒盐牛蛙</div>
+            <div class="result-meta section">
+              <span class="mini-chip">步行 9 分钟</span>
+              <span class="mini-chip">约 780m</span>
+              <span class="mini-chip">人均 65</span>
+              <span class="mini-chip">适合晚餐</span>
+            </div>
+            <div class="reason-box">
+              离当前位置不远，今晚营业时段匹配；最近一周没有吃过牛蛙类，适合作为今天的“奖励自己”选项。
+            </div>
+          </div>
+
+          <div class="section map-box" aria-label="餐厅位置地图">
+            <span class="map-road r1"></span>
+            <span class="map-road r2"></span>
+            <span class="map-road r3"></span>
+            <span class="map-pin p1">我</span>
+            <span class="map-pin p2">食</span>
+            <span class="map-pin p3">备</span>
+            <span class="map-label">湖墅南路 4 号</span>
+          </div>
+
+          <div class="action-grid">
+            <button class="action-primary">去这里</button>
+            <button class="action-secondary" id="rerollBtn">换一个</button>
+            <button class="action-secondary">加入饭池</button>
+            <button class="action-secondary">今天吃过了</button>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <span class="section-title">备选不纠结</span>
+              <span class="section-link">只看 3 个</span>
+            </div>
+            <div class="quick-list">
+              <div class="candidate-row">
+                <span class="candidate-copy">
+                  <strong>东北饺子坊</strong>
+                  <span>110m · 快速 · 人均 32</span>
+                </span>
+                <span class="candidate-score">92</span>
+              </div>
+              <div class="candidate-row">
+                <span class="candidate-copy">
+                  <strong>久旦鲜串烧鸟</strong>
+                  <span>189m · 夜宵 · 人均 88</span>
+                </span>
+                <span class="candidate-score">86</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="pool">
+          <div class="topbar">
+            <div class="title-block">
+              <span class="eyebrow">自己的常吃店更靠谱</span>
+              <h1>我的饭池</h1>
+            </div>
+            <button class="icon-btn" aria-label="新增店家">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="section">
+            <button class="big-action">
+              <span>
+                <strong>从公司午餐池抽</strong>
+                <span>18 家店，排除最近吃过的 3 家</span>
+              </span>
+              <span class="arrow-mark">→</span>
+            </button>
+          </div>
+
+          <div class="section">
+            <div class="quick-list">
+              <div class="pool-row">
+                <span class="pool-copy">
+                  <strong>公司午餐池</strong>
+                  <span>面馆 6 · 快餐 5 · 小炒 4 · 咖啡简餐 3</span>
+                </span>
+                <span class="pool-meter">18</span>
+              </div>
+              <div class="pool-row">
+                <span class="pool-copy">
+                  <strong>家附近晚餐</strong>
+                  <span>一个人 7 · 两个人 3 · 夜宵 2</span>
+                </span>
+                <span class="pool-meter">12</span>
+              </div>
+              <div class="pool-row">
+                <span class="pool-copy">
+                  <strong>朋友聚餐备选</strong>
+                  <span>火锅 3 · 烧烤 4 · 日料 2 · 粤菜 2</span>
+                </span>
+                <span class="pool-meter">11</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <span class="section-title">最近吃过</span>
+              <span class="section-link">全部</span>
+            </div>
+            <div class="result-card" style="padding: 14px;">
+              <div class="pool-meta">
+                <span class="mini-chip">昨天 · 兰州牛肉面</span>
+                <span class="mini-chip">周二 · 轻食沙拉</span>
+                <span class="mini-chip">周一 · 黄焖鸡</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="group">
+          <div class="topbar">
+            <div class="title-block">
+              <span class="eyebrow">群里别再问半小时</span>
+              <h1>多人决定</h1>
+            </div>
+            <button class="icon-btn" aria-label="分享">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M16 6 8 12l8 6M8 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="room-code">
+            <span>饭局码 8274</span>
+            <span>复制</span>
+          </div>
+
+          <div class="avatar-row" aria-label="参与者">
+            <span class="avatar">我</span>
+            <span class="avatar">梁</span>
+            <span class="avatar">周</span>
+            <span class="avatar">陈</span>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <span class="section-title">大家不想吃</span>
+              <span class="section-link">继续投票</span>
+            </div>
+            <div class="filter-row">
+              <span class="tag is-on">火锅 2</span>
+              <span class="tag is-on">轻食 1</span>
+              <span class="tag">烧烤 0</span>
+              <span class="tag">日料 0</span>
+              <span class="tag">快餐 0</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <button class="big-action">
+              <span>
+                <strong>生成大家都能接受的结果</strong>
+                <span>当前 14 家候选，0 家被所有人拒绝</span>
+              </span>
+              <span class="arrow-mark">→</span>
+            </button>
+          </div>
+
+          <div class="section">
+            <div class="quick-list">
+              <div class="candidate-row">
+                <span class="candidate-copy">
+                  <strong>泰式大排档</strong>
+                  <span>4 人可接受 · 2 人想吃 · 920m</span>
+                </span>
+                <span class="candidate-score">优</span>
+              </div>
+              <div class="candidate-row">
+                <span class="candidate-copy">
+                  <strong>港式烧腊饭</strong>
+                  <span>4 人可接受 · 快速 · 人均 42</span>
+                </span>
+                <span class="candidate-score">稳</span>
+              </div>
+              <div class="candidate-row">
+                <span class="candidate-copy">
+                  <strong>新疆兄弟烧烤</strong>
+                  <span>3 人可接受 · 1 人想吃 · 109m</span>
+                </span>
+                <span class="candidate-score">近</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="bottom-nav" aria-label="主导航">
+          <button class="nav-btn is-active" data-open="home">
+            <span class="nav-symbol">⌖</span>
+            <span>附近</span>
+          </button>
+          <button class="nav-btn" data-open="result">
+            <span class="nav-symbol">◎</span>
+            <span>饭票</span>
+          </button>
+          <button class="nav-btn" data-open="pool">
+            <span class="nav-symbol">▦</span>
+            <span>饭池</span>
+          </button>
+          <button class="nav-btn" data-open="group">
+            <span class="nav-symbol">◇</span>
+            <span>饭局</span>
+          </button>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="notes">
+      <div class="prototype-title">
+        <span class="eyebrow">Random Food Tool Prototype</span>
+        <h2>一个帮用户快速拍板的吃饭工具</h2>
+        <p>原型先聚焦四个关键状态：附近随机、抽中结果、我的饭池、多人决定。左侧可以直接点底部导航和按钮切换。</p>
+      </div>
+
+      <div class="screen-grid">
+        <article class="mini-screen is-active" data-open="home">
+          <div class="mini-head">
+            <span class="mini-index">1</span>
+            <h3>附近随机</h3>
+          </div>
+          <p>用户只需要确认地点、半径和少量偏好，核心按钮始终是“帮我决定”。</p>
+          <div class="flow-line">
+            <span>地点</span><span>半径</span><span>偏好</span><span>开奖</span>
+          </div>
+        </article>
+
+        <article class="mini-screen" data-open="result">
+          <div class="mini-head">
+            <span class="mini-index">2</span>
+            <h3>今日饭票</h3>
+          </div>
+          <p>结果页强调“已经替你选好了”，给出理由、距离和直接导航，减少继续犹豫。</p>
+          <div class="flow-line">
+            <span>结果</span><span>理由</span><span>导航</span><span>重抽</span>
+          </div>
+        </article>
+
+        <article class="mini-screen" data-open="pool">
+          <div class="mini-head">
+            <span class="mini-index">3</span>
+            <h3>我的饭池</h3>
+          </div>
+          <p>自定义店家沉淀成个人饭池，支持不同生活场景，后续可做云保存。</p>
+          <div class="flow-line">
+            <span>公司</span><span>家附近</span><span>聚餐</span><span>历史</span>
+          </div>
+        </article>
+
+        <article class="mini-screen" data-open="group">
+          <div class="mini-head">
+            <span class="mini-index">4</span>
+            <h3>多人决定</h3>
+          </div>
+          <p>饭局场景用“共同可接受”代替群聊反复拉扯，天然适合分享。</p>
+          <div class="flow-line">
+            <span>房间</span><span>偏好</span><span>避雷</span><span>共识</span>
+          </div>
+        </article>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const names = [
+      '阿里王椒盐牛蛙',
+      '东北饺子坊',
+      '久旦鲜串烧鸟',
+      '杭州泰餐',
+      '新疆兄弟烧烤'
+    ];
+
+    function openScreen(name) {
+      document.querySelectorAll('.screen').forEach((screen) => {
+        screen.classList.toggle('is-active', screen.dataset.screen === name);
+      });
+      document.querySelectorAll('[data-open]').forEach((node) => {
+        node.classList.toggle('is-active', node.dataset.open === name && node.classList.contains('mini-screen'));
+      });
+      document.querySelectorAll('.nav-btn').forEach((node) => {
+        node.classList.toggle('is-active', node.dataset.open === name);
+      });
+    }
+
+    document.querySelectorAll('[data-open]').forEach((node) => {
+      node.addEventListener('click', () => openScreen(node.dataset.open));
+    });
+
+    document.querySelectorAll('.tag').forEach((node) => {
+      node.addEventListener('click', () => node.classList.toggle('is-on'));
+    });
+
+    document.querySelectorAll('.segmented button').forEach((button) => {
+      button.addEventListener('click', () => {
+        button.parentElement.querySelectorAll('button').forEach((item) => item.classList.remove('is-on'));
+        button.classList.add('is-on');
+      });
+    });
+
+    document.querySelector('#rerollBtn').addEventListener('click', () => {
+      const current = document.querySelector('#resultName').textContent;
+      const next = names[(names.indexOf(current) + 1) % names.length];
+      document.querySelector('#resultName').textContent = next;
+    });
+  </script>
+</body>
+</html>

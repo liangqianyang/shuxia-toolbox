@@ -15,6 +15,7 @@ final class AmapMapProvider implements MapProvider
 {
     private const string INPUT_TIPS_URL = 'https://restapi.amap.com/v3/assistant/inputtips';
     private const string GEOCODE_URL = 'https://restapi.amap.com/v3/geocode/geo';
+    private const string REGEOCODE_URL = 'https://restapi.amap.com/v3/geocode/regeo';
     private const string STATIC_MAP_URL = 'https://restapi.amap.com/v3/staticmap';
     private const string WALKING_URL = 'https://restapi.amap.com/v3/direction/walking';
     private const string DRIVING_URL = 'https://restapi.amap.com/v3/direction/driving';
@@ -135,6 +136,42 @@ final class AmapMapProvider implements MapProvider
         }
 
         return $candidates;
+    }
+
+    /**
+     * 反向地理编码：把当前位置坐标转成可展示地址和城市/adcode。
+     */
+    public function reverseGeocode(array $center): array
+    {
+        $key = $this->key();
+        try {
+            $response = $this->client->get(self::REGEOCODE_URL, [
+                'query' => [
+                    'location' => $center['lng'] . ',' . $center['lat'],
+                    'key' => $key,
+                    'extensions' => 'base',
+                ],
+                'timeout' => $this->timeout(),
+            ]);
+            $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertOk($body, '高德逆地理编码返回错误');
+        } catch (Throwable $e) {
+            throw new RuntimeException('高德逆地理编码请求失败: ' . $e->getMessage(), 0, $e);
+        }
+
+        $regeo = is_array($body['regeocode'] ?? null) ? $body['regeocode'] : [];
+        $component = is_array($regeo['addressComponent'] ?? null) ? $regeo['addressComponent'] : [];
+        $city = $component['city'] ?? '';
+        if (is_array($city)) {
+            $city = '';
+        }
+
+        return [
+            'address' => is_string($regeo['formatted_address'] ?? null) ? $regeo['formatted_address'] : '',
+            'province' => is_string($component['province'] ?? null) ? $component['province'] : '',
+            'city' => is_string($city) ? $city : '',
+            'adcode' => isset($component['adcode']) ? (string) $component['adcode'] : '',
+        ];
     }
 
     /**
