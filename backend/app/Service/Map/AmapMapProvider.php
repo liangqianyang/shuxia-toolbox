@@ -78,6 +78,7 @@ final class AmapMapProvider implements MapProvider
                 $candidates[] = [
                     'name' => is_string($tip['name'] ?? null) ? $tip['name'] : $query,
                     'title' => is_string($tip['name'] ?? null) ? $tip['name'] : $query,
+                    'address' => is_string($tip['address'] ?? null) ? $tip['address'] : '',
                     'lng' => (float) $parts[0],
                     'lat' => (float) $parts[1],
                     'province' => '',
@@ -127,6 +128,7 @@ final class AmapMapProvider implements MapProvider
             $candidates[] = [
                 'name' => is_string($item['formatted_address'] ?? null) ? $item['formatted_address'] : $query,
                 'title' => is_string($item['formatted_address'] ?? null) ? $item['formatted_address'] : $query,
+                'address' => is_string($item['formatted_address'] ?? null) ? $item['formatted_address'] : '',
                 'lng' => (float) $parts[0],
                 'lat' => (float) $parts[1],
                 'province' => is_string($item['province'] ?? null) ? $item['province'] : '',
@@ -358,7 +360,7 @@ final class AmapMapProvider implements MapProvider
                     'location' => $center['lng'] . ',' . $center['lat'],
                     'keywords' => $keyword,
                     'radius' => $radius,
-                    'offset' => 10,
+                    'offset' => 25,
                     'sortrule' => 'distance',
                     'key' => $key,
                 ],
@@ -367,6 +369,10 @@ final class AmapMapProvider implements MapProvider
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
             $this->assertOk($body, '高德周边搜索返回错误');
         } catch (Throwable $e) {
+            $fallback = $this->fallbackExplore($center, $radius, $keyword);
+            if ($fallback !== []) {
+                return $fallback;
+            }
             throw new RuntimeException('高德周边搜索请求失败: ' . $e->getMessage(), 0, $e);
         }
 
@@ -386,9 +392,32 @@ final class AmapMapProvider implements MapProvider
                 'distanceM' => (int) ($item['distance'] ?? 0),
                 'lat' => (float) $parts[1],
                 'lng' => (float) $parts[0],
+                'category' => is_string($item['type'] ?? null) ? $item['type'] : '',
+                'typecode' => is_string($item['typecode'] ?? null) ? $item['typecode'] : '',
             ];
         }
         return $out;
+    }
+
+    /**
+     * 高德周边搜索不可用时，用腾讯周边搜索兜底。
+     *
+     * 常见场景：高德 key 绑定了 IP 白名单，后端出口 IP 未放行，会返回 INVALID_USER_IP。
+     *
+     * @return array<int, array{name: string, address: string, distanceM: int, lat: float, lng: float, category?: string, typecode?: string}>
+     */
+    private function fallbackExplore(array $center, int $radius, string $keyword): array
+    {
+        if ((getenv('TENCENT_MAP_KEY') ?: '') === '') {
+            return [];
+        }
+
+        try {
+            return (new TencentMapProvider())->explore($center, $radius, $keyword);
+        } catch (Throwable $e) {
+            error_log('[AmapMapProvider] 腾讯周边搜索兜底失败: ' . $e->getMessage());
+            return [];
+        }
     }
 
     /**

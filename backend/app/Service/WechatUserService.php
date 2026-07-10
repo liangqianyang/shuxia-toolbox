@@ -106,6 +106,32 @@ final class WechatUserService
         return $user === null ? null : $this->formatUser($user);
     }
 
+    /**
+     * 更新用户主动填写/选择的头像昵称。
+     *
+     * @return array{id: int, openid: string, nickname: string, avatarUrl: string}
+     */
+    public function updateProfile(int $userId, string $nickname, string $avatarUrl): array
+    {
+        /** @var null|WechatUser $user */
+        $user = WechatUser::query()->find($userId);
+        if ($user === null) {
+            throw new RuntimeException('用户不存在');
+        }
+
+        $nickname = mb_substr(trim($nickname), 0, 120);
+        $avatarUrl = mb_substr(trim($avatarUrl), 0, 600);
+        if ($nickname !== '') {
+            $user->nickname = $nickname;
+        }
+        if ($avatarUrl !== '') {
+            $user->avatar_url = $avatarUrl;
+        }
+        $user->save();
+
+        return $this->formatUser($user);
+    }
+
     /** 调微信 jscode2session。 */
     private function codeToSession(string $code): array
     {

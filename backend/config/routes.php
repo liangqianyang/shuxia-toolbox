@@ -14,6 +14,7 @@ Router::get('/health', [HealthController::class, 'index']);
 Router::addGroup('/api', function (): void {
     Router::get('/health', [HealthController::class, 'index']);
     Router::post('/auth/wechat-login', [AuthController::class, 'wechatLogin']);
+    Router::post('/auth/profile', [AuthController::class, 'saveProfile']);
     Router::get('/beads/palettes', [BeadController::class, 'palettes']);
     Router::post('/beads/estimate', [BeadController::class, 'estimate']);
     Router::get('/food/nearby', [FoodController::class, 'nearby']);

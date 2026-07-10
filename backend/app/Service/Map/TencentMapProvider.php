@@ -115,6 +115,7 @@ final class TencentMapProvider implements MapProvider
             $candidates[] = [
                 'name' => $title,
                 'title' => $title,
+                'address' => is_string($item['address'] ?? null) ? $item['address'] : '',
                 'lng' => (float) $location['lng'],
                 'lat' => (float) $location['lat'],
                 'province' => is_string($item['province'] ?? null) ? $item['province'] : '',
@@ -534,7 +535,7 @@ final class TencentMapProvider implements MapProvider
                     // boundary=nearby(纬度,经度,半径米)
                     'boundary' => sprintf('nearby(%f,%f,%d)', $center['lat'], $center['lng'], $radius),
                     'keyword' => $keyword,
-                    'page_size' => 10,
+                    'page_size' => 20,
                     'orderby' => '_distance',
                     'key' => $key,
                 ]),
@@ -566,6 +567,8 @@ final class TencentMapProvider implements MapProvider
                 'distanceM' => (int) ($item['_distance'] ?? 0),
                 'lat' => (float) $loc['lat'],
                 'lng' => (float) $loc['lng'],
+                'category' => is_string($item['category'] ?? null) ? $item['category'] : '',
+                'typecode' => '',
             ];
         }
 

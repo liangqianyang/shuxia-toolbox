@@ -8,11 +8,31 @@
     </view>
 
     <view class="food__account">
-      <view>
+      <image
+        v-if="accountUser?.avatarUrl"
+        class="food__account-avatar"
+        :src="accountUser.avatarUrl"
+        mode="aspectFill"
+      />
+      <view class="food__account-copy">
         <text class="food__account-title">{{ accountUser?.nickname || (authToken ? '微信用户' : '未登录') }}</text>
         <text class="food__account-sub">{{ authToken ? '饭池和饭局已同步到数据库' : '登录后跨设备同步饭池和饭局' }}</text>
       </view>
-      <view class="food__account-btn" @tap="loginWithWechatProfile">{{ authToken ? '同步资料' : '微信登录' }}</view>
+      <view class="food__account-btn" @tap="openProfileEditor">{{ authToken ? '编辑资料' : '微信登录' }}</view>
+    </view>
+
+    <view v-if="profileEditing" class="food__profile">
+      <button class="food__avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+        <image v-if="profileAvatarUrl" class="food__avatar-preview" :src="profileAvatarUrl" mode="aspectFill" />
+        <text v-else>选头像</text>
+      </button>
+      <input
+        class="food__nickname-input"
+        v-model="profileNickname"
+        type="nickname"
+        placeholder="填写昵称"
+      />
+      <view class="food__profile-save" @tap="saveProfile">保存</view>
     </view>
 
     <view class="food__tabs">
@@ -118,9 +138,12 @@
       <view v-if="activeTab === 'group'" class="food__section">
         <view class="food__room">
           <view class="food__room-code">
-            <text>饭局码 {{ groupRoomCode }}</text>
+            <text>饭局 {{ groupRoomCode }}</text>
             <view class="food__room-actions">
+              <text class="food__room-copy" @tap="newRoom">新饭局</text>
+              <text class="food__room-divider">|</text>
               <text class="food__room-copy" @tap="saveFoodRoomRemote()">{{ roomSaving ? '保存中' : '保存' }}</text>
+              <text class="food__room-divider">|</text>
               <text class="food__room-copy" @tap="copyRoomCode">复制</text>
             </view>
           </view>
@@ -200,15 +223,14 @@
         <text v-if="result.distanceM !== null" class="food__meta-chip">{{ formatDistance(result.distanceM) }}</text>
         <text class="food__meta-chip">{{ selectedPreferenceLabels.join(' / ') }}</text>
         <text
-          class="food__meta-chip"
-          :class="{ 'food__meta-chip--link': result.lat !== null && result.lng !== null }"
+          class="food__meta-chip food__meta-chip--link"
           @tap="openResultLocation"
-        >{{ result.lat !== null && result.lng !== null ? '地图导航' : '暂无坐标' }}</text>
+        >{{ result.lat !== null && result.lng !== null ? '地图导航' : '📍 绑定地点' }}</text>
       </view>
       <text class="food__reason">{{ result.reason }}</text>
       <text v-if="result.address" class="food__address">{{ result.address }}</text>
       <view class="food__ticket-actions">
-        <view class="food__ticket-btn food__ticket-btn--primary" @tap="openResultLocation">打开导航</view>
+        <view class="food__ticket-btn food__ticket-btn--primary" @tap="openResultLocation">{{ result.lat !== null && result.lng !== null ? '打开导航' : '绑定地点' }}</view>
         <view class="food__ticket-btn" @tap="decideFood">换一个</view>
         <view class="food__ticket-btn" @tap="saveResultToPool">加入饭池</view>
         <view class="food__ticket-btn" @tap="markAte">吃过了</view>
@@ -250,7 +272,29 @@
         <text class="food__decide-arrow">→</text>
       </view>
       <view class="food__pool-form">
-        <input class="food__pool-input" v-model="newShopName" placeholder="店名，如 楼下牛肉面" />
+        <input
+          class="food__pool-input"
+          v-model="newShopName"
+          placeholder="店名，如 楼下牛肉面"
+          @input="onShopNameInput"
+        />
+        <view v-if="shopSearching || shopCandidates.length > 0" class="food__place-results">
+          <view v-if="shopSearching" class="food__place-current">搜索地点中…</view>
+          <view
+            v-for="candidate in shopCandidates"
+            :key="candidateKey(candidate)"
+            class="food__place-result"
+            :class="{ 'food__place-result--active': isPickedShop(candidate) }"
+            @tap="chooseShopCandidate(candidate)"
+          >
+            <view class="food__place-result-copy">
+              <text class="food__place-result-title">{{ candidate.title || candidate.name }}</text>
+              <text class="food__place-result-sub">{{ candidate.address || placeCandidateSubtitle(candidate) }}</text>
+            </view>
+            <text class="food__place-result-action">{{ isPickedShop(candidate) ? '已选' : '带定位' }}</text>
+          </view>
+        </view>
+        <text v-if="pickedShopCoords" class="food__caption food__caption--hint">已绑定定位，加入后可直接导航</text>
         <input class="food__pool-input" v-model="newShopNote" placeholder="备注，如 快速 / 人均 30 / 适合午餐" />
         <view class="food__pool-add" @tap="addPoolItem">加入「{{ activePoolGroupName }}」</view>
       </view>
@@ -262,7 +306,14 @@
       <view v-else class="food__pool-list">
         <view v-for="item in currentGroupItems" :key="item.id" class="food__pool-item">
           <view class="food__pool-copy">
-            <text class="food__pool-name">{{ item.name }}</text>
+            <view class="food__pool-nameline">
+              <text class="food__pool-name">{{ item.name }}</text>
+              <text
+                v-if="item.lat === null || item.lng === null"
+                class="food__pool-badge"
+                @tap.stop="bindPoolItem(item)"
+              >未绑定</text>
+            </view>
             <text class="food__pool-note">{{ item.note || '自定义店家' }}</text>
           </view>
           <view class="food__pool-delete" @tap="removePoolItem(item.id)">删</view>
@@ -310,6 +361,8 @@ interface FoodShop {
   lng: number | null
   distanceM: number | null
   source: SourceMode
+  category?: string
+  typecode?: string
   groupId?: string
 }
 
@@ -325,6 +378,8 @@ interface NearbyItem {
   distanceM: number
   lat: number
   lng: number
+  category: string
+  typecode: string
 }
 
 interface NearbyResponse {
@@ -334,6 +389,7 @@ interface NearbyResponse {
 interface GeocodeCandidate {
   name: string
   title: string
+  address: string
   lng: number
   lat: number
   province: string
@@ -397,6 +453,10 @@ interface AccountUser {
 interface LoginResponse {
   token: string
   expiresAt: string
+  user: AccountUser
+}
+
+interface ProfileResponse {
   user: AccountUser
 }
 
@@ -485,6 +545,16 @@ const roomSaving = ref(false)
 const pendingRoomCode = ref('')
 const authToken = ref('')
 const accountUser = ref<AccountUser | null>(null)
+const profileEditing = ref(false)
+const profileNickname = ref('')
+const profileAvatarUrl = ref('')
+// 无坐标自愈：查找/回写位置时的并发锁
+const resolving = ref(false)
+// 录入即搜索：饭池店名框的候选与已选坐标
+const shopCandidates = ref<GeocodeCandidate[]>([])
+const shopSearching = ref(false)
+const pickedShopCoords = ref<{ lat: number, lng: number, address: string } | null>(null)
+let shopSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 const selectedPreferenceLabels = computed(() => {
   const selected = preferences.value.filter((tag) => selectedPreferenceIds.value.includes(tag.id)).map((tag) => tag.label)
@@ -571,6 +641,43 @@ async function loginWithWechatProfile(): Promise<void> {
     uni.showToast({ title: profileSynced ? '资料已同步' : '饭池已同步', icon: 'success' })
   } catch (e) {
     uni.showToast({ title: e instanceof Error ? e.message : '微信登录失败', icon: 'none' })
+  }
+}
+
+async function openProfileEditor(): Promise<void> {
+  const ok = await ensureAccount()
+  if (!ok) {
+    uni.showToast({ title: '微信登录失败', icon: 'none' })
+    return
+  }
+  profileNickname.value = accountUser.value?.nickname || ''
+  profileAvatarUrl.value = accountUser.value?.avatarUrl || ''
+  profileEditing.value = !profileEditing.value
+}
+
+function onChooseAvatar(event: { detail?: { avatarUrl?: string } }): void {
+  const avatarUrl = event.detail?.avatarUrl || ''
+  if (avatarUrl === '') return
+  profileAvatarUrl.value = avatarUrl
+}
+
+async function saveProfile(): Promise<void> {
+  const ok = await ensureAccount()
+  if (!ok) {
+    uni.showToast({ title: '请先微信登录', icon: 'none' })
+    return
+  }
+  try {
+    const data = await apiPost<ProfileResponse>('/api/auth/profile', {
+      nickname: compactText(profileNickname.value),
+      avatarUrl: profileAvatarUrl.value,
+    })
+    accountUser.value = data.user
+    uni.setStorageSync(USER_STORAGE_KEY, data.user)
+    profileEditing.value = false
+    uni.showToast({ title: '资料已保存', icon: 'success' })
+  } catch (e) {
+    uni.showToast({ title: e instanceof Error ? e.message : '资料保存失败', icon: 'none' })
   }
 }
 
@@ -855,25 +962,137 @@ function addPoolItem(): void {
     uni.showToast({ title: '这个饭池里已经有这家', icon: 'none' })
     return
   }
+  // 选了建议就带坐标入库；没选（纯手输「妈妈做的饭」这类）就留空，走无坐标自愈。
+  const picked = pickedShopCoords.value
   poolItems.value.unshift({
     id: genId(),
     name,
     note: compactText(newShopNote.value),
-    address: '',
-    lat: null,
-    lng: null,
+    address: picked?.address ?? '',
+    lat: picked?.lat ?? null,
+    lng: picked?.lng ?? null,
     distanceM: null,
     source: 'pool',
+    category: '',
+    typecode: '',
     groupId: activePoolGroupId.value,
   })
   newShopName.value = ''
   newShopNote.value = ''
+  pickedShopCoords.value = null
+  shopCandidates.value = []
+  if (shopSearchTimer) {
+    clearTimeout(shopSearchTimer)
+    shopSearchTimer = null
+  }
   savePool()
+}
+
+// 店名输入 debounce 搜索地点候选；改动店名即清掉上次绑定的坐标。
+function onShopNameInput(): void {
+  pickedShopCoords.value = null
+  const query = compactText(newShopName.value)
+  if (shopSearchTimer) {
+    clearTimeout(shopSearchTimer)
+    shopSearchTimer = null
+  }
+  if (query.length < 2) {
+    shopCandidates.value = []
+    shopSearching.value = false
+    return
+  }
+  shopSearchTimer = setTimeout(() => {
+    void searchShopCandidates(query)
+  }, 350)
+}
+
+async function searchShopCandidates(query: string): Promise<void> {
+  shopSearching.value = true
+  try {
+    const res = await apiGet<GeocodeResponse>('/api/travel/geocode', {
+      q: query,
+      region: currentRegion.value,
+    })
+    // 若用户在等待期间已选定或清空，丢弃过期结果。
+    if (pickedShopCoords.value || compactText(newShopName.value) !== query) return
+    shopCandidates.value = (res.candidates ?? []).slice(0, 5)
+  } catch {
+    shopCandidates.value = []
+  } finally {
+    shopSearching.value = false
+  }
+}
+
+function chooseShopCandidate(candidate: GeocodeCandidate): void {
+  newShopName.value = candidate.title || candidate.name
+  pickedShopCoords.value = { lat: candidate.lat, lng: candidate.lng, address: candidate.address || '' }
+  if (candidate.city || candidate.province) {
+    currentRegion.value = candidate.city || candidate.province || currentRegion.value
+  }
+  shopCandidates.value = []
+  shopSearching.value = false
+}
+
+function isPickedShop(candidate: GeocodeCandidate): boolean {
+  return pickedShopCoords.value !== null
+    && Math.abs(pickedShopCoords.value.lat - candidate.lat) < 0.000001
+    && Math.abs(pickedShopCoords.value.lng - candidate.lng) < 0.000001
 }
 
 function removePoolItem(id: string): void {
   poolItems.value = poolItems.value.filter((item) => item.id !== id)
   savePool()
+}
+
+// 从饭池列表直接给某条无坐标记录补定位（Layer1 自愈的第二入口）。
+async function bindPoolItem(item: FoodShop): Promise<void> {
+  if (resolving.value) return
+  resolving.value = true
+  uni.showLoading({ title: '查找位置中', mask: true })
+  let candidates: GeocodeCandidate[] = []
+  try {
+    const res = await apiGet<GeocodeResponse>('/api/travel/geocode', {
+      q: item.name,
+      region: currentRegion.value,
+    })
+    candidates = res.candidates ?? []
+  } catch (e) {
+    uni.hideLoading()
+    resolving.value = false
+    uni.showToast({ title: e instanceof Error ? e.message : '查找失败', icon: 'none' })
+    return
+  }
+  uni.hideLoading()
+  resolving.value = false
+
+  if (candidates.length === 0) {
+    fallbackSearchInMap(item.name)
+    return
+  }
+  if (candidates.length === 1) {
+    writePoolItemCoords(item.id, candidates[0])
+    return
+  }
+  uni.showActionSheet({
+    itemList: candidates.slice(0, 6).map((c) => truncateLabel(`${c.title || c.name}｜${c.address || c.city || ''}`)),
+    success: (r) => {
+      const picked = candidates[r.tapIndex]
+      if (picked) writePoolItemCoords(item.id, picked)
+    },
+  })
+}
+
+// 回写坐标到饭池记录；若当前饭票正是这家，也一并更新，UI 立即变成已绑定。
+function writePoolItemCoords(id: string, candidate: GeocodeCandidate): void {
+  const idx = poolItems.value.findIndex((item) => item.id === id)
+  if (idx < 0) return
+  const address = candidate.address || poolItems.value[idx].address || ''
+  poolItems.value[idx] = { ...poolItems.value[idx], lat: candidate.lat, lng: candidate.lng, address }
+  if (result.value && result.value.id === id) {
+    result.value = { ...result.value, lat: candidate.lat, lng: candidate.lng, address }
+  }
+  savePool()
+  uni.showToast({ title: '已绑定地点', icon: 'success' })
 }
 
 function loadHistory(): void {
@@ -1048,6 +1267,24 @@ async function copyRoomCode(): Promise<void> {
   uni.setClipboardData({
     data: groupRoomCode.value,
     success: () => uni.showToast({ title: '饭局码已复制', icon: 'success' }),
+  })
+}
+
+// 开一顿新饭局：换新码、清空参与人与避雷，回到默认配置。
+function newRoom(): void {
+  uni.showModal({
+    title: '开启新饭局',
+    content: '会生成新的饭局码，并清空当前参与人和避雷项，确定吗？',
+    success: (res) => {
+      if (!res.confirm) return
+      groupRoomCode.value = randomRoomCode()
+      roomCodeInput.value = ''
+      groupMembers.value = [{ id: genId(), name: '我' }]
+      groupAvoidOptions.value = DEFAULT_GROUP_AVOIDS.slice()
+      selectedGroupAvoidIds.value = []
+      saveGroup()
+      uni.showToast({ title: `新饭局 ${groupRoomCode.value}`, icon: 'none' })
+    },
   })
 }
 
@@ -1243,6 +1480,8 @@ async function fetchNearbyShops(keyword: string): Promise<FoodShop[]> {
     lng: item.lng,
     distanceM: item.distanceM,
     source: 'nearby',
+    category: item.category || '',
+    typecode: item.typecode || '',
   }))
 }
 
@@ -1267,6 +1506,8 @@ function saveResultToPool(): void {
       lng: shop.lng,
       distanceM: null,
       source: 'pool',
+      category: shop.category || '',
+      typecode: shop.typecode || '',
       groupId,
     })
     savePool()
@@ -1286,11 +1527,93 @@ function saveResultToPool(): void {
   })
 }
 
-function openResultLocation(): void {
-  if (!result.value?.lat || !result.value?.lng) {
-    uni.showToast({ title: '这家店暂无坐标', icon: 'none' })
+async function openResultLocation(): Promise<void> {
+  if (!result.value) return
+  // Layer1 自愈：没坐标不再弹「暂无坐标」死胡同，转去查找并绑定位置。
+  if (result.value.lat === null || result.value.lng === null) {
+    await resolveResultCoords()
     return
   }
+  navigateToResult()
+}
+
+// 拿店名 + 当前城市搜地点，让用户从分店里选一个，选中即回写坐标并导航。
+async function resolveResultCoords(): Promise<void> {
+  if (!result.value || resolving.value) return
+  const name = result.value.name
+  resolving.value = true
+  uni.showLoading({ title: '查找位置中', mask: true })
+  let candidates: GeocodeCandidate[] = []
+  try {
+    const res = await apiGet<GeocodeResponse>('/api/travel/geocode', {
+      q: name,
+      region: currentRegion.value,
+    })
+    candidates = res.candidates ?? []
+  } catch (e) {
+    uni.hideLoading()
+    resolving.value = false
+    uni.showToast({ title: e instanceof Error ? e.message : '查找失败', icon: 'none' })
+    return
+  }
+  uni.hideLoading()
+  resolving.value = false
+
+  if (candidates.length === 0) {
+    // Layer2 降级：搜不到就外链地图 App —— 复制店名让用户自己去搜。
+    fallbackSearchInMap(name)
+    return
+  }
+  if (candidates.length === 1) {
+    applyResolvedCoords(candidates[0])
+    return
+  }
+  // 多家分店必须让用户选，否则可能绑错门店。
+  uni.showActionSheet({
+    itemList: candidates.slice(0, 6).map((c) => truncateLabel(`${c.title || c.name}｜${c.address || c.city || ''}`)),
+    success: (r) => {
+      const picked = candidates[r.tapIndex]
+      if (picked) applyResolvedCoords(picked)
+    },
+  })
+}
+
+// 回写坐标到饭票和饭池同一条记录，下次抽中即带坐标（存量手动项被顺手治好）。
+function applyResolvedCoords(candidate: GeocodeCandidate): void {
+  if (!result.value) return
+  const address = candidate.address || result.value.address || ''
+  const targetId = result.value.id
+  const targetName = result.value.name
+  result.value = { ...result.value, lat: candidate.lat, lng: candidate.lng, address }
+  const idx = poolItems.value.findIndex(
+    (item) => item.id === targetId || (item.name === targetName && (item.lat === null || item.lng === null)),
+  )
+  if (idx >= 0) {
+    poolItems.value[idx] = { ...poolItems.value[idx], lat: candidate.lat, lng: candidate.lng, address }
+    savePool()
+  }
+  uni.showToast({ title: '已绑定地点', icon: 'success' })
+  navigateToResult()
+}
+
+function fallbackSearchInMap(name: string): void {
+  uni.showModal({
+    title: '没找到这家店的位置',
+    content: `可以复制「${name}」到地图 App 里搜索。`,
+    confirmText: '复制店名',
+    cancelText: '取消',
+    success: (res) => {
+      if (!res.confirm) return
+      uni.setClipboardData({
+        data: name,
+        success: () => uni.showToast({ title: '已复制店名', icon: 'success' }),
+      })
+    },
+  })
+}
+
+function navigateToResult(): void {
+  if (!result.value || result.value.lat === null || result.value.lng === null) return
 
   const system = uni.getSystemInfoSync()
   if (system.platform === 'devtools') {
@@ -1333,7 +1656,7 @@ function uniqueByName(items: FoodShop[]): FoodShop[] {
 
 function matchesAvoid(item: FoodShop, avoided: string[]): boolean {
   if (avoided.length === 0) return false
-  const text = `${item.name} ${item.note} ${item.address}`.toLowerCase()
+  const text = `${item.name} ${item.note} ${item.address} ${item.category || ''} ${item.typecode || ''}`.toLowerCase()
   return avoided.some((label) => {
     const key = label.toLowerCase()
     if (key.includes('不吃')) {
@@ -1356,6 +1679,11 @@ function formatDistance(value: number | null): string {
 
 function compactText(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
+}
+
+function truncateLabel(value: string): string {
+  const text = compactText(value).replace(/｜$/, '')
+  return text.length > 28 ? `${text.slice(0, 27)}…` : text
 }
 
 function genId(): string {
@@ -1517,6 +1845,19 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     background: #ffffff;
   }
 
+  &__account-avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: #eef1f2;
+    flex-shrink: 0;
+  }
+
+  &__account-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
   &__account-title,
   &__account-sub {
     display: block;
@@ -1547,6 +1888,67 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     font-size: 24rpx;
     font-weight: 800;
     flex-shrink: 0;
+  }
+
+  &__profile {
+    margin: -4rpx 0 18rpx;
+    padding: 18rpx;
+    border: 2rpx solid #e2e7e9;
+    border-radius: 16rpx;
+    display: grid;
+    grid-template-columns: 92rpx 1fr 96rpx;
+    gap: 12rpx;
+    align-items: center;
+    background: #ffffff;
+  }
+
+  &__avatar-btn {
+    width: 92rpx;
+    height: 92rpx;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1d6671;
+    background: #eef8fa;
+    font-size: 22rpx;
+    font-weight: 800;
+    line-height: 1.2;
+
+    &::after {
+      border: 0;
+    }
+  }
+
+  &__avatar-preview {
+    width: 92rpx;
+    height: 92rpx;
+    border-radius: 50%;
+  }
+
+  &__nickname-input {
+    min-height: 76rpx;
+    padding: 0 20rpx;
+    border: 2rpx solid #e2e7e9;
+    border-radius: 14rpx;
+    background: #f8faf9;
+    color: #202326;
+    font-size: 26rpx;
+  }
+
+  &__profile-save {
+    min-height: 76rpx;
+    border-radius: 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    background: #202326;
+    font-size: 26rpx;
+    font-weight: 800;
   }
 
   &__tabs {
@@ -1896,10 +2298,15 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     font-weight: 800;
   }
 
+  &__room-divider {
+    color: #bcd3d7;
+    font-size: 22rpx;
+  }
+
   &__room-actions {
     display: flex;
     align-items: center;
-    gap: 18rpx;
+    gap: 12rpx;
     flex-shrink: 0;
   }
 
@@ -2157,6 +2564,27 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     min-width: 0;
   }
 
+  &__pool-nameline {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    min-width: 0;
+  }
+
+  &__pool-badge {
+    flex-shrink: 0;
+    min-height: 40rpx;
+    padding: 0 14rpx;
+    border-radius: 999rpx;
+    display: inline-flex;
+    align-items: center;
+    color: #b06a00;
+    background: #fff3df;
+    font-size: 20rpx;
+    font-weight: 800;
+    line-height: 1;
+  }
+
   &__pool-name,
   &__pool-note {
     display: block;
@@ -2166,6 +2594,7 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__pool-name {
+    min-width: 0;
     color: #202326;
     font-size: 28rpx;
     font-weight: 800;

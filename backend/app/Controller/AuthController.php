@@ -39,4 +39,28 @@ final class AuthController extends AbstractController
 
         return $this->ok($result);
     }
+
+    /**
+     * 保存用户主动选择/填写的资料。
+     */
+    #[RateLimit(create: 5, capacity: 12, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function saveProfile(RequestInterface $request): array
+    {
+        $userId = $this->users->userIdByToken((string) $request->header('X-User-Token', ''));
+        if ($userId === null) {
+            throw new BizException(401, '请先微信登录');
+        }
+
+        try {
+            $user = $this->users->updateProfile(
+                $userId,
+                (string) $request->input('nickname', ''),
+                (string) $request->input('avatarUrl', ''),
+            );
+        } catch (Throwable $e) {
+            throw new BizException(500, '资料保存失败：' . $e->getMessage(), null, $e);
+        }
+
+        return $this->ok(['user' => $user]);
+    }
 }

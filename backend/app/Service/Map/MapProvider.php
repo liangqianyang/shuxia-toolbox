@@ -88,7 +88,7 @@ interface MapProvider
      * 周边搜索（探索）：中心点 radius 米内、匹配 keyword 的 POI。
      *
      * @param array{lat: float, lng: float} $center
-     * @return array<int, array{name: string, address: string, distanceM: int, lat: float, lng: float}>
+     * @return array<int, array{name: string, address: string, distanceM: int, lat: float, lng: float, category?: string, typecode?: string}>
      */
     public function explore(array $center, int $radius, string $keyword): array;
 }

@@ -65,6 +65,8 @@ final class FoodController extends AbstractController
                     'distanceM' => (int) ($item['distanceM'] ?? 0),
                     'lat' => (float) ($item['lat'] ?? 0),
                     'lng' => (float) ($item['lng'] ?? 0),
+                    'category' => (string) ($item['category'] ?? ''),
+                    'typecode' => (string) ($item['typecode'] ?? ''),
                 ];
             }, $items),
         ]);
