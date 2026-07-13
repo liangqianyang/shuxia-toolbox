@@ -304,12 +304,26 @@
         </view>
       </view>
       <text class="food__caption food__caption--hint">长按分组可重命名或删除</text>
-      <view class="food__decide food__decide--pool" @tap="decideFromPoolTab">
+      <view class="food__decide food__decide--pool" :class="{ 'food__decide--loading': deciding }" @tap="decideFromPoolTab">
         <view>
           <text class="food__decide-title">{{ poolDecideTitle }}</text>
           <text class="food__decide-sub">{{ poolDecideSubText }}</text>
         </view>
         <text class="food__decide-arrow">→</text>
+      </view>
+      <view v-if="deciding" class="food__draw">
+        <view class="food__draw-wheel">
+          <view class="food__draw-ring"></view>
+          <text class="food__draw-core">抽</text>
+        </view>
+        <view class="food__draw-copy">
+          <text class="food__draw-stage">{{ drawStage }}</text>
+          <text class="food__draw-name">{{ drawRollingName }}</text>
+          <view class="food__draw-progress">
+            <view class="food__draw-progress-bar" :style="{ width: drawProgress + '%' }"></view>
+          </view>
+          <text class="food__draw-hint">{{ drawHint }}</text>
+        </view>
       </view>
       <view class="food__pool-form">
         <input
