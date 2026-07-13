@@ -23,8 +23,7 @@ final class WechatUserService
 
     public function __construct(
         private readonly ConfigInterface $config,
-    )
-    {
+    ) {
         $this->client = new Client();
     }
 

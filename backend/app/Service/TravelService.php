@@ -307,7 +307,7 @@ final class TravelService
     private function mergeLockedStops(array $day, array $lockedStops): array
     {
         $stops = is_array($day['stops'] ?? null) ? array_values($day['stops']) : [];
-        usort($lockedStops, fn ($a, $b) => (int) ($a['slot'] ?? 0) <=> (int) ($b['slot'] ?? 0));
+        usort($lockedStops, fn($a, $b) => (int) ($a['slot'] ?? 0) <=> (int) ($b['slot'] ?? 0));
         foreach ($lockedStops as $item) {
             if (! is_array($item)) {
                 continue;
@@ -379,8 +379,8 @@ final class TravelService
                     $stop['lat'] = null;
                 }
             } catch (RuntimeException $_) {
-                $stop['lng'] = $stop['lng'] ?? null;
-                $stop['lat'] = $stop['lat'] ?? null;
+                $stop['lng'] ??= null;
+                $stop['lat'] ??= null;
             }
         }
         unset($stop);
@@ -917,7 +917,7 @@ final class TravelService
         $sortedLng = $lngs;
         sort($sortedLat);
         sort($sortedLng);
-        $median = static fn (array $a): float => $a[intdiv(count($a), 2)];
+        $median = static fn(array $a): float => $a[intdiv(count($a), 2)];
         $medLat = $median($sortedLat);
         $medLng = $median($sortedLng);
 

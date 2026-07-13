@@ -132,7 +132,7 @@ final class FoodUserDataService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(static fn (FoodPreference $item): array => [
+            ->map(static fn(FoodPreference $item): array => [
                 'id' => (string) $item->client_id,
                 'label' => (string) $item->label,
             ])
@@ -148,7 +148,7 @@ final class FoodUserDataService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(static fn (FoodPoolGroup $item): array => [
+            ->map(static fn(FoodPoolGroup $item): array => [
                 'id' => (string) $item->client_id,
                 'name' => (string) $item->name,
             ])
@@ -164,7 +164,7 @@ final class FoodUserDataService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(static fn (FoodPoolItem $item): array => [
+            ->map(static fn(FoodPoolItem $item): array => [
                 'id' => (string) $item->client_id,
                 'groupId' => (string) $item->group_id !== '' ? (string) $item->group_id : 'default',
                 'name' => (string) $item->name,
@@ -187,7 +187,7 @@ final class FoodUserDataService
             ->orderBy('sort_order')
             ->orderByDesc('eaten_at')
             ->get()
-            ->map(static fn (FoodHistory $item): array => [
+            ->map(static fn(FoodHistory $item): array => [
                 'id' => (string) $item->client_id,
                 'name' => (string) $item->name,
                 'at' => strtotime((string) $item->eaten_at) * 1000,

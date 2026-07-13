@@ -77,7 +77,7 @@
         >
           <view class="food__place-result-copy">
             <text class="food__place-result-title">{{ candidate.title || candidate.name }}</text>
-            <text class="food__place-result-sub">{{ placeCandidateSubtitle(candidate) }}</text>
+            <text class="food__place-result-sub">{{ shopCandidateSubtitle(candidate) }}</text>
           </view>
           <text class="food__place-result-action">{{ isSelectedPlace(candidate) ? '已选' : '选择' }}</text>
         </view>
@@ -211,30 +211,60 @@
         </view>
         <text class="food__decide-arrow">→</text>
       </view>
+      <view v-if="deciding" class="food__draw">
+        <view class="food__draw-wheel">
+          <view class="food__draw-ring"></view>
+          <text class="food__draw-core">抽</text>
+        </view>
+        <view class="food__draw-copy">
+          <text class="food__draw-stage">{{ drawStage }}</text>
+          <text class="food__draw-name">{{ drawRollingName }}</text>
+          <view class="food__draw-progress">
+            <view class="food__draw-progress-bar" :style="{ width: drawProgress + '%' }"></view>
+          </view>
+          <text class="food__draw-hint">{{ drawHint }}</text>
+        </view>
+      </view>
     </view>
 
     <view v-if="activeTab === 'ticket' && result" class="food__ticket">
-      <view class="food__ticket-head">
-        <text class="food__ticket-kicker">今日饭票</text>
-        <text class="food__ticket-source">{{ result.scene === 'group' ? '饭局抽中' : result.source === 'nearby' ? '附近抽中' : '饭池抽中' }}</text>
+      <view v-if="deciding" class="food__draw food__draw--ticket">
+        <view class="food__draw-wheel">
+          <view class="food__draw-ring"></view>
+          <text class="food__draw-core">抽</text>
+        </view>
+        <view class="food__draw-copy">
+          <text class="food__draw-stage">{{ drawStage }}</text>
+          <text class="food__draw-name">{{ drawRollingName }}</text>
+          <view class="food__draw-progress">
+            <view class="food__draw-progress-bar" :style="{ width: drawProgress + '%' }"></view>
+          </view>
+          <text class="food__draw-hint">{{ drawHint }}</text>
+        </view>
       </view>
-      <text class="food__shop-name">{{ result.name }}</text>
-      <view class="food__meta">
-        <text v-if="result.distanceM !== null" class="food__meta-chip">{{ formatDistance(result.distanceM) }}</text>
-        <text class="food__meta-chip">{{ selectedPreferenceLabels.join(' / ') }}</text>
-        <text
-          class="food__meta-chip food__meta-chip--link"
-          @tap="openResultLocation"
-        >{{ result.lat !== null && result.lng !== null ? '地图导航' : '📍 绑定地点' }}</text>
-      </view>
-      <text class="food__reason">{{ result.reason }}</text>
-      <text v-if="result.address" class="food__address">{{ result.address }}</text>
-      <view class="food__ticket-actions">
-        <view class="food__ticket-btn food__ticket-btn--primary" @tap="openResultLocation">{{ result.lat !== null && result.lng !== null ? '打开导航' : '绑定地点' }}</view>
-        <view class="food__ticket-btn" @tap="decideFood">换一个</view>
-        <view class="food__ticket-btn" @tap="saveResultToPool">加入饭池</view>
-        <view class="food__ticket-btn" @tap="markAte">吃过了</view>
-      </view>
+      <template v-else>
+        <view class="food__ticket-head">
+          <text class="food__ticket-kicker">今日饭票</text>
+          <text class="food__ticket-source">{{ result.scene === 'group' ? '饭局抽中' : result.source === 'nearby' ? '附近抽中' : '饭池抽中' }}</text>
+        </view>
+        <text class="food__shop-name">{{ result.name }}</text>
+        <view class="food__meta">
+          <text v-if="result.distanceM !== null" class="food__meta-chip">{{ formatDistance(result.distanceM) }}</text>
+          <text class="food__meta-chip">{{ selectedPreferenceLabels.join(' / ') }}</text>
+          <text
+            class="food__meta-chip food__meta-chip--link"
+            @tap="openResultLocation"
+          >{{ result.lat !== null && result.lng !== null ? '地图导航' : '📍 绑定地点' }}</text>
+        </view>
+        <text class="food__reason">{{ result.reason }}</text>
+        <text v-if="result.address" class="food__address">{{ result.address }}</text>
+        <view class="food__ticket-actions">
+          <view class="food__ticket-btn food__ticket-btn--primary" @tap="openResultLocation">{{ result.lat !== null && result.lng !== null ? '打开导航' : '绑定地点' }}</view>
+          <view class="food__ticket-btn" @tap="decideFood">换一个</view>
+          <view class="food__ticket-btn" @tap="saveResultToPool">加入饭池</view>
+          <view class="food__ticket-btn" @tap="markAte">吃过了</view>
+        </view>
+      </template>
     </view>
 
     <view v-else-if="activeTab === 'ticket'" class="food__panel">
@@ -244,13 +274,23 @@
     </view>
 
     <view v-if="activeTab === 'pool'" class="food__panel">
+      <view class="food__pool-location">
+        <view class="food__pool-location-copy">
+          <text class="food__pool-location-kicker">当前搜索位置</text>
+          <text class="food__pool-location-text">{{ poolLocationText }}</text>
+        </view>
+        <view class="food__pool-location-actions">
+          <text class="food__pool-location-action" @tap="locateMe">定位</text>
+          <text class="food__pool-location-action" @tap="openNearbyLocationSetup">{{ poolLocationActionText }}</text>
+        </view>
+      </view>
       <view class="food__section-head">
         <text class="food__section-title">我的饭池</text>
-        <text class="food__caption">{{ currentGroupItems.length }} 家店</text>
+        <text class="food__caption">{{ activePoolGroupCountText }}</text>
       </view>
       <view class="food__tags">
         <view
-          v-for="group in poolGroups"
+          v-for="group in visiblePoolGroups"
           :key="group.id"
           class="food__tag"
           :class="{ 'food__tag--active': activePoolGroupId === group.id }"
@@ -266,8 +306,8 @@
       <text class="food__caption food__caption--hint">长按分组可重命名或删除</text>
       <view class="food__decide food__decide--pool" @tap="decideFromPoolTab">
         <view>
-          <text class="food__decide-title">从「{{ activePoolGroupName }}」抽一个</text>
-          <text class="food__decide-sub">{{ currentGroupItems.length > 0 ? `${currentGroupItems.length} 家自定义店，自动避开最近吃过` : '先录入常吃店家' }}</text>
+          <text class="food__decide-title">{{ poolDecideTitle }}</text>
+          <text class="food__decide-sub">{{ poolDecideSubText }}</text>
         </view>
         <text class="food__decide-arrow">→</text>
       </view>
@@ -278,8 +318,9 @@
           placeholder="店名，如 楼下牛肉面"
           @input="onShopNameInput"
         />
-        <view v-if="shopSearching || shopCandidates.length > 0" class="food__place-results">
+        <view v-if="shopSearching || shopCandidates.length > 0 || shopSearched" class="food__place-results">
           <view v-if="shopSearching" class="food__place-current">搜索地点中…</view>
+          <view v-else-if="shopSearched && shopCandidates.length === 0" class="food__place-current">{{ shopSearchEmptyText }}</view>
           <view
             v-for="candidate in shopCandidates"
             :key="candidateKey(candidate)"
@@ -289,18 +330,18 @@
           >
             <view class="food__place-result-copy">
               <text class="food__place-result-title">{{ candidate.title || candidate.name }}</text>
-              <text class="food__place-result-sub">{{ candidate.address || placeCandidateSubtitle(candidate) }}</text>
+              <text class="food__place-result-sub">{{ shopCandidateSubtitle(candidate) }}</text>
             </view>
             <text class="food__place-result-action">{{ isPickedShop(candidate) ? '已选' : '带定位' }}</text>
           </view>
         </view>
         <text v-if="pickedShopCoords" class="food__caption food__caption--hint">已绑定定位，加入后可直接导航</text>
         <input class="food__pool-input" v-model="newShopNote" placeholder="备注，如 快速 / 人均 30 / 适合午餐" />
-        <view class="food__pool-add" @tap="addPoolItem">加入「{{ activePoolGroupName }}」</view>
+        <view class="food__pool-add" @tap="addPoolItem">{{ poolAddButtonText }}</view>
       </view>
 
       <view v-if="currentGroupItems.length === 0" class="food__empty">
-        <text>「{{ activePoolGroupName }}」还是空的，先录入几家平时常吃的店。</text>
+        <text>{{ poolEmptyText }}</text>
       </view>
 
       <view v-else class="food__pool-list">
@@ -335,7 +376,7 @@
 
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 type SourceMode = 'nearby' | 'pool' | 'group'
 type FoodTab = 'nearby' | 'ticket' | 'pool' | 'group'
@@ -395,6 +436,7 @@ interface GeocodeCandidate {
   province: string
   city: string
   adcode: string
+  distanceM?: number
 }
 
 interface GeocodeResponse {
@@ -496,6 +538,11 @@ const DEFAULT_GROUP_AVOIDS: PreferenceTag[] = [
   { id: 'bbq', label: '烧烤' },
 ]
 
+const DRAW_MIN_DURATION_MS = 1400
+const DRAW_REVEAL_DURATION_MS = 420
+const DRAW_STAGES = ['筛选候选店', '避开最近吃过', '摇匀选择', '准备揭晓']
+const DRAW_FALLBACK_NAMES = ['热乎面馆', '家常小炒', '附近好店', '人气餐馆', '今天的惊喜', '下饭小馆']
+
 const radiusOptions = [
   { label: '500m', value: 500 },
   { label: '1km', value: 1000 },
@@ -519,6 +566,9 @@ const placeQuery = ref('')
 const placeSearching = ref(false)
 const placeSearched = ref(false)
 const deciding = ref(false)
+const drawStage = ref(DRAW_STAGES[0])
+const drawRollingName = ref('正在找好吃的')
+const drawProgress = ref(0)
 const preferenceEditing = ref(false)
 const newPreferenceLabel = ref('')
 const newMemberName = ref('')
@@ -528,6 +578,8 @@ const newShopName = ref('')
 const newShopNote = ref('')
 const locationLabel = ref('尚未选择地点')
 const center = ref<{ lat: number, lng: number } | null>(null)
+// 设备真实定位：center 会在输入/搜索时被清空，这个保留下来，让地点搜索能带上坐标按“离我近”排序。
+const deviceLocation = ref<{ lat: number, lng: number } | null>(null)
 const currentRegion = ref('')
 const placeCandidates = ref<GeocodeCandidate[]>([])
 const preferences = ref<PreferenceTag[]>([])
@@ -553,8 +605,12 @@ const resolving = ref(false)
 // 录入即搜索：饭池店名框的候选与已选坐标
 const shopCandidates = ref<GeocodeCandidate[]>([])
 const shopSearching = ref(false)
+const shopSearched = ref(false)
+const shopSearchError = ref('')
 const pickedShopCoords = ref<{ lat: number, lng: number, address: string } | null>(null)
 let shopSearchTimer: ReturnType<typeof setTimeout> | null = null
+let drawTimer: ReturnType<typeof setInterval> | null = null
+let shopSearchSeq = 0
 
 const selectedPreferenceLabels = computed(() => {
   const selected = preferences.value.filter((tag) => selectedPreferenceIds.value.includes(tag.id)).map((tag) => tag.label)
@@ -571,10 +627,26 @@ const currentGroupItems = computed(() =>
   poolItems.value.filter((item) => (item.groupId || DEFAULT_POOL_GROUP_ID) === activePoolGroupId.value),
 )
 
+const visiblePoolGroups = computed(() => normalizePoolGroups(poolGroups.value))
+
 const activePoolGroupName = computed(() => {
   const found = poolGroups.value.find((group) => group.id === activePoolGroupId.value)
-  return found?.name ?? '我的饭池'
+  return readableText(found?.name, '我的饭池')
 })
+
+const activePoolGroupCountText = computed(() => `${currentGroupItems.value.length} 家店`)
+
+const poolDecideTitle = computed(() => `从「${activePoolGroupName.value}」抽一个`)
+
+const poolDecideSubText = computed(() =>
+  currentGroupItems.value.length > 0
+    ? `${currentGroupItems.value.length} 家自定义店，自动避开最近吃过`
+    : '先录入常吃店家',
+)
+
+const poolAddButtonText = computed(() => `加入「${activePoolGroupName.value}」`)
+
+const poolEmptyText = computed(() => `「${activePoolGroupName.value}」还是空的，先录入几家平时常吃的店。`)
 
 const decideTitle = computed(() => {
   if (sourceMode.value === 'pool') return `从「${activePoolGroupName.value}」抽一个`
@@ -593,6 +665,32 @@ const decideHint = computed(() => {
   }
   return center.value ? `从 ${formatDistance(radiusM.value)} 内搜索 ${nearbyKeyword.value}` : '先选择地点或使用当前位置'
 })
+
+const drawHint = computed(() => {
+  if (sourceMode.value === 'pool') {
+    return `从「${activePoolGroupName.value}」里抽，最近吃过的会尽量避开`
+  }
+  if (sourceMode.value === 'group') {
+    const avoidText = selectedGroupAvoidLabels.value.length > 0 ? `，避开 ${selectedGroupAvoidLabels.value.length} 项` : ''
+    return `${groupMembers.value.length} 人饭局正在合并附近和饭池${avoidText}`
+  }
+  return center.value ? `${formatDistance(radiusM.value)} 内按“${selectedPreferenceLabels.value.join('、')}”筛选` : '先确认地点，再给你抽今日饭票'
+})
+
+const poolLocationText = computed(() => {
+  const label = readableText(locationLabel.value, '')
+  if (center.value && label !== '' && label !== '尚未选择地点') return label
+  if (currentRegion.value !== '') return `${currentRegion.value}，未选具体位置`
+  return '未选择位置，录入店名时会按关键词搜索'
+})
+
+const poolLocationActionText = computed(() => center.value ? '更换' : '设置')
+
+const shopSearchEmptyText = computed(() =>
+  shopSearchError.value !== ''
+    ? shopSearchError.value
+    : '没有搜到地点，可换个关键词或直接手动加入',
+)
 
 const nearbyKeyword = computed(() => {
   const tag = preferences.value.find((t) => selectedPreferenceIds.value.includes(t.id))
@@ -613,6 +711,10 @@ onMounted(() => {
   }
 })
 
+onUnmounted(() => {
+  stopDrawAnimation()
+})
+
 onLoad((query) => {
   const code = typeof query?.room === 'string' ? query.room : ''
   pendingRoomCode.value = code
@@ -623,6 +725,11 @@ function switchTab(tab: FoodTab): void {
   if (tab === 'nearby') sourceMode.value = 'nearby'
   if (tab === 'pool') sourceMode.value = 'pool'
   if (tab === 'group') sourceMode.value = 'group'
+}
+
+function openNearbyLocationSetup(): void {
+  activeTab.value = 'nearby'
+  sourceMode.value = 'nearby'
 }
 
 async function loginWithWechatProfile(): Promise<void> {
@@ -716,7 +823,7 @@ async function syncFoodDataFromCloud(): Promise<void> {
         }
         uni.setStorageSync(PREF_STORAGE_KEY, preferences.value)
       }
-      poolGroups.value = Array.isArray(data.poolGroups) && data.poolGroups.length > 0 ? data.poolGroups : DEFAULT_POOL_GROUPS.slice()
+      poolGroups.value = normalizePoolGroups(data.poolGroups)
       poolItems.value = data.poolItems.map((item) => ({ ...item, groupId: item.groupId || DEFAULT_POOL_GROUP_ID }))
       history.value = data.history
       ensureActivePoolGroup()
@@ -736,6 +843,7 @@ async function saveFoodDataRemote(): Promise<void> {
   if (!ok) return
 
   try {
+    poolGroups.value = normalizePoolGroups(poolGroups.value)
     const data = await apiPost<FoodMineResponse>('/api/food/me', {
       preferences: preferences.value,
       poolGroups: poolGroups.value,
@@ -746,7 +854,7 @@ async function saveFoodDataRemote(): Promise<void> {
       preferences.value = normalizePreferences(data.preferences)
       uni.setStorageSync(PREF_STORAGE_KEY, preferences.value)
     }
-    poolGroups.value = Array.isArray(data.poolGroups) && data.poolGroups.length > 0 ? data.poolGroups : DEFAULT_POOL_GROUPS.slice()
+    poolGroups.value = normalizePoolGroups(data.poolGroups)
     poolItems.value = data.poolItems.map((item) => ({ ...item, groupId: item.groupId || DEFAULT_POOL_GROUP_ID }))
     history.value = data.history
     ensureActivePoolGroup()
@@ -793,6 +901,43 @@ function normalizePreferences(raw: PreferenceTag[]): PreferenceTag[] {
     })
 }
 
+function normalizePoolGroups(raw: unknown): FoodGroup[] {
+  const seen = new Set<string>()
+  const list = Array.isArray(raw) ? raw : []
+  const normalized = list
+    .map((item, index): FoodGroup | null => {
+      const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      const id = readableText(record.id, index === 0 ? DEFAULT_POOL_GROUP_ID : genId())
+      const name = readableText(record.name, index === 0 ? '我的饭池' : '')
+      if (id === '' || name === '') return null
+      return { id, name: name.slice(0, 10) }
+    })
+    .filter((item): item is FoodGroup => item !== null)
+    .filter((item) => {
+      const key = item.id
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+  return normalized.length > 0 ? normalized : DEFAULT_POOL_GROUPS.slice()
+}
+
+function readableText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') {
+    const text = compactText(value)
+    return text === '' ? fallback : text
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : fallback
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return readableText(record.name ?? record.label ?? record.title, fallback)
+  }
+  return fallback
+}
+
 function savePreferences(): void {
   uni.setStorageSync(PREF_STORAGE_KEY, preferences.value)
   void saveFoodDataRemote()
@@ -834,17 +979,20 @@ function removePreference(id: string): void {
 
 function loadPoolGroups(): void {
   const saved = safeStorageGet<FoodGroup[]>(POOL_GROUP_STORAGE_KEY, [])
-  poolGroups.value = Array.isArray(saved) && saved.length > 0 ? saved : DEFAULT_POOL_GROUPS.slice()
+  poolGroups.value = normalizePoolGroups(saved)
   ensureActivePoolGroup()
+  uni.setStorageSync(POOL_GROUP_STORAGE_KEY, poolGroups.value)
 }
 
 function savePoolGroups(): void {
+  poolGroups.value = normalizePoolGroups(poolGroups.value)
   uni.setStorageSync(POOL_GROUP_STORAGE_KEY, poolGroups.value)
   void saveFoodDataRemote()
 }
 
 // 保证当前选中分组仍存在，否则回落到第一个分组。
 function ensureActivePoolGroup(): void {
+  poolGroups.value = normalizePoolGroups(poolGroups.value)
   if (poolGroups.value.length === 0) {
     poolGroups.value = DEFAULT_POOL_GROUPS.slice()
   }
@@ -981,6 +1129,8 @@ function addPoolItem(): void {
   newShopNote.value = ''
   pickedShopCoords.value = null
   shopCandidates.value = []
+  shopSearched.value = false
+  shopSearchError.value = ''
   if (shopSearchTimer) {
     clearTimeout(shopSearchTimer)
     shopSearchTimer = null
@@ -988,15 +1138,20 @@ function addPoolItem(): void {
   savePool()
 }
 
-// 店名输入 debounce 搜索地点候选；改动店名即清掉上次绑定的坐标。
-function onShopNameInput(): void {
+// 店名输入 debounce 搜索地点候选；小程序端 input 事件早于 v-model 回写，需直接取事件值。
+function onShopNameInput(event: Event): void {
+  const value = inputEventValue(event, newShopName.value)
+  newShopName.value = value
   pickedShopCoords.value = null
-  const query = compactText(newShopName.value)
+  shopSearched.value = false
+  shopSearchError.value = ''
+  const query = compactText(value)
   if (shopSearchTimer) {
     clearTimeout(shopSearchTimer)
     shopSearchTimer = null
   }
   if (query.length < 2) {
+    shopSearchSeq += 1
     shopCandidates.value = []
     shopSearching.value = false
     return
@@ -1006,20 +1161,41 @@ function onShopNameInput(): void {
   }, 350)
 }
 
+function inputEventValue(event: Event | undefined, fallback: string): string {
+  const payload = event as (Event & { detail?: { value?: unknown }, target?: { value?: unknown } }) | undefined
+  const value = payload?.detail?.value ?? payload?.target?.value
+  return typeof value === 'string' ? value : fallback
+}
+
 async function searchShopCandidates(query: string): Promise<void> {
+  const seq = ++shopSearchSeq
   shopSearching.value = true
+  shopSearched.value = false
+  shopSearchError.value = ''
   try {
-    const res = await apiGet<GeocodeResponse>('/api/travel/geocode', {
+    const params: Record<string, string | number> = {
       q: query,
       region: currentRegion.value,
-    })
+    }
+    if (center.value) {
+      params.lat = center.value.lat
+      params.lng = center.value.lng
+      params.radius = Math.max(radiusM.value, 5000)
+    }
+    const res = await apiGet<GeocodeResponse>('/api/food/search-shops', params)
     // 若用户在等待期间已选定或清空，丢弃过期结果。
-    if (pickedShopCoords.value || compactText(newShopName.value) !== query) return
-    shopCandidates.value = (res.candidates ?? []).slice(0, 5)
-  } catch {
-    shopCandidates.value = []
+    if (seq !== shopSearchSeq || pickedShopCoords.value || compactText(newShopName.value) !== query) return
+    shopCandidates.value = uniqueGeocodeCandidates(res.candidates ?? []).slice(0, 6)
+  } catch (e) {
+    if (seq === shopSearchSeq) {
+      shopCandidates.value = []
+      shopSearchError.value = e instanceof Error ? e.message : '搜索失败，请稍后再试'
+    }
   } finally {
-    shopSearching.value = false
+    if (seq === shopSearchSeq) {
+      shopSearching.value = false
+      shopSearched.value = true
+    }
   }
 }
 
@@ -1031,6 +1207,8 @@ function chooseShopCandidate(candidate: GeocodeCandidate): void {
   }
   shopCandidates.value = []
   shopSearching.value = false
+  shopSearched.value = false
+  shopSearchError.value = ''
 }
 
 function isPickedShop(candidate: GeocodeCandidate): boolean {
@@ -1302,6 +1480,7 @@ async function locateMe(): Promise<void> {
   try {
     const loc = await getLocation()
     center.value = loc
+    deviceLocation.value = loc
     try {
       const info = await apiGet<ReverseLocationResponse>('/api/food/reverse-geocode', {
         lat: loc.lat,
@@ -1338,10 +1517,26 @@ async function searchPlace(): Promise<void> {
   placeSearched.value = false
   center.value = null
   try {
-    const res = await apiGet<GeocodeResponse>('/api/travel/geocode', {
+    // 先尽力拿到设备定位：带上坐标才能命中本地门店并按“离我近”排序，
+    // 否则纯地点联想会返回外地同名店（如沈阳/长春的粉小主）。
+    if (!deviceLocation.value) {
+      try {
+        deviceLocation.value = await getLocation()
+      } catch {
+        // 用户拒绝定位也没关系，退化为仅按 region 的地点搜索。
+      }
+    }
+    const params: Record<string, string | number> = {
       q: query,
       region: currentRegion.value,
-    })
+    }
+    if (deviceLocation.value) {
+      params.lat = deviceLocation.value.lat
+      params.lng = deviceLocation.value.lng
+      params.radius = 20000
+    }
+    // search-shops 走高德周边 + 腾讯兜底 + 距离排序，比 travel/geocode 更适合“搜本地门店”。
+    const res = await apiGet<GeocodeResponse>('/api/food/search-shops', params)
     placeCandidates.value = res.candidates ?? []
     placeSearched.value = true
     if (placeCandidates.value.length === 0) {
@@ -1381,23 +1576,119 @@ function placeCandidateSubtitle(candidate: GeocodeCandidate): string {
   return parts.length > 0 ? parts.join(' · ') : '点击设为随机中心'
 }
 
+function shopCandidateSubtitle(candidate: GeocodeCandidate): string {
+  const address = candidate.address || placeCandidateSubtitle(candidate)
+  if (typeof candidate.distanceM === 'number') {
+    return `${formatDistance(candidate.distanceM)} · ${address}`
+  }
+  return address
+}
+
+function uniqueGeocodeCandidates(candidates: GeocodeCandidate[]): GeocodeCandidate[] {
+  const seen = new Set<string>()
+  return candidates.filter((candidate) => {
+    const title = compactText(candidate.title || candidate.name).toLowerCase()
+    const address = compactText(candidate.address).toLowerCase()
+    const location = `${candidate.lng.toFixed(5)},${candidate.lat.toFixed(5)}`
+    const key = `${title}|${address}|${location}`
+    if (title === '' || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function startDrawAnimation(): void {
+  stopDrawAnimation()
+  const names = drawCandidateNames()
+  let tick = 0
+  drawStage.value = DRAW_STAGES[0]
+  drawRollingName.value = names[0] || DRAW_FALLBACK_NAMES[0]
+  drawProgress.value = 8
+  drawTimer = setInterval(() => {
+    tick += 1
+    const currentNames = drawCandidateNames()
+    drawRollingName.value = currentNames[tick % currentNames.length] || DRAW_FALLBACK_NAMES[tick % DRAW_FALLBACK_NAMES.length]
+    drawStage.value = DRAW_STAGES[Math.min(DRAW_STAGES.length - 1, Math.floor(tick / 4))]
+    drawProgress.value = Math.min(94, drawProgress.value + (tick < 5 ? 11 : 6))
+  }, 140)
+}
+
+function finishDrawAnimation(name: string): void {
+  stopDrawAnimation()
+  drawStage.value = '抽中了'
+  drawRollingName.value = name
+  drawProgress.value = 100
+}
+
+function stopDrawAnimation(): void {
+  if (drawTimer !== null) {
+    clearInterval(drawTimer)
+    drawTimer = null
+  }
+}
+
+function drawCandidateNames(): string[] {
+  const names: string[] = []
+  if (sourceMode.value === 'pool') {
+    names.push(...currentGroupItems.value.map((item) => item.name))
+  } else if (sourceMode.value === 'group') {
+    names.push(...poolItems.value.map((item) => item.name))
+    names.push('附近美食', '适合聚餐', '大家都能吃')
+  } else {
+    names.push(...selectedPreferenceLabels.value.map((label) => `${label}美食`))
+    names.push(`${formatDistance(radiusM.value)}附近`, nearbyKeyword.value)
+  }
+
+  return uniqueLabels([...names, ...DRAW_FALLBACK_NAMES]).slice(0, 10)
+}
+
+function uniqueLabels(items: string[]): string[] {
+  const seen = new Set<string>()
+  return items
+    .map((item) => compactText(item))
+    .filter((item) => {
+      if (item === '' || seen.has(item)) return false
+      seen.add(item)
+      return true
+    })
+}
+
+async function keepDrawVisible(startedAt: number): Promise<void> {
+  const remaining = DRAW_MIN_DURATION_MS - (Date.now() - startedAt)
+  if (remaining > 0) {
+    await sleep(remaining)
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function decideFood(): Promise<void> {
   if (deciding.value) return
   deciding.value = true
+  const startedAt = Date.now()
+  startDrawAnimation()
   try {
+    let nextResult: FoodResult
     if (sourceMode.value === 'nearby') {
-      result.value = await decideNearby()
+      nextResult = await decideNearby()
     } else if (sourceMode.value === 'group') {
-      result.value = await decideGroup()
+      nextResult = await decideGroup()
     } else {
-      result.value = decideFromPool()
+      nextResult = decideFromPool()
     }
-    if (result.value) {
-      activeTab.value = 'ticket'
-    }
+    await keepDrawVisible(startedAt)
+    finishDrawAnimation(nextResult.name)
+    await sleep(DRAW_REVEAL_DURATION_MS)
+    result.value = nextResult
+    activeTab.value = 'ticket'
   } catch (e) {
     uni.showToast({ title: e instanceof Error ? e.message : '随机失败', icon: 'none' })
   } finally {
+    stopDrawAnimation()
     deciding.value = false
   }
 }
@@ -1761,6 +2052,7 @@ function apiGet<T>(path: string, query: Record<string, string | number>): Promis
       url,
       method: 'GET',
       header: requestHeaders(),
+      timeout: 8000,
       success: (res) => {
         const body = res.data as ApiEnvelope<T>
         if (!body || body.code !== 0) {
@@ -1781,6 +2073,7 @@ function apiPost<T>(path: string, data: Record<string, unknown>, withUserToken =
       method: 'POST',
       data,
       header: requestHeaders(withUserToken),
+      timeout: 8000,
       success: (res) => {
         const body = res.data as ApiEnvelope<T>
         if (!body || body.code !== 0) {
@@ -2385,7 +2678,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     box-shadow: 0 14rpx 28rpx rgba(223, 81, 63, 0.22);
 
     &--loading {
-      opacity: 0.72;
+      transform: translateY(2rpx);
+      opacity: 0.78;
     }
 
     &--pool {
@@ -2426,6 +2720,109 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     flex-shrink: 0;
   }
 
+  &__draw {
+    margin-top: 18rpx;
+    padding: 22rpx;
+    border: 2rpx solid rgba(223, 81, 63, 0.2);
+    border-radius: 16rpx;
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+    background: #fffdf9;
+    box-shadow: inset 0 0 0 2rpx rgba(255, 255, 255, 0.62);
+    animation: food-draw-in 180ms ease-out;
+
+    &--ticket {
+      margin-top: 0;
+      background: #ffffff;
+    }
+  }
+
+  &__draw-wheel {
+    position: relative;
+    width: 92rpx;
+    height: 92rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__draw-ring {
+    position: absolute;
+    inset: 0;
+    border: 6rpx solid rgba(223, 81, 63, 0.16);
+    border-top-color: #df513f;
+    border-right-color: #238a9a;
+    border-radius: 50%;
+    animation: food-draw-spin 760ms linear infinite;
+  }
+
+  &__draw-core {
+    position: relative;
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    background: #202326;
+    font-size: 26rpx;
+    font-weight: 900;
+    animation: food-draw-pop 620ms ease-in-out infinite alternate;
+  }
+
+  &__draw-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__draw-stage,
+  &__draw-name,
+  &__draw-hint {
+    display: block;
+  }
+
+  &__draw-stage {
+    color: #b73c2e;
+    font-size: 22rpx;
+    font-weight: 850;
+  }
+
+  &__draw-name {
+    margin-top: 6rpx;
+    color: #202326;
+    font-size: 34rpx;
+    font-weight: 900;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__draw-progress {
+    height: 10rpx;
+    margin-top: 14rpx;
+    border-radius: 999rpx;
+    overflow: hidden;
+    background: #edf1f1;
+  }
+
+  &__draw-progress-bar {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #df513f, #238a9a);
+    transition: width 140ms ease;
+  }
+
+  &__draw-hint {
+    margin-top: 10rpx;
+    color: #7f8a91;
+    font-size: 22rpx;
+    line-height: 1.4;
+  }
+
   &__ticket {
     position: relative;
     overflow: hidden;
@@ -2459,6 +2856,7 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     font-size: 46rpx;
     font-weight: 880;
     line-height: 1.16;
+    animation: food-ticket-pop 220ms ease-out;
   }
 
   &__meta {
@@ -2520,6 +2918,62 @@ function requestHeaders(withUserToken = true): Record<string, string> {
       color: #ffffff;
       background: #df513f;
     }
+  }
+
+  &__pool-location {
+    margin-bottom: 22rpx;
+    padding: 18rpx;
+    border: 2rpx solid rgba(35, 138, 154, 0.18);
+    border-radius: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    background: #f2fafb;
+  }
+
+  &__pool-location-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__pool-location-kicker,
+  &__pool-location-text {
+    display: block;
+  }
+
+  &__pool-location-kicker {
+    color: #1d6671;
+    font-size: 22rpx;
+    font-weight: 850;
+  }
+
+  &__pool-location-text {
+    margin-top: 6rpx;
+    color: #394149;
+    font-size: 24rpx;
+    line-height: 1.45;
+  }
+
+  &__pool-location-actions {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    flex-shrink: 0;
+  }
+
+  &__pool-location-action {
+    min-width: 72rpx;
+    min-height: 52rpx;
+    padding: 0 14rpx;
+    border-radius: 999rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1d6671;
+    background: #ffffff;
+    font-size: 22rpx;
+    font-weight: 850;
   }
 
   &__pool-form {
@@ -2616,6 +3070,46 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     background: #fff2ef;
     font-size: 24rpx;
     font-weight: 800;
+  }
+}
+
+@keyframes food-draw-in {
+  from {
+    transform: translateY(12rpx);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes food-draw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes food-draw-pop {
+  from {
+    transform: scale(0.92);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes food-ticket-pop {
+  from {
+    transform: translateY(10rpx) scale(0.98);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
   }
 }
 </style>

@@ -18,6 +18,7 @@ Router::addGroup('/api', function (): void {
     Router::get('/beads/palettes', [BeadController::class, 'palettes']);
     Router::post('/beads/estimate', [BeadController::class, 'estimate']);
     Router::get('/food/nearby', [FoodController::class, 'nearby']);
+    Router::get('/food/search-shops', [FoodController::class, 'searchShops']);
     Router::get('/food/reverse-geocode', [FoodController::class, 'reverseGeocode']);
     Router::get('/food/me', [FoodController::class, 'getMine']);
     Router::post('/food/me', [FoodController::class, 'saveMine']);

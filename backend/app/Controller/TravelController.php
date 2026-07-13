@@ -17,9 +17,7 @@ class TravelController extends AbstractController
     public function __construct(
         private readonly TravelService $travel,
         private readonly TravelShareService $shares,
-    )
-    {
-    }
+    ) {}
 
     /**
      * 地点搜索代理：前端输入地点名，后端走当前地图服务商返回候选坐标。
@@ -78,7 +76,7 @@ class TravelController extends AbstractController
         // 每日游玩时长：支持按天数组（[8,6,7]）或单值；非法/空回退 [8]
         $dhRaw = $request->input('daily_hours', 8);
         $dailyHours = is_array($dhRaw)
-            ? array_values(array_filter(array_map(fn ($v) => (float) $v, $dhRaw), fn ($v) => $v > 0))
+            ? array_values(array_filter(array_map(fn($v) => (float) $v, $dhRaw), fn($v) => $v > 0))
             : [(float) $dhRaw];
         if ($dailyHours === []) {
             $dailyHours = [8.0];

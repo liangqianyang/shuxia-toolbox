@@ -239,14 +239,14 @@ final class TencentMapProvider implements MapProvider
         // SK 签名（官方 GET 算法）：多同名参数按 key 升序、同 key 按 value 升序，原始值，md5(path+'?'+串+sk)，无 urlencode。
         if ($sk !== '') {
             $sorted = $params;
-            usort($sorted, static fn ($a, $b) => $a[0] <=> $b[0] ?: strcmp((string) $a[1], (string) $b[1]));
-            $raw = implode('&', array_map(static fn ($p) => $p[0] . '=' . $p[1], $sorted));
+            usort($sorted, static fn($a, $b) => $a[0] <=> $b[0] ?: strcmp((string) $a[1], (string) $b[1]));
+            $raw = implode('&', array_map(static fn($p) => $p[0] . '=' . $p[1], $sorted));
             $params[] = ['sig', md5('/ws/staticmap/v2/?' . $raw . $sk)];
         }
 
         // 拼 URL：每个值 rawurlencode
         return 'https://apis.map.qq.com/ws/staticmap/v2/?'
-            . implode('&', array_map(static fn ($p) => $p[0] . '=' . rawurlencode((string) $p[1]), $params));
+            . implode('&', array_map(static fn($p) => $p[0] . '=' . rawurlencode((string) $p[1]), $params));
     }
 
     /**
@@ -376,7 +376,7 @@ final class TencentMapProvider implements MapProvider
                     'price' => isset($line['price']) ? (float) $line['price'] : null,
                     'startTime' => $this->stringField($line, ['start_time', 'startTime']),
                     'endTime' => $this->stringField($line, ['end_time', 'endTime']),
-                ], static fn ($value) => $value !== null && $value !== '');
+                ], static fn($value) => $value !== null && $value !== '');
             }
         }
 
@@ -384,7 +384,7 @@ final class TencentMapProvider implements MapProvider
             throw new RuntimeException('公共交通规划无有效线路');
         }
 
-        $summary = implode(' → ', array_map(static fn ($line) => $line['title'], $lines));
+        $summary = implode(' → ', array_map(static fn($line) => $line['title'], $lines));
 
         return [
             'distanceM' => (int) ($route['distance'] ?? 0),
@@ -532,8 +532,9 @@ final class TencentMapProvider implements MapProvider
         try {
             $response = $this->client->get($url, [
                 'query' => $this->withSig($url, [
-                    // boundary=nearby(纬度,经度,半径米)
-                    'boundary' => sprintf('nearby(%f,%f,%d)', $center['lat'], $center['lng'], $radius),
+                    // boundary=nearby(纬度,经度,半径米)；auto_extend=0 关闭「半径内结果少时自动扩大范围」，
+                    // 否则会返回远超请求半径的门店（随机场景会抽到很远的店）。
+                    'boundary' => sprintf('nearby(%f,%f,%d,0)', $center['lat'], $center['lng'], $radius),
                     'keyword' => $keyword,
                     'page_size' => 20,
                     'orderby' => '_distance',

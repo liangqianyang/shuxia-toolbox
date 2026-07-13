@@ -19,14 +19,19 @@ page {
   font-weight: 600;
   text-align: center;
   padding: 24rpx 0;
-  transition: opacity 0.15s;
+  // 主色柔和投影让核心 CTA 从卡片里浮起来；按压时缩放+投影收缩，模拟“按下沉下去”。
+  box-shadow: 0 6rpx 16rpx rgba($color-primary, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.15s ease;
 
   &:active {
-    opacity: 0.75;
+    transform: scale(0.96);
+    box-shadow: 0 2rpx 6rpx rgba($color-primary, 0.22);
+    opacity: 0.92;
   }
 
   &.disabled {
     opacity: 0.45;
+    box-shadow: none;
   }
 }
 
@@ -38,9 +43,10 @@ page {
   font-size: $font-body;
   text-align: center;
   padding: 20rpx 0;
-  transition: opacity 0.15s;
+  transition: transform 0.12s ease, opacity 0.15s ease;
 
   &:active {
+    transform: scale(0.96);
     opacity: 0.6;
   }
 

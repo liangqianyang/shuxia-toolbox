@@ -328,7 +328,7 @@ final class AmapMapProvider implements MapProvider
                     'distanceM' => (int) ($line['distance'] ?? 0),
                     'durationMin' => (int) ceil(((int) ($line['duration'] ?? 0)) / 60),
                     'price' => isset($line['price']) ? (float) $line['price'] : null,
-                ], static fn ($value) => $value !== null && $value !== '');
+                ], static fn($value) => $value !== null && $value !== '');
             }
         }
 
@@ -341,7 +341,7 @@ final class AmapMapProvider implements MapProvider
             'durationMin' => (int) ceil(((int) ($route['duration'] ?? 0)) / 60),
             'walkingM' => $walkingM,
             'transferCount' => max(0, count($lines) - 1),
-            'summary' => implode(' → ', array_map(static fn ($line) => $line['title'], $lines)),
+            'summary' => implode(' → ', array_map(static fn($line) => $line['title'], $lines)),
             'lines' => $lines,
         ];
     }
@@ -413,7 +413,7 @@ final class AmapMapProvider implements MapProvider
         }
 
         try {
-            return (new TencentMapProvider())->explore($center, $radius, $keyword);
+            return new TencentMapProvider()->explore($center, $radius, $keyword);
         } catch (Throwable $e) {
             error_log('[AmapMapProvider] 腾讯周边搜索兜底失败: ' . $e->getMessage());
             return [];
@@ -685,7 +685,7 @@ final class AmapMapProvider implements MapProvider
         }
 
         try {
-            return (new TencentMapProvider())->staticMap($markers, $paths, $size);
+            return new TencentMapProvider()->staticMap($markers, $paths, $size);
         } catch (Throwable $e) {
             error_log('[AmapMapProvider] 腾讯静态图兜底失败: ' . $e->getMessage());
             return '';
