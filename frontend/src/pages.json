@@ -3,7 +3,7 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "枫叶小屋的工具箱"
+        "navigationBarTitleText": "首页"
       }
     },
     {
@@ -22,6 +22,36 @@
       "path": "pages/food/index",
       "style": {
         "navigationBarTitleText": "今天吃什么"
+      }
+    },
+    {
+      "path": "pages/lottery/index",
+      "style": {
+        "navigationBarTitleText": "枫叶签筒"
+      }
+    },
+    {
+      "path": "pages/tool-library/index",
+      "style": {
+        "navigationBarTitleText": "首页工具管理"
+      }
+    },
+    {
+      "path": "pages/toolbox/index",
+      "style": {
+        "navigationBarTitleText": "工具箱"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/admin/index",
+      "style": {
+        "navigationBarTitleText": "工具运营台"
       }
     }
   ],

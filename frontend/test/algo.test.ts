@@ -9,6 +9,16 @@ import { computeSheetLayout } from '@/utils/sheetRenderer'
 import { getPalette } from '@/utils/beadPalette'
 import { deltaE2000 } from '@/utils/color'
 import { EMPTY_CELL, DEFAULT_PARAMS, type PatternResult } from '@/types/beads'
+import type { LotteryOption, LotteryPrize, LotterySpecialGift } from '@/types/lottery'
+import {
+  calculatePrizePool,
+  createBalancedGroups,
+  drawWeightedOptions,
+  findDuplicateLotteryLines,
+  parseLotteryLines,
+  pickWeighted,
+  validateSpecialGifts,
+} from '@/utils/lottery'
 import { __setPixels, type PixelBuffer } from './stubCanvasAdapter'
 
 let failures = 0
@@ -764,6 +774,70 @@ async function testDefringe() {
   )
 }
 
+function testLotteryAlgorithms() {
+  console.log('用例 14：万能抽奖规则与权重')
+  const prizes: LotteryPrize[] = [
+    { id: 'speaker', name: '蓝牙音箱', quantity: 1, weight: 1 },
+    { id: 'coffee', name: '咖啡券', quantity: 6, weight: 3 },
+    { id: 'journal', name: '手账礼盒', quantity: 2, weight: 2 },
+  ]
+  const gifts: LotterySpecialGift[] = [
+    { id: 'gift-1', prizeId: 'journal', quantity: 1, recipient: '林晓' },
+    { id: 'gift-2', prizeId: 'coffee', quantity: 1, recipient: '周宁' },
+    { id: 'gift-3', prizeId: 'journal', quantity: 1, recipient: '陈意' },
+  ]
+  const validation = validateSpecialGifts(prizes, gifts)
+  assert(validation.valid, '多条特别赠礼在库存内时校验通过')
+  assert(validation.reservedByPrize.journal === 2, '同一奖品的多条赠礼会累计预留')
+  assert(validation.reservedByPrize.coffee === 1, '不同奖品分别统计预留数量')
+
+  const pendingRecipient = validateSpecialGifts(prizes, [
+    { id: 'gift-pending', prizeId: 'coffee', quantity: 1, recipient: '' },
+  ], { requireRecipient: false })
+  assert(pendingRecipient.valid, '奖品步骤允许先预留库存、到名单步骤再选择赠礼对象')
+
+  const overflow = validateSpecialGifts(prizes, [
+    ...gifts,
+    { id: 'gift-4', prizeId: 'journal', quantity: 1, recipient: '顾遥' },
+  ])
+  assert(!overflow.valid && overflow.errors.some((error) => error.includes('超过库存')), '赠礼总数超过库存时阻止开奖')
+
+  const pool = calculatePrizePool(prizes, gifts)
+  const speaker = pool.find((item) => item.prizeId === 'speaker')!
+  const coffee = pool.find((item) => item.prizeId === 'coffee')!
+  const journal = pool.find((item) => item.prizeId === 'journal')!
+  assert(journal.remaining === 0 && journal.probability === 0, '全部预留的奖品不再进入随机池')
+  assert(coffee.remaining === 5, '随机库存正确扣除特别赠礼')
+  assert(Math.abs(coffee.probability - 15 / 16) < 1e-9, '概率按剩余库存 × 权重计算')
+  assert(Math.abs(speaker.probability - 1 / 16) < 1e-9, '低权重奖品仍保留正确概率')
+
+  const weighted = [
+    { id: 'a', weight: 1 },
+    { id: 'b', weight: 3 },
+  ]
+  assert(pickWeighted(weighted, (item) => item.weight, () => 0)?.id === 'a', '权重区间起点选中第一项')
+  assert(pickWeighted(weighted, (item) => item.weight, () => 0.999)?.id === 'b', '权重区间末端选中最后一项')
+
+  const options: LotteryOption[] = [
+    { id: 'a', label: '选项 A', weight: 1 },
+    { id: 'b', label: '选项 B', weight: 1 },
+    { id: 'c', label: '选项 C', weight: 1 },
+  ]
+  const drawn = drawWeightedOptions(options, 3, new Set(), false, () => 0)
+  assert(new Set(drawn.map((item) => item.id)).size === 3, '不放回抽取不会重复')
+
+  const groups = createBalancedGroups(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], 3, () => 0.42)
+  const sizes = groups.map((group) => group.length)
+  assert(Math.max(...sizes) - Math.min(...sizes) <= 1, '随机分组人数差不超过 1')
+  assert(new Set(groups.flat()).size === 8, '随机分组不遗漏也不重复')
+
+  const lines = parseLotteryLines(' 小王 \n小李\n小王\n\n 小张 ')
+  assert(JSON.stringify(lines) === JSON.stringify(['小王', '小李', '小张']), '名单解析会清理空行并去重')
+
+  const duplicates = findDuplicateLotteryLines('小王\n小李\n 小王 \n小李\n小张')
+  assert(JSON.stringify(duplicates) === JSON.stringify(['小王', '小李']), '重复名单会被识别并提示')
+}
+
 async function main() {
   await testPixelArt()
   await testNoisyPhoto()
@@ -779,6 +853,7 @@ async function main() {
   await testLayout()
   await testManualCellEdit()
   await testDefringe()
+  testLotteryAlgorithms()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)

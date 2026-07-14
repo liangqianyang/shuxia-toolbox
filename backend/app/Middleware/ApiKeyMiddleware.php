@@ -23,7 +23,8 @@ final class ApiKeyMiddleware implements MiddlewareInterface
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if ($request->getUri()->getPath() === '/health') {
+        $path = $request->getUri()->getPath();
+        if ($path === '/health' || str_starts_with($path, '/uploads/avatar/')) {
             return $handler->handle($request);
         }
 

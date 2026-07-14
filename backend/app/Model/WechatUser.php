@@ -12,6 +12,7 @@ namespace App\Model;
  * @property null|string $unionid
  * @property string $nickname
  * @property string $avatar_url
+ * @property string $role
  * @property string $created_at
  * @property string $updated_at
  */
@@ -24,6 +25,7 @@ final class WechatUser extends Model
         'unionid',
         'nickname',
         'avatar_url',
+        'role',
     ];
 
     protected array $casts = [

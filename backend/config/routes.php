@@ -3,14 +3,17 @@
 declare(strict_types=1);
 
 use App\Controller\BeadController;
+use App\Controller\AdminToolController;
 use App\Controller\AuthController;
 use App\Controller\FoodController;
 use App\Controller\HealthController;
 use App\Controller\TravelController;
+use App\Controller\ToolController;
 use Hyperf\HttpServer\Router\Router;
 
 // 容器/负载均衡健康检查，不需要 API Key。
 Router::get('/health', [HealthController::class, 'index']);
+Router::get('/uploads/avatar/{filename}', [AuthController::class, 'avatar']);
 
 Router::addGroup('/api', function (): void {
     // API 健康检查：给前端或运维侧验证 /api 前缀可用。
@@ -19,6 +22,17 @@ Router::addGroup('/api', function (): void {
     // 微信账号体系：小程序 wx.login 换后端 token；用户主动同步头像昵称。
     Router::post('/auth/wechat-login', [AuthController::class, 'wechatLogin']);
     Router::post('/auth/profile', [AuthController::class, 'saveProfile']);
+    Router::post('/auth/avatar', [AuthController::class, 'uploadAvatar']);
+    Router::get('/auth/me', [AuthController::class, 'me']);
+
+    // 用户工具集：首页展示选择和排序由用户账号持久化。
+    Router::get('/tools/home', [ToolController::class, 'home']);
+    Router::post('/tools/home', [ToolController::class, 'saveHome']);
+
+    // 工具运营台：仅由 ADMIN_WECHAT_OPENIDS 指定的管理员账号访问。
+    Router::get('/admin/tools', [AdminToolController::class, 'index']);
+    Router::post('/admin/tools/publication', [AdminToolController::class, 'setPublication']);
+    Router::post('/admin/tools/order', [AdminToolController::class, 'saveOrder']);
 
     // 拼豆工具：色卡/估算接口，以及生成图纸前的微信内容安全检测。
     Router::get('/beads/palettes', [BeadController::class, 'palettes']);
