@@ -337,6 +337,10 @@ import { PAGE_CELLS } from '@/utils/sheetPaginator'
 import { displayCode } from '@/utils/format'
 import { textColorOn } from '@/utils/color'
 
+const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:9501').replace(/\/$/, '')
+const API_KEY = import.meta.env.VITE_API_KEY || ''
+const AUTH_STORAGE_KEY = 'shuxia-food-auth-token-v1'
+
 const instance = getCurrentInstance()?.proxy
 
 const imagePath = ref('')
@@ -510,8 +514,7 @@ async function renderCompareGrid() {
 
 async function pickImage() {
   try {
-    const path = await chooseImage()
-    imagePath.value = path
+    imagePath.value = await chooseImage()
     reset()
     editMode.value = false
     highlightIndex.value = null
@@ -555,6 +558,8 @@ async function onGenerate() {
   if (build.active.value) build.exit()
   compareOpen.value = false
   await preview.setHighlight(null, null)
+  const safe = await ensureBeadContentSafe()
+  if (!safe) return
   const allowed = params.ownedOnly ? inventory.allowedIndices(params.paletteKey) : undefined
   const generated = await generate(imagePath.value, allowed)
   if (!generated) {
@@ -571,6 +576,140 @@ async function onGenerate() {
   selectedCell.value = null
   activePaletteIndex.value = null
   await preview.render(generated, instance)
+}
+
+async function ensureBeadContentSafe(): Promise<boolean> {
+  try {
+    const token = await ensureAuthToken()
+    const payload = {
+      content: beadSecCheckText(),
+    }
+    const firstCheck = await postBeadSecCheck(payload, token)
+    if (!firstCheck.ok && firstCheck.shouldRefreshToken) {
+      const freshToken = await ensureAuthToken(true)
+      await apiPost('/api/beads/sec-check', payload, freshToken)
+    } else if (!firstCheck.ok) {
+      throw firstCheck.error
+    }
+    return true
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '内容安全检测失败'
+    uni.showToast({ title: message === '内容含违规信息' ? '内容含违规信息' : message, icon: 'none' })
+    return false
+  }
+}
+
+async function postBeadSecCheck(payload: { content: string }, token: string): Promise<{
+  ok: boolean
+  shouldRefreshToken: boolean
+  error: Error
+}> {
+  try {
+    await apiPost('/api/beads/sec-check', payload, token)
+    return {
+      ok: true,
+      shouldRefreshToken: false,
+      error: new Error(''),
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      shouldRefreshToken: e instanceof ApiError && e.code === 401,
+      error: e instanceof Error ? e : new Error('内容安全检测失败'),
+    }
+  }
+}
+
+function beadSecCheckText(): string {
+  return [
+    '拼豆图纸生成',
+    `色卡:${params.paletteKey}`,
+    `尺寸:${params.gridWidth}x${params.gridHeight}`,
+    `长边:${params.gridLongSide}`,
+    `自动尺寸:${params.autoGridSize ? '是' : '否'}`,
+  ].join(' ')
+}
+
+async function ensureAuthToken(forceRefresh = false): Promise<string> {
+  if (forceRefresh) {
+    safeStorageRemove(AUTH_STORAGE_KEY)
+  }
+  const saved = safeStorageGet(AUTH_STORAGE_KEY)
+  if (saved !== '') return saved
+
+  const code = await wxLoginCode()
+  const data = await apiPost<{ token: string }>('/api/auth/wechat-login', { code, profile: {} }, '')
+  const token = data.token || ''
+  if (token === '') {
+    throw new Error('微信登录失败')
+  }
+  uni.setStorageSync(AUTH_STORAGE_KEY, token)
+  return token
+}
+
+function wxLoginCode(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.login({
+      provider: 'weixin',
+      success: (res) => {
+        if (res.code) {
+          resolve(res.code)
+          return
+        }
+        reject(new Error('微信登录失败'))
+      },
+      fail: (err) => reject(new Error(err.errMsg || '微信登录失败')),
+    })
+  })
+}
+
+class ApiError extends Error {
+  constructor(
+    public readonly code: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+function apiPost<T>(path: string, data: Record<string, unknown>, token: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = { 'X-API-Key': API_KEY }
+    if (token !== '') headers['X-User-Token'] = token
+    uni.request({
+      url: `${API_BASE}${path}`,
+      method: 'POST',
+      data,
+      header: headers,
+      timeout: 12000,
+      success: (res) => {
+        const body = res.data as { code?: number; message?: string; data?: T }
+        if (!body || body.code !== 0) {
+          reject(new ApiError(Number(body?.code ?? -1), body?.message || '接口返回异常'))
+          return
+        }
+        resolve(body.data as T)
+      },
+      fail: (err) => reject(new Error(err.errMsg || '网络请求失败')),
+    })
+  })
+}
+
+function safeStorageGet(key: string): string {
+  try {
+    const value = uni.getStorageSync(key)
+    return typeof value === 'string' ? value : ''
+  } catch {
+    return ''
+  }
+}
+
+function safeStorageRemove(key: string): void {
+  try {
+    uni.removeStorageSync(key)
+  } catch {
+    // 清理失败不阻断重新登录。
+  }
 }
 
 async function onZoom(zoom: number) {
@@ -1072,7 +1211,6 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     position: fixed;
     left: 24rpx;
     right: 24rpx;
-    bottom: calc(20rpx + constant(safe-area-inset-bottom));
     bottom: calc(20rpx + env(safe-area-inset-bottom));
     z-index: 20;
     display: flex;

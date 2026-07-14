@@ -9,14 +9,23 @@ use App\Controller\HealthController;
 use App\Controller\TravelController;
 use Hyperf\HttpServer\Router\Router;
 
+// 容器/负载均衡健康检查，不需要 API Key。
 Router::get('/health', [HealthController::class, 'index']);
 
 Router::addGroup('/api', function (): void {
+    // API 健康检查：给前端或运维侧验证 /api 前缀可用。
     Router::get('/health', [HealthController::class, 'index']);
+
+    // 微信账号体系：小程序 wx.login 换后端 token；用户主动同步头像昵称。
     Router::post('/auth/wechat-login', [AuthController::class, 'wechatLogin']);
     Router::post('/auth/profile', [AuthController::class, 'saveProfile']);
+
+    // 拼豆工具：色卡/估算接口，以及生成图纸前的微信内容安全检测。
     Router::get('/beads/palettes', [BeadController::class, 'palettes']);
     Router::post('/beads/estimate', [BeadController::class, 'estimate']);
+    Router::post('/beads/sec-check', [BeadController::class, 'secCheck']);
+
+    // 今天吃什么：附近餐厅、饭池店名搜索、定位反查、用户饭池/历史和饭局房间。
     Router::get('/food/nearby', [FoodController::class, 'nearby']);
     Router::get('/food/search-shops', [FoodController::class, 'searchShops']);
     Router::get('/food/reverse-geocode', [FoodController::class, 'reverseGeocode']);
@@ -24,6 +33,8 @@ Router::addGroup('/api', function (): void {
     Router::post('/food/me', [FoodController::class, 'saveMine']);
     Router::post('/food/room', [FoodController::class, 'saveRoom']);
     Router::get('/food/room/{code}', [FoodController::class, 'getRoom']);
+
+    // AI 旅行攻略：地点搜索、生成/局部重写行程，以及云保存分享码。
     Router::get('/travel/geocode', [TravelController::class, 'geocode']);
     Router::post('/travel/plan', [TravelController::class, 'plan']);
     Router::post('/travel/refine-day', [TravelController::class, 'refineDay']);

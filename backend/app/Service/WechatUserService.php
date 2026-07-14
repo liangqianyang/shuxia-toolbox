@@ -73,24 +73,22 @@ final class WechatUserService
      */
     public function userIdByToken(string $token): ?int
     {
-        $token = trim($token);
-        if ($token === '') {
-            return null;
-        }
+        return $this->sessionByToken($token)?->user_id;
+    }
 
-        /** @var null|UserSession $session */
-        $session = UserSession::query()
-            ->where('token_hash', hash('sha256', $token))
-            ->where('expires_at', '>', date('Y-m-d H:i:s'))
-            ->first();
+    /**
+     * 根据请求头 token 获取 openid，用于微信内容安全接口。
+     */
+    public function openidByToken(string $token): ?string
+    {
+        $session = $this->sessionByToken($token);
         if ($session === null) {
             return null;
         }
 
-        $session->last_seen_at = date('Y-m-d H:i:s');
-        $session->save();
-
-        return (int) $session->user_id;
+        /** @var null|WechatUser $user */
+        $user = WechatUser::query()->find((int) $session->user_id);
+        return $user === null ? null : (string) $user->openid;
     }
 
     /**
@@ -187,6 +185,31 @@ final class WechatUserService
         $user->save();
 
         return $this->formatUser($user);
+    }
+
+    /**
+     * 根据后端 token 查会话，并刷新 last_seen_at。
+     */
+    private function sessionByToken(string $token): ?UserSession
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return null;
+        }
+
+        /** @var null|UserSession $session */
+        $session = UserSession::query()
+            ->where('token_hash', hash('sha256', $token))
+            ->where('expires_at', '>', date('Y-m-d H:i:s'))
+            ->first();
+        if ($session === null) {
+            return null;
+        }
+
+        $session->last_seen_at = date('Y-m-d H:i:s');
+        $session->save();
+
+        return $session;
     }
 
     /**
