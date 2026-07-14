@@ -10,7 +10,7 @@
       </view>
     </view>
 
-    <view v-if="sorting" class="home__sort-state">首页工具排序中</view>
+    <view v-if="sorting" class="home__sort-state">长按卡片后上下拖动排序，完成后自动保存</view>
 
     <view v-if="tools.length" class="home__tools">
       <view
@@ -18,11 +18,11 @@
         :key="tool.key"
         class="home__tool-card card"
         :class="{ 'home__tool-card--dragging': draggingToolKey === tool.key, 'home__tool-card--sorting': sorting }"
-        @tap="onToolTap(tool)"
-        @longpress="beginSort(tool.key)"
+        @tap.stop="onToolTap(tool)"
+        @longpress.stop="beginSort(tool.key)"
         @touchmove.stop="onToolDragMove($event)"
-        @touchend="finishSort"
-        @touchcancel="finishSort"
+        @touchend.stop="endToolDrag"
+        @touchcancel.stop="endToolDrag"
       >
         <view class="home__tool-icon">{{ tool.icon }}</view>
         <view class="home__tool-body">
@@ -127,10 +127,14 @@ function onToolDragMove(event: TouchEvent) {
   void refreshToolPositions()
 }
 
+function endToolDrag() {
+  draggingToolKey.value = ''
+}
+
 async function finishSort() {
   const wasSorting = sorting.value
   sorting.value = false
-  draggingToolKey.value = ''
+  endToolDrag()
   if (!wasSorting) return
   try {
     const data = await saveHomeTools(tools.value.map((tool) => tool.key))

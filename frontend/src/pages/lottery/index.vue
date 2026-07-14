@@ -1083,6 +1083,7 @@ function goStep(step: number) {
     uni.showToast({ title: '请先完成当前步骤', icon: 'none' })
     return
   }
+  showHistory.value = false
   activeStep.value = step
 }
 
@@ -1513,7 +1514,7 @@ function copyResults() {
 function finishActivity() {
   saveHistory()
   saveDraft()
-  uni.showToast({ title: '活动已保存', icon: 'success' })
+  uni.showToast({ title: '已保存到本地', icon: 'success' })
 }
 
 function saveHistory() {
