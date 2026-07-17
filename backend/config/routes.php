@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controller\BeadController;
 use App\Controller\AdminToolController;
+use App\Controller\AnniversaryController;
 use App\Controller\AuthController;
 use App\Controller\FoodController;
 use App\Controller\HealthController;
@@ -28,6 +29,13 @@ Router::addGroup('/api', function (): void {
     // 用户工具集：首页展示选择和排序由用户账号持久化。
     Router::get('/tools/home', [ToolController::class, 'home']);
     Router::post('/tools/home', [ToolController::class, 'saveHome']);
+
+    // 时光纪念卡：纪念日云同步、手机日历写入状态和站内提醒数据源。
+    Router::get('/anniversaries', [AnniversaryController::class, 'index']);
+    Router::post('/anniversaries', [AnniversaryController::class, 'save']);
+    Router::post('/anniversaries/{id}/delete', [AnniversaryController::class, 'delete']);
+    Router::post('/anniversaries/{id}/calendar-added', [AnniversaryController::class, 'markCalendarAdded']);
+    Router::post('/anniversaries/{id}/subscribe', [AnniversaryController::class, 'subscribe']);
 
     // 工具运营台：仅由 ADMIN_WECHAT_OPENIDS 指定的管理员账号访问。
     Router::get('/admin/tools', [AdminToolController::class, 'index']);

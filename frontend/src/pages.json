@@ -31,6 +31,12 @@
       }
     },
     {
+      "path": "pages/anniversary/index",
+      "style": {
+        "navigationBarTitleText": "时光纪念卡"
+      }
+    },
+    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"

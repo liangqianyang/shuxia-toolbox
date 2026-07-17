@@ -27,8 +27,9 @@
         <view class="home__tool-icon">{{ tool.icon }}</view>
         <view class="home__tool-body">
           <text class="home__tool-title">{{ tool.name }}</text>
-          <text class="home__tool-desc">{{ tool.description }}</text>
+          <text class="home__tool-desc">{{ toolDescription(tool) }}</text>
         </view>
+        <text v-if="toolBadge(tool)" class="home__tool-badge">{{ toolBadge(tool) }}</text>
         <text class="home__tool-order" v-if="sorting">↕</text>
         <text class="home__tool-arrow" v-else>›</text>
       </view>
@@ -48,6 +49,9 @@ import { onShow } from '@dcloudio/uni-app'
 import AppBottomNav from '@/components/AppBottomNav.vue'
 import type { ToolboxHomeData, ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
+import { fetchAnniversaries } from '@/services/anniversary'
+import type { AnniversarySummary } from '@/types/anniversary'
+import { summarizeAnniversaries } from '@/utils/anniversary'
 
 interface ToolPosition {
   top: number
@@ -59,9 +63,11 @@ const FALLBACK_TOOLS: ToolboxTool[] = [
   { key: 'travel', name: '旅游攻略图生成器', description: '编辑行程，生成可分享的旅游攻略图', icon: '🗺️', route: '/pages/travel/index' },
   { key: 'food', name: '今天吃什么', description: '选地点和偏好，随机抽一家附近美食或常吃店', icon: '🍜', route: '/pages/food/index' },
   { key: 'lottery', name: '枫叶签筒', description: '抽奖品、随机抽取、随机分组，规则由你设置', icon: '🍁', route: '/pages/lottery/index' },
+  { key: 'anniversary', name: '时光纪念卡', description: '记录纪念日、倒数提醒，生成可保存的纪念卡', icon: '📅', route: '/pages/anniversary/index' },
 ]
 
 const tools = ref<ToolboxTool[]>([])
+const anniversarySummary = ref<AnniversarySummary | null>(null)
 const loading = ref(true)
 const sorting = ref(false)
 const draggingToolKey = ref('')
@@ -76,8 +82,10 @@ async function loadTools() {
   try {
     const data = await fetchHomeTools()
     tools.value = homeToolsFrom(data)
+    await loadAnniversarySummary(tools.value)
   } catch (error) {
     if (tools.value.length === 0) tools.value = [...FALLBACK_TOOLS]
+    await loadAnniversarySummary(tools.value)
     console.warn('[home] load tool preferences failed:', error)
   } finally {
     loading.value = false
@@ -92,6 +100,32 @@ function homeToolsFrom(data: ToolboxHomeData): ToolboxTool[] {
 function onToolTap(tool: ToolboxTool) {
   if (sorting.value) return
   uni.navigateTo({ url: tool.route })
+}
+
+async function loadAnniversarySummary(currentTools: ToolboxTool[]) {
+  anniversarySummary.value = null
+  if (!currentTools.some((tool) => tool.key === 'anniversary')) return
+  try {
+    anniversarySummary.value = summarizeAnniversaries(await fetchAnniversaries())
+  } catch (error) {
+    console.warn('[home] load anniversary summary failed:', error)
+  }
+}
+
+function toolDescription(tool: ToolboxTool): string {
+  if (tool.key !== 'anniversary' || !anniversarySummary.value) return tool.description
+  const summary = anniversarySummary.value
+  const parts: string[] = []
+  if (summary.todayCount) parts.push(`今天 ${summary.todayCount} 个`)
+  if (summary.upcomingCount) parts.push(`7天内 ${summary.upcomingCount} 个`)
+  if (summary.nextMilestone) parts.push(`${summary.nextMilestone.remainingDays} 天到 ${summary.nextMilestone.label}`)
+  return parts.length ? parts.join(' · ') : tool.description
+}
+
+function toolBadge(tool: ToolboxTool): string {
+  if (tool.key !== 'anniversary' || !anniversarySummary.value) return ''
+  const count = anniversarySummary.value.todayCount + anniversarySummary.value.upcomingCount
+  return count > 0 ? String(count) : ''
 }
 
 function toggleSortMode() {
@@ -263,6 +297,20 @@ async function refreshToolPositions() {
     font-size: $font-caption;
     color: $color-text-secondary;
     line-height: 1.45;
+  }
+
+  &__tool-badge {
+    min-width: 36rpx;
+    height: 36rpx;
+    padding: 0 10rpx;
+    border-radius: 999rpx;
+    background: $color-danger;
+    color: #fff;
+    font-size: 20rpx;
+    font-weight: 700;
+    line-height: 36rpx;
+    text-align: center;
+    flex-shrink: 0;
   }
 
   &__tool-arrow,

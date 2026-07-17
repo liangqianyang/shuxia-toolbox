@@ -12,9 +12,10 @@
         <view class="toolbox__copy">
           <view class="toolbox__name-row">
             <text class="toolbox__name">{{ tool.name }}</text>
+            <text v-if="toolBadge(tool)" class="toolbox__badge">{{ toolBadge(tool) }}</text>
             <text v-if="selectedKeys.includes(tool.key)" class="toolbox__selected">已在首页</text>
           </view>
-          <text class="toolbox__description">{{ tool.description }}</text>
+          <text class="toolbox__description">{{ toolDescription(tool) }}</text>
         </view>
         <text class="toolbox__arrow">›</text>
       </view>
@@ -34,9 +35,13 @@ import { ref } from 'vue'
 import AppBottomNav from '@/components/AppBottomNav.vue'
 import type { ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools } from '@/services/toolbox'
+import { fetchAnniversaries } from '@/services/anniversary'
+import type { AnniversarySummary } from '@/types/anniversary'
+import { summarizeAnniversaries } from '@/utils/anniversary'
 
 const tools = ref<ToolboxTool[]>([])
 const selectedKeys = ref<string[]>([])
+const anniversarySummary = ref<AnniversarySummary | null>(null)
 const loading = ref(true)
 
 onShow(() => {
@@ -49,6 +54,7 @@ async function loadTools() {
     const data = await fetchHomeTools()
     tools.value = data.catalog
     selectedKeys.value = data.homeToolKeys
+    await loadAnniversarySummary()
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '读取工具箱失败', icon: 'none' })
   } finally {
@@ -58,6 +64,32 @@ async function loadTools() {
 
 function openTool(tool: ToolboxTool) {
   uni.navigateTo({ url: tool.route })
+}
+
+async function loadAnniversarySummary() {
+  anniversarySummary.value = null
+  if (!tools.value.some((tool) => tool.key === 'anniversary')) return
+  try {
+    anniversarySummary.value = summarizeAnniversaries(await fetchAnniversaries())
+  } catch (error) {
+    console.warn('[toolbox] load anniversary summary failed:', error)
+  }
+}
+
+function toolDescription(tool: ToolboxTool): string {
+  if (tool.key !== 'anniversary' || !anniversarySummary.value) return tool.description
+  const summary = anniversarySummary.value
+  const parts: string[] = []
+  if (summary.todayCount) parts.push(`今天 ${summary.todayCount} 个`)
+  if (summary.upcomingCount) parts.push(`7天内 ${summary.upcomingCount} 个`)
+  if (summary.nextMilestone) parts.push(`${summary.nextMilestone.remainingDays} 天到 ${summary.nextMilestone.label}`)
+  return parts.length ? parts.join(' · ') : tool.description
+}
+
+function toolBadge(tool: ToolboxTool): string {
+  if (tool.key !== 'anniversary' || !anniversarySummary.value) return ''
+  const count = anniversarySummary.value.todayCount + anniversarySummary.value.upcomingCount
+  return count > 0 ? String(count) : ''
 }
 </script>
 
@@ -140,6 +172,20 @@ function openTool(tool: ToolboxTool) {
     background: $color-primary-light;
     color: $color-primary-dark;
     font-size: 20rpx;
+    flex-shrink: 0;
+  }
+
+  &__badge {
+    min-width: 34rpx;
+    height: 34rpx;
+    padding: 0 10rpx;
+    border-radius: 999rpx;
+    background: $color-danger;
+    color: #fff;
+    font-size: 20rpx;
+    font-weight: 700;
+    line-height: 34rpx;
+    text-align: center;
     flex-shrink: 0;
   }
 

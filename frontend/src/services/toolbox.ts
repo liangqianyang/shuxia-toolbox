@@ -85,6 +85,10 @@ export async function saveAdminToolOrder(toolKeys: string[]): Promise<AdminTool[
   return response.tools
 }
 
+export async function requestUserApi<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>): Promise<T> {
+  return requestWithSession(() => request<T>(path, method, data, true))
+}
+
 async function requestWithSession<T>(operation: () => Promise<T>): Promise<T> {
   await ensureToken()
   try {
