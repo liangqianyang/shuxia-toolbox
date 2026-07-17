@@ -62,7 +62,10 @@
               <text class="caption">{{ summary.today.length }} 个</text>
             </view>
             <view v-for="event in summary.today" :key="`today-${event.id}`" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">{{ dayLabel(event) }}</view>
+              <view class="anniversary__date-badge">
+                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+              </view>
               <view class="anniversary__event-body">
                 <text class="anniversary__event-title">{{ event.title }}</text>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
@@ -77,7 +80,10 @@
               <text class="caption">7 天内</text>
             </view>
             <view v-for="event in summary.upcoming" :key="`upcoming-${event.id}`" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">{{ dayLabel(event) }}</view>
+              <view class="anniversary__date-badge">
+                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+              </view>
               <view class="anniversary__event-body">
                 <text class="anniversary__event-title">{{ event.title }}</text>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
@@ -120,7 +126,10 @@
             </view>
 
             <view v-for="event in filteredEvents" :key="event.id" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">{{ dayLabel(event) }}</view>
+              <view class="anniversary__date-badge">
+                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+              </view>
               <view class="anniversary__event-body">
                 <view class="anniversary__event-title-row">
                   <text class="anniversary__event-title">{{ event.title }}</text>
@@ -222,14 +231,14 @@
 
           <view class="anniversary__field">
             <text class="caption">卡片风格</text>
-            <picker mode="selector" :range="toneLabels" :value="toneIndex" @change="onToneChange">
+            <picker mode="selector" :range="toneLabels" :value="toneIndex" :key="'tone-' + (form.id || 0)" @change="onToneChange">
               <view class="anniversary__picker">{{ toneLabels[toneIndex] }}</view>
             </picker>
           </view>
 
           <view class="anniversary__cover" @tap="chooseCoverForForm">
             <view v-if="form.coverImage" class="anniversary__cover-image-wrap">
-              <image class="anniversary__cover-image" :src="form.coverImage" mode="aspectFill" />
+              <image class="anniversary__cover-image" :src="form.coverImage" mode="aspectFit" />
               <view class="anniversary__cover-remove" @tap.stop="removeCover">✕</view>
             </view>
             <view v-else class="anniversary__cover-empty">
@@ -276,10 +285,13 @@
             <view class="anniversary__preview-dot" style="top: 160rpx; left: 120rpx;" />
           </template>
 
-          <text class="anniversary__preview-label">{{ templateName(cardEvent.cardTemplate) }}</text>
+          <view class="anniversary__preview-labels">
+            <text class="anniversary__preview-label">{{ templateName(cardEvent.cardTemplate) }}</text>
+            <text class="anniversary__preview-label anniversary__preview-label--tone">{{ toneName(cardEvent.cardTone) }}</text>
+          </view>
           <view class="anniversary__preview-number">
-            <text>{{ cardEvent.countMode === 'countup' ? computeOccurrence(cardEvent).elapsedDays : Math.max(0, computeOccurrence(cardEvent).daysUntil) }}</text>
-            <text class="anniversary__preview-unit">天</text>
+            <text>{{ previewNumber }}</text>
+            <text class="anniversary__preview-unit">{{ previewUnit }}</text>
           </view>
           <text class="anniversary__preview-title">{{ cardEvent.title }}</text>
           <text class="anniversary__preview-copy">{{ defaultCopyForEvent(cardEvent) }}</text>
@@ -313,7 +325,7 @@
         <view class="anniversary__section">
           <view class="anniversary__section-head">
             <text class="section-title">风格</text>
-            <text class="caption">文案保持克制</text>
+            <text class="caption">{{ toneName(cardTone) }} · {{ toneHint(cardTone) }}</text>
           </view>
           <view class="anniversary__tone-row">
             <view
@@ -323,7 +335,8 @@
               :class="{ 'anniversary__tone--active': cardTone === tone.key }"
               @tap="selectCardTone(tone.key)"
             >
-              {{ tone.name }}
+              <text>{{ tone.name }}</text>
+              <text class="caption">{{ tone.hint }}</text>
             </view>
           </view>
         </view>
@@ -400,6 +413,22 @@ const heroIsToday = computed(() => {
   if (!summary.value.nextEvent) return false
   return computeOccurrence(summary.value.nextEvent).daysUntil === 0
 })
+
+const previewOccurrence = computed(() => cardEvent.value ? computeOccurrence(cardEvent.value) : null)
+const previewNumber = computed(() => {
+  if (!previewOccurrence.value) return 0
+  const { elapsedDays, daysUntil } = previewOccurrence.value
+  const notStarted = cardEvent.value?.countMode === 'countup' && elapsedDays === 0
+  return notStarted ? Math.max(0, daysUntil) : cardEvent.value?.countMode === 'countup' ? elapsedDays : Math.max(0, daysUntil)
+})
+const previewUnit = computed(() => {
+  if (!previewOccurrence.value) return '天'
+  const { elapsedDays, daysUntil } = previewOccurrence.value
+  const notStarted = cardEvent.value?.countMode === 'countup' && elapsedDays === 0
+  if (notStarted) return '天后出发'
+  if (cardEvent.value?.countMode === 'countup') return '天'
+  return daysUntil === 0 ? '今天' : '天'
+})
 const sortedEvents = computed(() => [...events.value].sort((a, b) => computeOccurrence(a).daysUntil - computeOccurrence(b).daysUntil || a.sortOrder - b.sortOrder))
 const searchQuery = ref('')
 const filterScene = ref('')
@@ -426,7 +455,7 @@ const cardEvent = computed<AnniversaryEvent | null>(() => selectedEvent.value ? 
 const remindIndex = computed(() => Math.max(0, remindValues.indexOf(form.value.remindDaysBefore)))
 const templateLabels = computed(() => TEMPLATE_OPTIONS.map((item) => item.name))
 const templateIndex = computed(() => Math.max(0, TEMPLATE_OPTIONS.findIndex((item) => item.key === form.value.cardTemplate)))
-const toneLabels = computed(() => TONE_OPTIONS.map((item) => item.name))
+const toneLabels = computed(() => TONE_OPTIONS.map((item) => `${item.name} · ${item.hint}`))
 const toneIndex = computed(() => Math.max(0, TONE_OPTIONS.findIndex((item) => item.key === form.value.cardTone)))
 const lunarYearIndex = computed(() => Math.max(0, lunarYears.indexOf(form.value.lunarYear || new Date().getFullYear())))
 const lunarMonthOptions = computed(() => {
@@ -735,7 +764,7 @@ function writePhoneCalendar(event: AnniversaryEvent): Promise<void> {
     allDay: true,
     alarm: true,
     alarmOffset: event.remindDaysBefore * 86400,
-    description: `来自树下小屋 · 时光纪念卡\n${defaultCopyForEvent(event, occurrence)}`,
+    description: `来自枫叶小屋 · 时光纪念卡\n${defaultCopyForEvent(event, occurrence)}`,
   }
   return new Promise((resolve, reject) => {
     const api = typeof wx !== 'undefined' ? wx : null
@@ -867,12 +896,24 @@ function upsertEvent(event: AnniversaryEvent) {
   }
 }
 
-function dayLabel(event: AnniversaryEvent): string {
-  return computeOccurrence(event).date.slice(-2)
+function badgeMonth(event: AnniversaryEvent): string {
+  return `${Number(computeOccurrence(event).date.slice(5, 7))}月`
+}
+
+function badgeDay(event: AnniversaryEvent): string {
+  return String(Number(computeOccurrence(event).date.slice(-2)))
 }
 
 function templateName(template: AnniversaryCardTemplate): string {
   return TEMPLATE_OPTIONS.find((item) => item.key === template)?.name ?? '极简'
+}
+
+function toneName(tone: AnniversaryCardTone): string {
+  return TONE_OPTIONS.find((item) => item.key === tone)?.name ?? '温柔'
+}
+
+function toneHint(tone: AnniversaryCardTone): string {
+  return TONE_OPTIONS.find((item) => item.key === tone)?.hint ?? '暖棕调'
 }
 </script>
 
@@ -1144,10 +1185,21 @@ function templateName(template: AnniversaryCardTemplate): string {
     background: $color-primary-light;
     color: $color-primary-dark;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 28rpx;
     font-weight: 700;
+  }
+
+  &__date-badge-month {
+    font-size: 18rpx;
+    line-height: 1.1;
+  }
+
+  &__date-badge-day {
+    margin-top: 4rpx;
+    font-size: 30rpx;
+    line-height: 1;
   }
 
   &__event-body {
@@ -1215,11 +1267,11 @@ function templateName(template: AnniversaryCardTemplate): string {
   }
 
   &__scene--active,
-  &__chip--active,
-  &__tone--active {
+  &__chip--active {
     border-color: $color-primary;
-    background: $color-primary-light;
-    color: $color-primary-dark;
+    background: $color-primary;
+    color: #ffffff;
+    font-weight: 600;
   }
 
   &__form {
@@ -1334,24 +1386,28 @@ function templateName(template: AnniversaryCardTemplate): string {
     flex-direction: column;
     justify-content: space-between;
     overflow: hidden;
-    background: linear-gradient(150deg, #fff, #fff5ec);
+    background: linear-gradient(150deg, #fff8f0, #fef5ea);
     border: 2rpx solid $color-border;
   }
 
+  &__card-preview--warm {
+    background: linear-gradient(150deg, #fff8f0, #fef5ea);
+  }
+
   &__card-preview--fresh {
-    background: linear-gradient(150deg, #f2fbf8, #fff);
+    background: linear-gradient(150deg, #eef8f5, #edfaf5);
   }
 
   &__card-preview--classic {
-    background: linear-gradient(150deg, #f7f4ee, #fff);
+    background: linear-gradient(150deg, #f6f3ee, #f5f1ea);
   }
 
   &__card-preview--rose {
-    background: linear-gradient(150deg, #fff4f6, #fff);
+    background: linear-gradient(150deg, #fff3f4, #fef0f1);
   }
 
   &__card-preview--ink {
-    background: linear-gradient(150deg, #f5f8f6, #fff);
+    background: linear-gradient(150deg, #f7f7f4, #f4f6f2);
   }
 
   &__card-preview--certificate {
@@ -1391,7 +1447,7 @@ function templateName(template: AnniversaryCardTemplate): string {
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 35%, rgba(0, 0, 0, 0.45) 75%, rgba(0, 0, 0, 0.6) 100%);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 20%, rgba(0, 0, 0, 0.48) 60%, rgba(0, 0, 0, 0.72) 100%);
   }
 
   &__card-preview--has-photo {
@@ -1407,11 +1463,20 @@ function templateName(template: AnniversaryCardTemplate): string {
     position: relative;
     z-index: 2;
     color: #ffffff;
+    text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.45);
   }
 
   &__card-preview--has-photo &__preview-label {
     background: rgba(255, 255, 255, 0.15);
     color: #ffffff;
+  }
+
+  &__preview-labels {
+    display: flex;
+    gap: 12rpx;
+    align-self: flex-start;
+    position: relative;
+    z-index: 2;
   }
 
   &__preview-label {
@@ -1421,6 +1486,11 @@ function templateName(template: AnniversaryCardTemplate): string {
     background: $color-primary-light;
     color: $color-primary-dark;
     font-size: 22rpx;
+  }
+
+  &__preview-label--tone {
+    background: rgba($color-primary, 0.1);
+    color: $color-text-secondary;
   }
 
   &__preview-number {
@@ -1536,13 +1606,27 @@ function templateName(template: AnniversaryCardTemplate): string {
 
   &__tone {
     min-width: 104rpx;
-    padding: 16rpx 18rpx;
+    padding: 14rpx 22rpx;
     border: 2rpx solid $color-border;
     border-radius: 999rpx;
     background: $color-card;
     text-align: center;
     color: $color-text-secondary;
     font-size: 24rpx;
+    display: flex;
+    flex-direction: column;
+    gap: 2rpx;
+  }
+
+  &__tone--active {
+    border-color: $color-primary;
+    background: $color-primary;
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  &__tone--active .caption {
+    color: rgba(255, 255, 255, 0.75);
   }
 
   &__delete {

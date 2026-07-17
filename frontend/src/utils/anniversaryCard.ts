@@ -25,11 +25,11 @@ interface RenderState {
 }
 
 const TONES: Record<string, CardTone> = {
-  warm: { bg: '#fff8f0', card: '#ffffff', text: '#4a3f35', muted: '#9b8d80', primary: '#c8956c', soft: '#f3e3d3', line: '#ead8c7' },
-  fresh: { bg: '#eef8f5', card: '#ffffff', text: '#25423c', muted: '#70877f', primary: '#4a9a83', soft: '#d8eee7', line: '#c7ddd6' },
-  classic: { bg: '#f6f3ee', card: '#ffffff', text: '#303030', muted: '#74706a', primary: '#66635d', soft: '#e8e2da', line: '#d5cec4' },
-  rose: { bg: '#fff3f4', card: '#ffffff', text: '#54363b', muted: '#9b7379', primary: '#c87582', soft: '#f3d8dc', line: '#e7c5ca' },
-  ink: { bg: '#f7f7f4', card: '#ffffff', text: '#26302d', muted: '#71807a', primary: '#50645e', soft: '#dfe7e3', line: '#cfd8d3' },
+  warm: { bg: '#fff8f0', card: '#fef9f4', text: '#4a3f35', muted: '#9b8d80', primary: '#c8956c', soft: '#f3e3d3', line: '#ead8c7' },
+  fresh: { bg: '#eef8f5', card: '#f5fbf8', text: '#25423c', muted: '#70877f', primary: '#4a9a83', soft: '#d8eee7', line: '#c7ddd6' },
+  classic: { bg: '#f6f3ee', card: '#faf8f4', text: '#303030', muted: '#74706a', primary: '#66635d', soft: '#e8e2da', line: '#d5cec4' },
+  rose: { bg: '#fff3f4', card: '#fef8f8', text: '#54363b', muted: '#9b7379', primary: '#c87582', soft: '#f3d8dc', line: '#e7c5ca' },
+  ink: { bg: '#f7f7f4', card: '#f9faf7', text: '#26302d', muted: '#71807a', primary: '#50645e', soft: '#dfe7e3', line: '#cfd8d3' },
 }
 
 /** Derive a photo-background-friendly tone: white text, subtle panels, keeps the accent color. */
@@ -65,13 +65,18 @@ async function drawPhotoBackground(state: RenderState): Promise<boolean> {
   ctx.drawImage(image, sx, sy, sw, sh, 0, 0, width, height)
 
   // Dark gradient overlay: lighter at top, heavier at bottom where text lives
-  const gradient = ctx.createLinearGradient(0, height * 0.35, 0, height)
-  gradient.addColorStop(0, 'rgba(0,0,0,0.05)')
-  gradient.addColorStop(0.45, 'rgba(0,0,0,0.32)')
-  gradient.addColorStop(1, 'rgba(0,0,0,0.58)')
+  const gradient = ctx.createLinearGradient(0, height * 0.2, 0, height)
+  gradient.addColorStop(0, 'rgba(0,0,0,0.18)')
+  gradient.addColorStop(0.4, 'rgba(0,0,0,0.48)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0.72)')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, width, height)
   ctx.restore()
+
+  // Enable text shadow for all subsequent draws
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'
+  ctx.shadowBlur = 6
+  ctx.shadowOffsetY = 2
 
   return true
 }
@@ -485,13 +490,23 @@ function drawPanel(state: RenderState, x: number, y: number, w: number, h: numbe
 
 function drawBigNumber(state: RenderState, x: number, y: number): void {
   const { ctx, occurrence, event, tone } = state
-  const value = event.countMode === 'countup' ? occurrence.elapsedDays : Math.max(0, occurrence.daysUntil)
+  const notStarted = event.countMode === 'countup' && occurrence.elapsedDays === 0
+  const value = notStarted
+    ? Math.max(0, occurrence.daysUntil)
+    : event.countMode === 'countup'
+      ? occurrence.elapsedDays
+      : Math.max(0, occurrence.daysUntil)
   setFont(ctx, 188, 500)
   ctx.fillStyle = tone.text
   ctx.fillText(String(value), x, y)
   setFont(ctx, 42, 400)
   ctx.fillStyle = tone.muted
-  ctx.fillText(event.countMode === 'countup' ? '天' : occurrence.daysUntil === 0 ? '今天' : '天', x + measureText(ctx, String(value)) + 18, y - 12)
+  const unit = notStarted
+    ? '天后出发'
+    : event.countMode === 'countup'
+      ? '天'
+      : occurrence.daysUntil === 0 ? '今天' : '天'
+  ctx.fillText(unit, x + measureText(ctx, String(value)) + 18, y - 12)
 }
 
 function drawTitleBlock(state: RenderState, x: number, y: number): void {
@@ -517,7 +532,7 @@ function drawFooter(state: RenderState): void {
   setFont(ctx, 30, 400)
   ctx.fillStyle = tone.muted
   ctx.fillText(eventDateLabel(event), 144, height - 120)
-  ctx.fillText('树下小屋 · 时光纪念卡', 604, height - 120)
+  ctx.fillText('枫叶小屋 · 时光纪念卡', 604, height - 120)
 }
 
 function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, tone: CardTone): void {

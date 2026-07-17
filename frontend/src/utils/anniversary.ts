@@ -43,12 +43,12 @@ export const TEMPLATE_OPTIONS: TemplateOption[] = [
   { key: 'festival', name: '节日', hint: '温柔祝福卡' },
 ]
 
-export const TONE_OPTIONS: Array<{ key: AnniversaryCardTone, name: string }> = [
-  { key: 'warm', name: '温柔' },
-  { key: 'fresh', name: '清新' },
-  { key: 'classic', name: '经典' },
-  { key: 'rose', name: '纪念' },
-  { key: 'ink', name: '素雅' },
+export const TONE_OPTIONS: Array<{ key: AnniversaryCardTone, name: string, hint: string }> = [
+  { key: 'warm', name: '温柔', hint: '暖棕调' },
+  { key: 'fresh', name: '清新', hint: '薄荷绿调' },
+  { key: 'classic', name: '经典', hint: '暖灰调' },
+  { key: 'rose', name: '纪念', hint: '玫瑰粉调' },
+  { key: 'ink', name: '素雅', hint: '墨绿调' },
 ]
 
 export function emptyAnniversaryDraft(sceneType: AnniversarySceneType = 'birthday'): AnniversaryDraft {
