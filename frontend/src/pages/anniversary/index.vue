@@ -260,11 +260,14 @@
           :class="[
             `anniversary__card-preview--${cardEvent.cardTemplate}`,
             `anniversary__card-preview--${cardEvent.cardTone}`,
-            { 'anniversary__card-preview--has-photo': cardEvent.coverImage },
+            {
+              'anniversary__card-preview--has-cover': hasCoverBackground,
+              'anniversary__card-preview--photo-bg': usesPhotoBackground,
+            },
           ]"
         >
-          <image v-if="cardEvent.coverImage" class="anniversary__preview-bg" :src="cardEvent.coverImage" mode="aspectFill" />
-          <view v-if="cardEvent.coverImage" class="anniversary__preview-overlay" />
+          <image v-if="hasCoverBackground" class="anniversary__preview-bg" :src="cardEvent.coverImage" mode="aspectFill" />
+          <view v-if="hasCoverBackground" class="anniversary__preview-overlay" />
 
           <!-- 证书印章 -->
           <view v-if="cardEvent.cardTemplate === 'certificate'" class="anniversary__preview-stamp">纪</view>
@@ -452,6 +455,8 @@ const cardEvent = computed<AnniversaryEvent | null>(() => selectedEvent.value ? 
   cardTone: cardTone.value,
   coverImage: cardCoverImage.value,
 } : null)
+const hasCoverBackground = computed(() => Boolean(cardEvent.value?.coverImage))
+const usesPhotoBackground = computed(() => Boolean(cardEvent.value?.coverImage && cardEvent.value.cardTemplate === 'photo'))
 const remindIndex = computed(() => Math.max(0, remindValues.indexOf(form.value.remindDaysBefore)))
 const templateLabels = computed(() => TEMPLATE_OPTIONS.map((item) => item.name))
 const templateIndex = computed(() => Math.max(0, TEMPLATE_OPTIONS.findIndex((item) => item.key === form.value.cardTemplate)))
@@ -1441,33 +1446,67 @@ function toneHint(tone: AnniversaryCardTone): string {
     width: 100%;
     height: 100%;
     z-index: 0;
+    opacity: 0.78;
   }
 
   &__preview-overlay {
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.18) 20%, rgba(0, 0, 0, 0.48) 60%, rgba(0, 0, 0, 0.72) 100%);
+    background: linear-gradient(150deg, rgba(255, 248, 240, 0.42), rgba(255, 255, 255, 0.32));
   }
 
-  &__card-preview--has-photo {
+  &__card-preview--fresh &__preview-overlay {
+    background: linear-gradient(150deg, rgba(238, 248, 245, 0.42), rgba(255, 255, 255, 0.32));
+  }
+
+  &__card-preview--classic &__preview-overlay {
+    background: linear-gradient(150deg, rgba(246, 243, 238, 0.44), rgba(255, 255, 255, 0.34));
+  }
+
+  &__card-preview--rose &__preview-overlay {
+    background: linear-gradient(150deg, rgba(255, 243, 244, 0.42), rgba(255, 255, 255, 0.32));
+  }
+
+  &__card-preview--ink &__preview-overlay {
+    background: linear-gradient(150deg, rgba(247, 247, 244, 0.42), rgba(255, 255, 255, 0.32));
+  }
+
+  &__card-preview--has-cover {
     position: relative;
   }
 
-  &__card-preview--has-photo &__preview-label,
-  &__card-preview--has-photo &__preview-number,
-  &__card-preview--has-photo &__preview-title,
-  &__card-preview--has-photo &__preview-copy,
-  &__card-preview--has-photo &__preview-date,
-  &__card-preview--has-photo &__preview-unit {
+  &__card-preview--has-cover &__preview-labels,
+  &__card-preview--has-cover &__preview-number,
+  &__card-preview--has-cover &__preview-title,
+  &__card-preview--has-cover &__preview-copy,
+  &__card-preview--has-cover &__preview-date {
+    position: relative;
+    z-index: 2;
+  }
+
+  &__card-preview--photo-bg &__preview-bg {
+    opacity: 1;
+  }
+
+  &__card-preview--photo-bg &__preview-overlay {
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 12%, rgba(0, 0, 0, 0.22) 55%, rgba(0, 0, 0, 0.42) 100%);
+  }
+
+  &__card-preview--photo-bg &__preview-label,
+  &__card-preview--photo-bg &__preview-number,
+  &__card-preview--photo-bg &__preview-title,
+  &__card-preview--photo-bg &__preview-copy,
+  &__card-preview--photo-bg &__preview-date,
+  &__card-preview--photo-bg &__preview-unit {
     position: relative;
     z-index: 2;
     color: #ffffff;
-    text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.45);
+    text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.28);
   }
 
-  &__card-preview--has-photo &__preview-label {
-    background: rgba(255, 255, 255, 0.15);
+  &__card-preview--photo-bg &__preview-label {
+    background: rgba(255, 255, 255, 0.28);
     color: #ffffff;
   }
 

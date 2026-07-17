@@ -45,6 +45,15 @@ function photoTone(base: CardTone): CardTone {
   }
 }
 
+function softCoverTone(base: CardTone): CardTone {
+  return {
+    ...base,
+    card: 'rgba(255,255,255,0.76)',
+    soft: 'rgba(255,255,255,0.5)',
+    line: 'rgba(255,255,255,0.42)',
+  }
+}
+
 /** Draw the user's photo as a full-card background with a dark gradient overlay for readability. Returns true if a photo was drawn. */
 async function drawPhotoBackground(state: RenderState): Promise<boolean> {
   const { ctx, canvas, event, width, height } = state
@@ -64,20 +73,36 @@ async function drawPhotoBackground(state: RenderState): Promise<boolean> {
   const sy = (sourceHeight - sh) / 2
   ctx.drawImage(image, sx, sy, sw, sh, 0, 0, width, height)
 
-  // Dark gradient overlay: lighter at top, heavier at bottom where text lives
+  // Soft gradient overlay: keeps photo text readable without turning the whole card dark.
   const gradient = ctx.createLinearGradient(0, height * 0.2, 0, height)
-  gradient.addColorStop(0, 'rgba(0,0,0,0.18)')
-  gradient.addColorStop(0.4, 'rgba(0,0,0,0.48)')
-  gradient.addColorStop(1, 'rgba(0,0,0,0.72)')
+  gradient.addColorStop(0, 'rgba(0,0,0,0.08)')
+  gradient.addColorStop(0.48, 'rgba(0,0,0,0.22)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0.42)')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, width, height)
   ctx.restore()
 
   // Enable text shadow for all subsequent draws
-  ctx.shadowColor = 'rgba(0,0,0,0.45)'
-  ctx.shadowBlur = 6
+  ctx.shadowColor = 'rgba(0,0,0,0.28)'
+  ctx.shadowBlur = 4
   ctx.shadowOffsetY = 2
 
+  return true
+}
+
+async function drawSoftCoverBackground(state: RenderState, baseTone: CardTone): Promise<boolean> {
+  const { ctx, canvas, event, width, height } = state
+  if (!event.coverImage) return false
+  const image = await loadDrawableImage(canvas, event.coverImage)
+  if (!image) return false
+
+  ctx.save()
+  drawImageCover(ctx, image, 0, 0, width, height)
+  ctx.fillStyle = baseTone.bg
+  ctx.globalAlpha = 0.38
+  ctx.fillRect(0, 0, width, height)
+  ctx.globalAlpha = 1
+  ctx.restore()
   return true
 }
 
@@ -104,12 +129,19 @@ export async function renderAnniversaryCard(
   }
   ctx.clearRect(0, 0, width, height)
 
-  // Try user-uploaded photo as full-card background
-  const hasPhotoBg = await drawPhotoBackground(state)
+  // Only the photo template uses the user's image as full-card background.
+  const hasPhotoBg = event.cardTemplate === 'photo' ? await drawPhotoBackground(state) : false
 
   if (!hasPhotoBg) {
     ctx.fillStyle = state.tone.bg
     ctx.fillRect(0, 0, width, height)
+    const hasSoftCover = event.coverImage ? await drawSoftCoverBackground(state, baseTone) : false
+    if (hasSoftCover) {
+      state.tone = softCoverTone(baseTone)
+    }
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
   } else {
     state.tone = photoTone(baseTone)
   }
