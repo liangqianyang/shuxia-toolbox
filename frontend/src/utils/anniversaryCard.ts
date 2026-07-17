@@ -99,7 +99,7 @@ async function drawSoftCoverBackground(state: RenderState, baseTone: CardTone): 
   ctx.save()
   drawImageCover(ctx, image, 0, 0, width, height)
   ctx.fillStyle = baseTone.bg
-  ctx.globalAlpha = 0.38
+  ctx.globalAlpha = 0.28
   ctx.fillRect(0, 0, width, height)
   ctx.globalAlpha = 1
   ctx.restore()

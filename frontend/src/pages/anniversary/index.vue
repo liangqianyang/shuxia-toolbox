@@ -256,30 +256,41 @@
 
       <template v-else-if="panel === 'card' && cardEvent">
         <view
+          v-if="previewImage"
+          :key="previewCardKey + '-rendered'"
+          class="anniversary__canvas-preview card"
+        >
+          <image class="anniversary__canvas-preview-image" :src="previewImage" mode="widthFix" />
+          <text v-if="previewRendering" class="caption anniversary__canvas-preview-state">正在更新预览…</text>
+        </view>
+
+        <view
+          v-else
+          :key="previewCardKey"
           class="anniversary__card-preview card"
           :class="[
-            `anniversary__card-preview--${cardEvent.cardTemplate}`,
-            `anniversary__card-preview--${cardEvent.cardTone}`,
+            `anniversary__card-preview--${cardTemplate}`,
+            `anniversary__card-preview--${cardTone}`,
             {
               'anniversary__card-preview--has-cover': hasCoverBackground,
               'anniversary__card-preview--photo-bg': usesPhotoBackground,
             },
           ]"
         >
-          <image v-if="hasCoverBackground" class="anniversary__preview-bg" :src="cardEvent.coverImage" mode="aspectFill" />
+          <image v-if="hasCoverBackground" class="anniversary__preview-bg" :src="cardCoverImage" mode="aspectFill" />
           <view v-if="hasCoverBackground" class="anniversary__preview-overlay" />
 
           <!-- 证书印章 -->
-          <view v-if="cardEvent.cardTemplate === 'certificate'" class="anniversary__preview-stamp">纪</view>
+          <view v-if="cardTemplate === 'certificate'" class="anniversary__preview-stamp">纪</view>
 
           <!-- 进度环 -->
-          <view v-if="cardEvent.cardTemplate === 'progress'" class="anniversary__preview-ring-wrap">
+          <view v-if="cardTemplate === 'progress'" class="anniversary__preview-ring-wrap">
             <view class="anniversary__preview-ring" />
             <text class="anniversary__preview-ring-text">{{ cardEvent.countMode === 'countup' ? '...' : Math.max(0, computeOccurrence(cardEvent).daysUntil) + '天' }}</text>
           </view>
 
           <!-- 节日星星 -->
-          <template v-if="cardEvent.cardTemplate === 'festival'">
+          <template v-if="cardTemplate === 'festival'">
             <view class="anniversary__preview-star" style="top: 100rpx; right: 160rpx; width: 32rpx; height: 32rpx;" />
             <view class="anniversary__preview-star" style="top: 180rpx; right: 100rpx; width: 20rpx; height: 20rpx;" />
             <view class="anniversary__preview-star" style="top: 140rpx; left: 80rpx; width: 24rpx; height: 24rpx;" />
@@ -289,8 +300,8 @@
           </template>
 
           <view class="anniversary__preview-labels">
-            <text class="anniversary__preview-label">{{ templateName(cardEvent.cardTemplate) }}</text>
-            <text class="anniversary__preview-label anniversary__preview-label--tone">{{ toneName(cardEvent.cardTone) }}</text>
+            <text class="anniversary__preview-label">{{ templateName(cardTemplate) }}</text>
+            <text class="anniversary__preview-label anniversary__preview-label--tone">{{ toneName(cardTone) }}</text>
           </view>
           <view class="anniversary__preview-number">
             <text>{{ previewNumber }}</text>
@@ -405,6 +416,9 @@ const selectedId = ref<number | null>(null)
 const cardTemplate = ref<AnniversaryCardTemplate>('minimal')
 const cardTone = ref<AnniversaryCardTone>('warm')
 const cardCoverImage = ref('')
+const previewImage = ref('')
+const previewRendering = ref(false)
+let previewRenderSeq = 0
 
 const remindValues = [0, 1, 3, 7, 14, 30]
 const remindLabels = ['当天提醒', '提前 1 天', '提前 3 天', '提前 7 天', '提前 14 天', '提前 30 天']
@@ -455,8 +469,9 @@ const cardEvent = computed<AnniversaryEvent | null>(() => selectedEvent.value ? 
   cardTone: cardTone.value,
   coverImage: cardCoverImage.value,
 } : null)
-const hasCoverBackground = computed(() => Boolean(cardEvent.value?.coverImage))
-const usesPhotoBackground = computed(() => Boolean(cardEvent.value?.coverImage && cardEvent.value.cardTemplate === 'photo'))
+const hasCoverBackground = computed(() => Boolean(cardCoverImage.value))
+const usesPhotoBackground = computed(() => Boolean(cardCoverImage.value && cardTemplate.value === 'photo'))
+const previewCardKey = computed(() => `${selectedId.value || 0}-${cardTemplate.value}-${cardTone.value}-${cardCoverImage.value}`)
 const remindIndex = computed(() => Math.max(0, remindValues.indexOf(form.value.remindDaysBefore)))
 const templateLabels = computed(() => TEMPLATE_OPTIONS.map((item) => item.name))
 const templateIndex = computed(() => Math.max(0, TEMPLATE_OPTIONS.findIndex((item) => item.key === form.value.cardTemplate)))
@@ -660,6 +675,8 @@ async function chooseCoverForCard() {
   if (!cardEvent.value) return
   try {
     cardCoverImage.value = await chooseImage()
+    patchSelectedCardEvent()
+    void renderPreviewCard()
     await saveCardPreference(false)
   } catch (error) {
     if (!/cancel/i.test(error instanceof Error ? error.message : String(error))) {
@@ -694,15 +711,23 @@ function openCard(event: AnniversaryEvent) {
   cardTone.value = event.cardTone || 'warm'
   cardCoverImage.value = event.coverImage || ''
   panel.value = 'card'
+  previewImage.value = ''
+  void renderPreviewCard()
 }
 
 function selectCardTemplate(template: AnniversaryCardTemplate) {
   cardTemplate.value = template
+  patchSelectedCardEvent()
+  previewImage.value = ''
+  void renderPreviewCard()
   void saveCardPreference(false)
 }
 
 function selectCardTone(tone: AnniversaryCardTone) {
   cardTone.value = tone
+  patchSelectedCardEvent()
+  previewImage.value = ''
+  void renderPreviewCard()
   void saveCardPreference(false)
 }
 
@@ -717,6 +742,42 @@ async function saveCardPreference(showToast = true) {
   upsertEvent(event)
   selectedId.value = event.id
   if (showToast) uni.showToast({ title: '卡片偏好已保存', icon: 'success' })
+}
+
+function patchSelectedCardEvent() {
+  if (!selectedEvent.value) return
+  upsertEvent({
+    ...selectedEvent.value,
+    cardTemplate: cardTemplate.value,
+    cardTone: cardTone.value,
+    coverImage: cardCoverImage.value,
+  })
+}
+
+async function renderPreviewCard() {
+  const event = cardEvent.value
+  if (!event) return
+  const seq = ++previewRenderSeq
+  previewRendering.value = true
+  try {
+    await nextTick()
+    const { canvas, ctx } = await getCanvasNode('#anniversary-export-canvas', instance)
+    canvas.width = 1080
+    canvas.height = 1440
+    await renderAnniversaryCard(canvas, ctx, event, 1080, 1440)
+    const filePath = await canvasToFile(canvas, 1080, 1440)
+    canvas.width = 1
+    canvas.height = 1
+    if (seq === previewRenderSeq) {
+      previewImage.value = filePath
+    }
+  } catch (error) {
+    console.warn('[anniversary] render preview failed:', error)
+  } finally {
+    if (seq === previewRenderSeq) {
+      previewRendering.value = false
+    }
+  }
 }
 
 const SUBSCRIBE_TMPL_ID = 'Jy26nV_9a4EbDPNzccPmnZ_ojRZ4EYSu5rjzmD1CYfc'
@@ -1395,6 +1456,23 @@ function toneHint(tone: AnniversaryCardTone): string {
     border: 2rpx solid $color-border;
   }
 
+  &__canvas-preview {
+    margin-bottom: 28rpx;
+    padding: 0;
+    overflow: hidden;
+    border: 2rpx solid $color-border;
+  }
+
+  &__canvas-preview-image {
+    width: 100%;
+    display: block;
+  }
+
+  &__canvas-preview-state {
+    display: block;
+    padding: 0 24rpx 24rpx;
+  }
+
   &__card-preview--warm {
     background: linear-gradient(150deg, #fff8f0, #fef5ea);
   }
@@ -1446,30 +1524,30 @@ function toneHint(tone: AnniversaryCardTone): string {
     width: 100%;
     height: 100%;
     z-index: 0;
-    opacity: 0.78;
+    opacity: 0.88;
   }
 
   &__preview-overlay {
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: linear-gradient(150deg, rgba(255, 248, 240, 0.42), rgba(255, 255, 255, 0.32));
+    background: linear-gradient(150deg, rgba(255, 248, 240, 0.34), rgba(255, 255, 255, 0.24));
   }
 
   &__card-preview--fresh &__preview-overlay {
-    background: linear-gradient(150deg, rgba(238, 248, 245, 0.42), rgba(255, 255, 255, 0.32));
+    background: linear-gradient(150deg, rgba(238, 248, 245, 0.34), rgba(255, 255, 255, 0.24));
   }
 
   &__card-preview--classic &__preview-overlay {
-    background: linear-gradient(150deg, rgba(246, 243, 238, 0.44), rgba(255, 255, 255, 0.34));
+    background: linear-gradient(150deg, rgba(246, 243, 238, 0.36), rgba(255, 255, 255, 0.26));
   }
 
   &__card-preview--rose &__preview-overlay {
-    background: linear-gradient(150deg, rgba(255, 243, 244, 0.42), rgba(255, 255, 255, 0.32));
+    background: linear-gradient(150deg, rgba(255, 243, 244, 0.34), rgba(255, 255, 255, 0.24));
   }
 
   &__card-preview--ink &__preview-overlay {
-    background: linear-gradient(150deg, rgba(247, 247, 244, 0.42), rgba(255, 255, 255, 0.32));
+    background: linear-gradient(150deg, rgba(247, 247, 244, 0.34), rgba(255, 255, 255, 0.24));
   }
 
   &__card-preview--has-cover {
@@ -1483,6 +1561,13 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__card-preview--has-cover &__preview-date {
     position: relative;
     z-index: 2;
+  }
+
+  &__card-preview--has-cover:not(.anniversary__card-preview--photo-bg) &__preview-number,
+  &__card-preview--has-cover:not(.anniversary__card-preview--photo-bg) &__preview-title,
+  &__card-preview--has-cover:not(.anniversary__card-preview--photo-bg) &__preview-copy,
+  &__card-preview--has-cover:not(.anniversary__card-preview--photo-bg) &__preview-date {
+    text-shadow: 0 2rpx 8rpx rgba(255, 255, 255, 0.6);
   }
 
   &__card-preview--photo-bg &__preview-bg {
