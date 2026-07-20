@@ -292,12 +292,11 @@
 
           <!-- 节日星星 -->
           <template v-if="cardTemplate === 'festival'">
-            <view class="anniversary__preview-star" style="top: 100rpx; right: 160rpx; width: 32rpx; height: 32rpx;" />
-            <view class="anniversary__preview-star" style="top: 180rpx; right: 100rpx; width: 20rpx; height: 20rpx;" />
-            <view class="anniversary__preview-star" style="top: 140rpx; left: 80rpx; width: 24rpx; height: 24rpx;" />
-            <view class="anniversary__preview-dot" style="top: 120rpx; right: 130rpx;" />
-            <view class="anniversary__preview-dot" style="top: 210rpx; right: 180rpx;" />
-            <view class="anniversary__preview-dot" style="top: 160rpx; left: 120rpx;" />
+            <view class="anniversary__preview-ribbon">今天值得被记住</view>
+            <view class="anniversary__preview-spark" style="top: 236rpx; left: 92rpx;" />
+            <view class="anniversary__preview-spark" style="top: 322rpx; right: 84rpx;" />
+            <view class="anniversary__preview-dot" style="top: 286rpx; right: 168rpx;" />
+            <view class="anniversary__preview-dot" style="top: 380rpx; left: 148rpx;" />
           </template>
 
           <view class="anniversary__preview-labels">
@@ -1662,8 +1661,9 @@ function toneHint(tone: AnniversaryCardTone): string {
 
   &__preview-number {
     display: flex;
-    align-items: baseline;
-    gap: 12rpx;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8rpx;
     margin-top: 56rpx;
     color: $color-text;
   }
@@ -1671,11 +1671,12 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__preview-number > text:first-child {
     font-size: 112rpx;
     font-weight: 700;
-    line-height: 1;
+    line-height: 0.92;
   }
 
   &__preview-unit {
     font-size: 32rpx;
+    font-weight: 600;
     color: $color-text-secondary;
   }
 
@@ -1747,12 +1748,27 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-weight: 600;
   }
 
-  &__preview-star {
+  &__preview-ribbon {
+    position: absolute;
+    top: 96rpx;
+    left: 44rpx;
+    z-index: 2;
+    padding: 14rpx 28rpx;
+    border-radius: 0 999rpx 999rpx 0;
+    background: $color-primary;
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 600;
+  }
+
+  &__preview-spark {
     position: absolute;
     z-index: 2;
+    width: 30rpx;
+    height: 30rpx;
     background: $color-primary;
-    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-    opacity: 0.5;
+    clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+    opacity: 0.46;
   }
 
   &__preview-dot {

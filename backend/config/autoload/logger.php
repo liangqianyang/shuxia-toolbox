@@ -10,9 +10,14 @@ return [
         'handler' => [
             'class' => RotatingFileHandler::class,
             'constructor' => [
-                'filename' => BASE_PATH . '/runtime/logs/hyperf.log',
-                'level' => Level::Info,
-                'maxFiles' => 30,
+                BASE_PATH . '/runtime/logs/hyperf.log',
+                30,
+                Level::Info,
+                true,
+                null,
+                false,
+                RotatingFileHandler::FILE_PER_DAY,
+                '{filename}-{date}',
             ],
         ],
         'formatter' => [

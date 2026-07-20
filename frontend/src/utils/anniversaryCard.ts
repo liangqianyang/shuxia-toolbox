@@ -24,6 +24,13 @@ interface RenderState {
   height: number
 }
 
+interface BigNumberOptions {
+  align?: 'left' | 'center'
+  size?: number
+  unitSize?: number
+  unitY?: number
+}
+
 const TONES: Record<string, CardTone> = {
   warm: { bg: '#fff8f0', card: '#fef9f4', text: '#4a3f35', muted: '#9b8d80', primary: '#c8956c', soft: '#f3e3d3', line: '#ead8c7' },
   fresh: { bg: '#eef8f5', card: '#f5fbf8', text: '#25423c', muted: '#70877f', primary: '#4a9a83', soft: '#d8eee7', line: '#c7ddd6' },
@@ -156,26 +163,33 @@ export async function renderAnniversaryCard(
 }
 
 function drawMinimalCard(state: RenderState): void {
-  const { ctx, tone } = state
-  drawPanel(state, 86, 110, 908, 1220, 52)
+  const { ctx, event, occurrence, tone, copy } = state
+  drawPanel(state, 76, 92, 928, 1268, 38)
 
-  // Geometric accent — thin vertical line creating an asymmetric layout
+  drawLabel(ctx, '时光纪念卡', 136, 184, tone)
+  drawDatePill(ctx, eventDateLabel(event), 692, 150, tone)
+
   ctx.strokeStyle = tone.line
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(270, 180)
-  ctx.lineTo(270, 1190)
-  ctx.stroke()
+  ctx.lineWidth = 2
+  roundedStroke(ctx, 136, 282, 808, 352, 30)
+  roundedRect(ctx, 160, 306, 760, 304, 24, 'rgba(255,255,255,0.38)')
+  drawBigNumber(state, 540, 520, { align: 'center', size: 216, unitY: 580 })
 
-  // Horizontal hairline below header area
-  ctx.beginPath()
-  ctx.moveTo(144, 280)
-  ctx.lineTo(270, 280)
-  ctx.stroke()
+  roundedRect(ctx, 136, 696, 132, 8, 4, tone.primary)
+  roundedRect(ctx, 288, 698, 412, 4, 2, tone.line)
 
-  drawLabel(ctx, '时光纪念卡', 144, 190, tone)
-  drawBigNumber(state, 144, 520)
-  drawTitleBlock(state, 144, 760)
+  setFont(ctx, 64, 500)
+  ctx.fillStyle = tone.text
+  wrapText(ctx, event.title, 136, 806, 780, 78, 2)
+
+  roundedRect(ctx, 136, 948, 808, 168, 24, tone.soft)
+  ctx.fillStyle = tone.primary
+  roundedRect(ctx, 168, 986, 8, 90, 4, tone.primary)
+  setFont(ctx, 34, 400)
+  ctx.fillStyle = tone.muted
+  wrapText(ctx, occurrence.detail, 204, 1006, 676, 46, 1)
+  wrapText(ctx, copy, 204, 1062, 676, 44, 1)
+
   drawFooter(state)
 }
 
@@ -184,21 +198,21 @@ function drawCalendarCard(state: RenderState): void {
   drawPanel(state, 86, 110, 908, 1220, 44)
   const date = state.occurrence.date.split('-')
   const [year, month, day] = date.map(Number)
-  roundedRect(ctx, 176, 190, 360, 420, 34, tone.card)
+  roundedRect(ctx, 142, 176, 796, 520, 38, 'rgba(255,255,255,0.76)')
+  roundedRect(ctx, 176, 220, 350, 390, 34, tone.card)
   ctx.fillStyle = tone.primary
-  roundTopRect(ctx, 176, 190, 360, 110, 34)
+  roundTopRect(ctx, 176, 220, 350, 104, 34)
   ctx.fillStyle = '#ffffff'
   setFont(ctx, 44, 500)
-  ctx.fillText(`${date[0]}.${date[1]}`, 252, 258)
+  ctx.fillText(`${date[0]}.${date[1]}`, 246, 286)
   ctx.fillStyle = tone.text
   setFont(ctx, 176, 500)
-  ctx.fillText(date[2], 246, 478)
-  drawLabel(ctx, event.repeatType === 'yearly' ? '每年重复' : '重要日子', 600, 214, tone)
+  ctx.fillText(date[2], 244, 504)
+  drawLabel(ctx, event.repeatType === 'yearly' ? '每年重复' : '重要日子', 594, 252, tone)
 
-  // Mini calendar grid right of the date block
-  drawMiniCalendar(ctx, year, month, day, 600, 276, tone)
+  drawMiniCalendar(ctx, year, month, day, 586, 336, tone)
 
-  drawTitleBlock(state, 144, 735)
+  drawTitleBlock(state, 144, 818)
   drawFooter(state)
 }
 
@@ -254,11 +268,15 @@ function drawMiniCalendar(
 
 async function drawPhotoCard(state: RenderState, hasPhotoBg = false): Promise<void> {
   const { ctx, canvas, event, tone } = state
-  drawPanel(state, 70, 86, 940, 1268, 38)
-
   if (hasPhotoBg) {
-    // Photo is already full-canvas background — just leave some breathing room
+    roundedRect(ctx, 96, 710, 888, 430, 36, 'rgba(255,255,255,0.18)')
+    drawLabel(ctx, '照片纪念卡', 136, 190, tone)
+    drawBigNumber(state, 144, 855)
+    drawTitleBlock(state, 144, 1026)
+    drawFooter(state)
+    return
   } else {
+    drawPanel(state, 70, 86, 940, 1268, 38)
     // Polaroid-style framed photo
     const px = 140, py = 130, pw = 800, ph = 540
     const bottomPad = 56 // extra white margin at bottom like real polaroid
@@ -355,7 +373,7 @@ function drawBarcode(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawCertificateCard(state: RenderState): void {
-  const { ctx, tone } = state
+  const { ctx, event, occurrence, tone, copy } = state
   drawPanel(state, 72, 96, 936, 1248, 28)
   ctx.strokeStyle = tone.primary
   ctx.lineWidth = 6
@@ -363,12 +381,33 @@ function drawCertificateCard(state: RenderState): void {
   ctx.strokeStyle = tone.line
   ctx.lineWidth = 2
   roundedStroke(ctx, 150, 174, 780, 1092, 18)
-  drawLabel(ctx, '纪念证书', 408, 260, tone)
-  drawBigNumber(state, 174, 610)
-  drawTitleBlock(state, 174, 850)
+
+  drawCenterText(ctx, '纪念证书', 540, 268, 58, 700, tone.text)
+  drawCenterText(ctx, 'CERTIFICATE OF MEMORY', 540, 326, 24, 500, tone.muted)
+
+  ctx.strokeStyle = tone.line
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(230, 374)
+  ctx.lineTo(850, 374)
+  ctx.stroke()
+
+  drawCenterText(ctx, event.title, 540, 486, 56, 700, tone.text, 720)
+  drawCenterText(ctx, '这一天已被正式收进时光档案', 540, 552, 30, 400, tone.muted, 720)
+
+  roundedRect(ctx, 236, 630, 608, 236, 28, tone.soft)
+  drawBigNumber(state, 540, 774, { align: 'center', size: 178, unitY: 824 })
+
+  setFont(ctx, 34, 400)
+  ctx.fillStyle = tone.muted
+  wrapText(ctx, occurrence.detail, 236, 938, 608, 46, 1)
+  wrapText(ctx, copy, 236, 998, 608, 46, 2)
+
+  drawCertificateMeta(ctx, 214, 1110, '记录日期', eventDateLabel(event), tone)
+  drawCertificateMeta(ctx, 214, 1184, '纪念说明', occurrence.label, tone)
 
   // Red stamp seal — bottom-right, slightly rotated
-  drawStampSeal(ctx, 750, 1080, 68, tone)
+  drawStampSeal(ctx, 780, 1134, 70, tone)
 
   drawFooter(state)
 }
@@ -459,41 +498,32 @@ function drawProgressCard(state: RenderState): void {
 }
 
 function drawFestivalCard(state: RenderState): void {
-  const { ctx, tone } = state
-  drawPanel(state, 86, 110, 908, 1220, 56)
-  ctx.fillStyle = tone.soft
-  ctx.globalAlpha = 0.85
-  ctx.beginPath()
-  ctx.arc(822, 276, 132, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.globalAlpha = 1
+  const { ctx, event, occurrence, tone, copy } = state
+  drawPanel(state, 86, 110, 908, 1220, 42)
+  roundedRect(ctx, 138, 178, 804, 188, 32, tone.soft)
+  drawRibbon(ctx, 138, 210, 360, 76, tone.primary)
+  drawCenterText(ctx, '今天值得被记住', 318, 260, 32, 700, '#ffffff')
+  drawDatePill(ctx, eventDateLabel(event), 660, 238, tone)
 
-  // Decorative stars scattered in upper area
-  const stars: Array<[number, number, number]> = [
-    [720, 380, 22], [880, 310, 14], [200, 350, 18],
-    [840, 500, 16], [300, 440, 12], [900, 430, 20],
+  const confetti: Array<[number, number, number, string]> = [
+    [180, 430, 18, tone.primary], [284, 392, 10, tone.muted], [788, 430, 16, tone.primary],
+    [890, 514, 11, tone.muted], [224, 596, 8, tone.primary], [838, 632, 10, tone.primary],
   ]
-  for (const [sx, sy, sr] of stars) {
-    drawStar(ctx, sx, sy, sr, sr * 0.42, 5, tone.primary)
+  for (const [cx, cy, radius, fill] of confetti) {
+    drawSpark(ctx, cx, cy, radius, fill)
   }
 
-  // Small dot confetti
-  const dots: Array<[number, number, number]> = [
-    [760, 340, 6], [850, 470, 4], [240, 390, 5],
-    [910, 360, 5], [180, 420, 4], [820, 420, 7],
-  ]
-  ctx.fillStyle = tone.primary
-  ctx.globalAlpha = 0.5
-  for (const [dx, dy, dr] of dots) {
-    ctx.beginPath()
-    ctx.arc(dx, dy, dr, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  ctx.globalAlpha = 1
+  drawBigNumber(state, 540, 608, { align: 'center', size: 202, unitY: 668 })
 
-  drawLabel(ctx, '今天值得被记住', 144, 210, tone)
-  drawBigNumber(state, 144, 590)
-  drawTitleBlock(state, 144, 850)
+  setFont(ctx, 60, 700)
+  ctx.fillStyle = tone.text
+  wrapText(ctx, event.title, 144, 798, 792, 74, 2)
+
+  roundedRect(ctx, 144, 958, 792, 150, 28, 'rgba(255,255,255,0.42)')
+  setFont(ctx, 32, 400)
+  ctx.fillStyle = tone.muted
+  wrapText(ctx, occurrence.detail, 184, 1016, 710, 42, 1)
+  wrapText(ctx, copy, 184, 1064, 710, 42, 1)
   drawFooter(state)
 }
 
@@ -520,25 +550,39 @@ function drawPanel(state: RenderState, x: number, y: number, w: number, h: numbe
   roundedRect(state.ctx, x, y, w, h, r, state.tone.card)
 }
 
-function drawBigNumber(state: RenderState, x: number, y: number): void {
-  const { ctx, occurrence, event, tone } = state
+function mainValue(state: RenderState): string {
+  const { occurrence, event } = state
   const notStarted = event.countMode === 'countup' && occurrence.elapsedDays === 0
   const value = notStarted
     ? Math.max(0, occurrence.daysUntil)
     : event.countMode === 'countup'
       ? occurrence.elapsedDays
       : Math.max(0, occurrence.daysUntil)
-  setFont(ctx, 188, 500)
+  return String(value)
+}
+
+function mainUnit(state: RenderState): string {
+  const { occurrence, event } = state
+  const notStarted = event.countMode === 'countup' && occurrence.elapsedDays === 0
+  if (notStarted) return '天后出发'
+  if (event.countMode === 'countup') return '天'
+  return occurrence.daysUntil === 0 ? '今天' : '天'
+}
+
+function drawBigNumber(state: RenderState, x: number, y: number, options: BigNumberOptions = {}): void {
+  const { ctx, tone } = state
+  const value = mainValue(state)
+  const size = options.size ?? (value.length >= 5 ? 148 : value.length >= 4 ? 166 : 188)
+  const unitSize = options.unitSize ?? 42
+  const align = options.align ?? 'left'
+  ctx.textAlign = align
+  setFont(ctx, size, 500)
   ctx.fillStyle = tone.text
-  ctx.fillText(String(value), x, y)
-  setFont(ctx, 42, 400)
+  ctx.fillText(value, x, y)
+  setFont(ctx, unitSize, 500)
   ctx.fillStyle = tone.muted
-  const unit = notStarted
-    ? '天后出发'
-    : event.countMode === 'countup'
-      ? '天'
-      : occurrence.daysUntil === 0 ? '今天' : '天'
-  ctx.fillText(unit, x + measureText(ctx, String(value)) + 18, y - 12)
+  ctx.fillText(mainUnit(state), x, options.unitY ?? y + 58)
+  ctx.textAlign = 'start'
 }
 
 function drawTitleBlock(state: RenderState, x: number, y: number): void {
@@ -567,12 +611,88 @@ function drawFooter(state: RenderState): void {
   ctx.fillText('枫叶小屋 · 时光纪念卡', 604, height - 120)
 }
 
+function drawCenterText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  weight: 400 | 500 | 700,
+  fill: string,
+  maxWidth = 0,
+): void {
+  let fittedSize = size
+  setFont(ctx, fittedSize, weight)
+  while (maxWidth > 0 && measureText(ctx, text) > maxWidth && fittedSize > 28) {
+    fittedSize -= 2
+    setFont(ctx, fittedSize, weight)
+  }
+  ctx.fillStyle = fill
+  ctx.textAlign = 'center'
+  ctx.fillText(text, x, y)
+  ctx.textAlign = 'start'
+}
+
+function drawCertificateMeta(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, value: string, tone: CardTone): void {
+  setFont(ctx, 24, 500)
+  ctx.fillStyle = tone.muted
+  ctx.fillText(label, x, y)
+  ctx.strokeStyle = tone.line
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x + 122, y - 8)
+  ctx.lineTo(x + 442, y - 8)
+  ctx.stroke()
+  setFont(ctx, 30, 500)
+  ctx.fillStyle = tone.text
+  wrapText(ctx, value, x + 122, y - 6, 320, 38, 1)
+}
+
 function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, tone: CardTone): void {
   setFont(ctx, 32, 500)
   const width = measureText(ctx, text) + 44
   roundedRect(ctx, x, y - 38, width, 58, 29, tone.soft)
   ctx.fillStyle = tone.primary
   ctx.fillText(text, x + 22, y)
+}
+
+function drawDatePill(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, tone: CardTone): void {
+  setFont(ctx, 28, 500)
+  const width = Math.max(214, measureText(ctx, text) + 42)
+  roundedRect(ctx, x, y, width, 62, 31, tone.soft)
+  ctx.fillStyle = tone.primary
+  ctx.fillText(text, x + 22, y + 40)
+}
+
+function drawRibbon(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string): void {
+  ctx.beginPath()
+  ctx.moveTo(x + 22, y)
+  ctx.lineTo(x + w, y)
+  ctx.lineTo(x + w - 30, y + h / 2)
+  ctx.lineTo(x + w, y + h)
+  ctx.lineTo(x + 22, y + h)
+  ctx.lineTo(x, y + h / 2)
+  ctx.closePath()
+  ctx.fillStyle = fill
+  ctx.fill()
+}
+
+function drawSpark(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, fill: string): void {
+  ctx.save()
+  ctx.fillStyle = fill
+  ctx.globalAlpha = 0.46
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - radius)
+  ctx.lineTo(cx + radius * 0.28, cy - radius * 0.28)
+  ctx.lineTo(cx + radius, cy)
+  ctx.lineTo(cx + radius * 0.28, cy + radius * 0.28)
+  ctx.lineTo(cx, cy + radius)
+  ctx.lineTo(cx - radius * 0.28, cy + radius * 0.28)
+  ctx.lineTo(cx - radius, cy)
+  ctx.lineTo(cx - radius * 0.28, cy - radius * 0.28)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
 }
 
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string): void {
