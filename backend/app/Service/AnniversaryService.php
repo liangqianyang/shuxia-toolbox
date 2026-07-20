@@ -35,7 +35,7 @@ final class AnniversaryService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(fn (AnniversaryEvent $event): array => $this->format($event))
+            ->map(fn(AnniversaryEvent $event): array => $this->format($event))
             ->all();
     }
 

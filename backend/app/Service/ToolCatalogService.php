@@ -103,7 +103,7 @@ final class ToolCatalogService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(fn (ToolCatalog $tool): array => $this->formatAdminTool($tool))
+            ->map(fn(ToolCatalog $tool): array => $this->formatAdminTool($tool))
             ->all();
     }
 

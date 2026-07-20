@@ -105,6 +105,10 @@ final class WechatSubscribeMessageService
 
     private function isProduction(): bool
     {
-        return ($_ENV['APP_ENV'] ?? '') === 'production';
+        // 注意：入口用 putenv() 注入 .env，$_ENV 数组不会被填充，只能用 config/getenv 读取。
+        // miniprogram_state=developer 时正式版小程序收不到订阅消息，故这里必须能正确判定生产环境。
+        $env = (string) $this->config->get('app_env', getenv('APP_ENV') ?: 'dev');
+
+        return in_array($env, ['production', 'prod'], true);
     }
 }

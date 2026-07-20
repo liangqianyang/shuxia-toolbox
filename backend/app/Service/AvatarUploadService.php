@@ -40,7 +40,7 @@ final class AvatarUploadService
         }
 
         $directory = $this->directory();
-        if (! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
+        if (! is_dir($directory) && ! mkdir($directory, 0o775, true) && ! is_dir($directory)) {
             throw new RuntimeException('创建头像目录失败');
         }
 
