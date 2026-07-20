@@ -286,9 +286,12 @@ final class AnniversaryService
                 continue;
             }
 
-            // 构造消息内容
+            // 构造消息内容：事项时间用本次实际发生日（优先前端预计算的 next_occurrence_date）
+            $occurrenceDate = $sub->next_occurrence_date !== null
+                ? (string) $sub->next_occurrence_date
+                : (string) $event->event_date;
             $templateId = (string) $sub->template_id;
-            $data = $this->buildReminderData($event);
+            $data = $this->buildReminderData($event, $occurrenceDate);
             $page = 'pages/anniversary/index';
 
             $result = $this->subscribeMessages->send(
@@ -350,26 +353,38 @@ final class AnniversaryService
         return $eventDate->subDays($daysBefore)->startOfDay();
     }
 
-    /** 构造订阅消息的 data 字段。 */
-    private function buildReminderData(AnniversaryEvent $event): array
+    /**
+     * 构造订阅消息的 data 字段。
+     * 模板「待办事项提醒」(Jy26nV...) 字段：
+     *   thing4  事项描述（thing 类型，≤20 字）
+     *   time2   事项时间（time 类型，需 Y-m-d H:i:s）
+     *   thing12 备注消息（thing 类型，≤20 字）
+     *
+     * @param string $occurrenceDate 本次纪念日实际发生日期（Y-m-d）
+     */
+    private function buildReminderData(AnniversaryEvent $event, string $occurrenceDate): array
     {
-        $daysBefore = (int) $event->remind_days_before;
-        $eventDate = (string) $event->event_date;
         $title = (string) $event->title;
 
+        // 文案按"今天到纪念日的实际剩余天数"生成，而非提前提醒天数（remind_days_before）。
+        $daysLeft = max(0, Carbon::today()->diffInDays(Carbon::parse($occurrenceDate)->startOfDay(), false));
+
         $copy = match ((string) $event->scene_type) {
-            'travel' => '把期待装进口袋，' . ($daysBefore > 0 ? "{$daysBefore} 天后出发。" : '今天出发！'),
-            'birthday' => $daysBefore > 0 ? "还有 {$daysBefore} 天，准备一份心意。" : '今天值得被好好记住。',
+            'travel' => '把期待装进口袋，' . ($daysLeft > 0 ? "{$daysLeft} 天后出发。" : '今天出发！'),
+            'birthday' => $daysLeft > 0 ? "还有 {$daysLeft} 天，准备一份心意。" : '今天值得被好好记住。',
             'relationship', 'wedding' => '是时间留下的温柔记号。',
             'habit' => '每一天都算数。',
-            'deadline' => $daysBefore > 0 ? "还有 {$daysBefore} 天，把节奏稳住。" : '今天就是目标日。',
-            default => $daysBefore > 0 ? "还有 {$daysBefore} 天。" : '就是今天。',
+            'deadline' => $daysLeft > 0 ? "还有 {$daysLeft} 天，把节奏稳住。" : '今天就是目标日。',
+            default => $daysLeft > 0 ? "还有 {$daysLeft} 天。" : '就是今天。',
         };
 
+        // time 类型需完整时间；纪念日按全天处理。
+        $eventTime = Carbon::parse($occurrenceDate)->format('Y-m-d');
+
         return [
-            'thing1' => ['value' => mb_substr($title, 0, 20)],
-            'date2' => ['value' => str_replace('-', '.', $eventDate)],
-            'thing3' => ['value' => mb_substr($copy, 0, 20)],
+            'thing4' => ['value' => mb_substr($title, 0, 20)],
+            'time2' => ['value' => $eventTime],
+            'thing12' => ['value' => mb_substr($copy, 0, 20)],
         ];
     }
 }

@@ -28,7 +28,7 @@ final class WechatSubscribeMessageService
     /**
      * 发一条订阅消息。成功返回 true，失败返回错误信息。
      *
-     * @param array{thing1?: array{value: string}, date2?: array{value: string}, thing3?: array{value: string}} $data
+     * @param array<string, array{value: string}> $data 模板字段，键名需与微信模板一致（如 thing4/time2/thing12）
      */
     public function send(string $openid, string $templateId, string $page, array $data): true|string
     {
@@ -55,7 +55,7 @@ final class WechatSubscribeMessageService
 
         $errcode = (int) ($body['errcode'] ?? -1);
         if ($errcode !== 0) {
-            return (string) ($body['errmsg'] ?? '发送失败');
+            return sprintf('errcode=%d, errmsg=%s', $errcode, (string) ($body['errmsg'] ?? '发送失败'));
         }
 
         return true;
