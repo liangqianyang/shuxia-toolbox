@@ -11,6 +11,7 @@ namespace App\Model;
  * @property int $user_id
  * @property int $anniversary_event_id
  * @property string $template_id
+ * @property null|string $next_occurrence_date
  * @property string $status          pending / sent / expired
  * @property string $subscribed_at
  * @property null|string $sent_at
@@ -29,6 +30,8 @@ final class AnniversarySubscription extends Model
         'status',
         'subscribed_at',
         'sent_at',
+        'created_at',
+        'updated_at',
     ];
 
     protected array $casts = [

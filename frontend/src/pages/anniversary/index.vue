@@ -446,7 +446,7 @@ const previewUnit = computed(() => {
   if (cardEvent.value?.countMode === 'countup') return '天'
   return daysUntil === 0 ? '今天' : '天'
 })
-const sortedEvents = computed(() => [...events.value].sort((a, b) => computeOccurrence(a).daysUntil - computeOccurrence(b).daysUntil || a.sortOrder - b.sortOrder))
+const sortedEvents = computed(() => [...events.value].sort((a, b) => b.id - a.id))
 const searchQuery = ref('')
 const filterScene = ref('')
 const filterSceneOptions = computed(() => [{ key: '', name: '全部' }, ...SCENE_OPTIONS])
@@ -782,25 +782,39 @@ async function renderPreviewCard() {
 
 const SUBSCRIBE_TMPL_ID = 'Jy26nV_9a4EbDPNzccPmnZ_ojRZ4EYSu5rjzmD1CYfc'
 
+interface SubscribeReminderResult {
+  accepted: boolean
+  saved: boolean
+  message: string
+}
+
 async function addToCalendar(event: AnniversaryEvent) {
   const target = event.id === selectedEvent.value?.id && cardEvent.value ? cardEvent.value : event
   try {
+    const subscribeResult = await requestSubscribeReminder(target)
     await writePhoneCalendar(target)
     const updated = await markAnniversaryCalendarAdded(target.id, target.repeatType)
     upsertEvent(updated)
-    uni.showToast({ title: '已写入手机日历', icon: 'success' })
-
-    // 顺便请求订阅消息授权，作为日历被删后的兜底提醒
-    await requestSubscribeReminder(target)
+    if (subscribeResult.accepted && !subscribeResult.saved) {
+      uni.showModal({
+        title: '微信订阅未保存',
+        content: `手机日历已写入，但微信订阅保存失败：${subscribeResult.message || '请稍后重试'}`,
+        showCancel: false,
+        confirmText: '知道了',
+      })
+      return
+    }
+    uni.showToast({ title: subscribeResult.saved ? '提醒已开启' : '已写入手机日历', icon: 'success' })
   } catch (error) {
     const message = error instanceof Error ? error.message : '写入日历失败'
     if (!/cancel/i.test(message)) uni.showToast({ title: message, icon: 'none' })
   }
 }
 
-async function requestSubscribeReminder(event: AnniversaryEvent) {
+async function requestSubscribeReminder(event: AnniversaryEvent): Promise<SubscribeReminderResult> {
   const api = typeof wx !== 'undefined' ? wx : null
-  if (!api || typeof api.requestSubscribeMessage !== 'function') return
+  const fallback = { accepted: false, saved: false, message: '' }
+  if (!api || typeof api.requestSubscribeMessage !== 'function') return fallback
 
   try {
     const result = await new Promise<{ errMsg: string; [tmplId: string]: string }>((resolve, reject) => {
@@ -813,11 +827,19 @@ async function requestSubscribeReminder(event: AnniversaryEvent) {
 
     if (result[SUBSCRIBE_TMPL_ID] === 'accept') {
       const nextDate = computeOccurrence(event).date
-      await subscribeAnniversaryReminder(event.id, SUBSCRIBE_TMPL_ID, nextDate)
+      try {
+        await subscribeAnniversaryReminder(event.id, SUBSCRIBE_TMPL_ID, nextDate)
+        return { accepted: true, saved: true, message: '' }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '服务内部错误，请稍后重试'
+        console.warn('[anniversary] save subscribe reminder failed:', error)
+        return { accepted: true, saved: false, message }
+      }
     }
-  } catch {
-    // 用户拒绝或出错，静默忽略
+  } catch (error) {
+    console.warn('[anniversary] request subscribe reminder failed:', error)
   }
+  return fallback
 }
 
 function writePhoneCalendar(event: AnniversaryEvent): Promise<void> {

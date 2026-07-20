@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-use Monolog\Handler\StreamHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Level;
 
 return [
     'default' => [
         'handler' => [
-            'class' => StreamHandler::class,
+            'class' => RotatingFileHandler::class,
             'constructor' => [
-                'stream' => BASE_PATH . '/runtime/logs/hyperf.log',
+                'filename' => BASE_PATH . '/runtime/logs/hyperf.log',
                 'level' => Level::Info,
+                'maxFiles' => 30,
             ],
         ],
         'formatter' => [
