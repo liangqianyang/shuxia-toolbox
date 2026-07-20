@@ -36,7 +36,8 @@
             </view>
             <text class="anniversary__hero-detail">{{ computeOccurrence(summary.nextEvent).detail }}</text>
             <view class="anniversary__hero-actions">
-              <view class="btn-ghost anniversary__small-btn" @tap="addToCalendar(summary.nextEvent)">写入日历</view>
+              <view class="btn-ghost anniversary__small-btn" @tap="addToCalendar(summary.nextEvent)">加手机日历</view>
+              <view class="btn-ghost anniversary__small-btn" @tap="enableWechatReminder(summary.nextEvent)">微信提醒</view>
               <view class="btn-primary anniversary__small-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '马上纪念' : '生成卡片' }}</view>
             </view>
           </view>
@@ -359,7 +360,8 @@
           <view class="btn-ghost anniversary__action" @tap="panel = 'home'">返回</view>
           <view class="btn-ghost anniversary__action" @tap="openEdit(cardEvent)">编辑</view>
           <view class="btn-ghost anniversary__action" @tap="chooseCoverForCard">换图</view>
-          <view class="btn-ghost anniversary__action" @tap="addToCalendar(cardEvent)">写入日历</view>
+          <view class="btn-ghost anniversary__action" @tap="addToCalendar(cardEvent)">加手机日历</view>
+          <view class="btn-ghost anniversary__action" @tap="enableWechatReminder(cardEvent)">微信提醒</view>
           <view class="btn-ghost anniversary__action" @tap="shareCard">分享</view>
           <view class="btn-primary anniversary__action" :class="{ disabled: exporting }" @tap="exportCard">保存图片</view>
         </view>
@@ -788,25 +790,44 @@ interface SubscribeReminderResult {
   message: string
 }
 
+function resolveTarget(event: AnniversaryEvent): AnniversaryEvent {
+  return event.id === selectedEvent.value?.id && cardEvent.value ? cardEvent.value : event
+}
+
+// 写入手机系统日历（addPhoneCalendar 要求在用户 TAP 手势的同步链里发起，
+// 因此本函数入口直接绑 @tap，函数体在第一个 await 之前不能夹其它 await）。
 async function addToCalendar(event: AnniversaryEvent) {
-  const target = event.id === selectedEvent.value?.id && cardEvent.value ? cardEvent.value : event
+  const target = resolveTarget(event)
   try {
-    const subscribeResult = await requestSubscribeReminder(target)
     await writePhoneCalendar(target)
     const updated = await markAnniversaryCalendarAdded(target.id, target.repeatType)
     upsertEvent(updated)
-    if (subscribeResult.accepted && !subscribeResult.saved) {
+    uni.showToast({ title: '已写入手机日历', icon: 'success' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '写入日历失败'
+    if (!/cancel/i.test(message)) uni.showToast({ title: message, icon: 'none' })
+  }
+}
+
+// 开启微信服务通知订阅（requestSubscribeMessage 同样要求 TAP 手势同步链，独立按钮直接绑 @tap）。
+async function enableWechatReminder(event: AnniversaryEvent) {
+  const target = resolveTarget(event)
+  try {
+    const result = await requestSubscribeReminder(target)
+    if (result.accepted && result.saved) {
+      uni.showToast({ title: '提醒已开启', icon: 'success' })
+    } else if (result.accepted && !result.saved) {
       uni.showModal({
         title: '微信订阅未保存',
-        content: `手机日历已写入，但微信订阅保存失败：${subscribeResult.message || '请稍后重试'}`,
+        content: `订阅授权成功，但保存失败：${result.message || '请稍后重试'}`,
         showCancel: false,
         confirmText: '知道了',
       })
-      return
+    } else {
+      uni.showToast({ title: '未开启微信提醒', icon: 'none' })
     }
-    uni.showToast({ title: subscribeResult.saved ? '提醒已开启' : '已写入手机日历', icon: 'success' })
   } catch (error) {
-    const message = error instanceof Error ? error.message : '写入日历失败'
+    const message = error instanceof Error ? error.message : '开启提醒失败'
     if (!/cancel/i.test(message)) uni.showToast({ title: message, icon: 'none' })
   }
 }
