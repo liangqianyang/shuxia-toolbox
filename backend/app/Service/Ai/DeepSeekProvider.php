@@ -9,15 +9,16 @@ use RuntimeException;
 use Throwable;
 
 /**
- * 智谱 GLM 实现。POST https://open.bigmodel.cn/api/paas/v4/chat/completions
- * 走原生 PHP curl（bin/hyperf.php 已禁用 SWOOLE_HOOK_CURL），HTTPS 出站可用（已实测 0.12s）。
- * key/模型/思考/联网 走 getenv，与 TencentMapProvider 一致。
- * prompt 构建与响应解析在 AbstractAiProvider。
+ * DeepSeek 实现。OpenAI 兼容协议，POST {DEEPSEEK_BASE_URL}/chat/completions。
+ * key/模型/base_url 走 getenv，与 ZhipuProvider 一致；prompt 构建与响应解析在 AbstractAiProvider。
+ *
+ * 与智谱的差异：
+ * - 开启 response_format=json_object，比纯 prompt 约束更稳地拿到合法 JSON；
+ * - DeepSeek API 无官方联网搜索工具，webSearchEnabled() 恒 false，
+ *   prompt 自动去掉「联网搜索」表述，跨城耗时/天气回退到 TravelService 的兜底逻辑。
  */
-final class ZhipuProvider extends AbstractAiProvider
+final class DeepSeekProvider extends AbstractAiProvider
 {
-    private const string URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-
     private readonly Client $client;
 
     public function __construct()
@@ -28,32 +29,27 @@ final class ZhipuProvider extends AbstractAiProvider
 
     protected function webSearchEnabled(): bool
     {
-        return strtolower((string) (getenv('ZHIPU_WEB_SEARCH') ?: 'true')) !== 'false';
+        return false;
     }
 
     protected function requestAiContent(array $messages, bool $webSearch): string
     {
-        $key = getenv('ZHIPU_API_KEY') ?: '';
+        $key = getenv('DEEPSEEK_API_KEY') ?: '';
         if ($key === '') {
-            throw new RuntimeException('AI 服务未配置 ZHIPU_API_KEY');
+            throw new RuntimeException('AI 服务未配置 DEEPSEEK_API_KEY');
         }
 
-        $model = getenv('ZHIPU_MODEL') ?: 'glm-5.2';
+        $baseUrl = rtrim(getenv('DEEPSEEK_BASE_URL') ?: 'https://api.deepseek.com', '/');
+        $model = getenv('DEEPSEEK_MODEL') ?: 'deepseek-v4-flash';
         $timeout = (int) (getenv('AI_TIMEOUT') ?: 120);
-        $thinking = getenv('ZHIPU_THINKING') ?: 'disabled';
         $payload = [
             'model' => $model,
             'messages' => $messages,
+            'response_format' => ['type' => 'json_object'],
         ];
-        if ($thinking === 'disabled') {
-            $payload['thinking'] = ['type' => 'disabled'];
-        }
-        if ($webSearch) {
-            $payload['tools'] = [['type' => 'web_search', 'web_search' => ['enable' => true]]];
-        }
 
         try {
-            $response = $this->client->post(self::URL, [
+            $response = $this->client->post($baseUrl . '/chat/completions', [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $key,
                     'Content-Type' => 'application/json',
