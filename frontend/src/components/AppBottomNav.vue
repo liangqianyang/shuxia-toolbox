@@ -14,13 +14,14 @@
 </template>
 
 <script setup lang="ts">
-type NavItemId = 'home' | 'toolbox' | 'mine'
+type NavItemId = 'home' | 'toolbox' | 'games' | 'mine'
 
 defineProps<{ active: NavItemId }>()
 
 const items: Array<{ id: NavItemId, label: string, icon: string, path: string }> = [
   { id: 'home', label: '首页', icon: '⌂', path: '/pages/home/index' },
   { id: 'toolbox', label: '工具箱', icon: '▦', path: '/pages/toolbox/index' },
+  { id: 'games', label: '游戏', icon: '♟', path: '/pages/games/index' },
   { id: 'mine', label: '我的', icon: '◉', path: '/pages/mine/index' },
 ]
 
@@ -43,7 +44,7 @@ function go(id: NavItemId) {
   border-top: 2rpx solid $color-border;
   background: #fffdf9;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   box-shadow: 0 -8rpx 24rpx rgba(168, 116, 75, 0.08);
   box-sizing: border-box;
 

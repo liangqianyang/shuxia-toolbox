@@ -13,7 +13,7 @@ use Hyperf\DbConnection\Db;
 final class ToolCatalogService
 {
     /**
-     * @return array{catalog: array<int, array{key: string, name: string, description: string, icon: string, route: string}>, homeToolKeys: array<int, string>}
+     * @return array{catalog: array<int, array{key: string, category: string, name: string, description: string, icon: string, route: string}>, homeToolKeys: array<int, string>}
      */
     public function userTools(int $userId): array
     {
@@ -96,7 +96,7 @@ final class ToolCatalogService
         return $this->userTools($userId);
     }
 
-    /** @return array<int, array{key: string, name: string, description: string, icon: string, route: string, isPublished: bool, sortOrder: int}> */
+    /** @return array<int, array{key: string, category: string, name: string, description: string, icon: string, route: string, isPublished: bool, sortOrder: int}> */
     public function adminTools(): array
     {
         return ToolCatalog::query()
@@ -145,11 +145,12 @@ final class ToolCatalogService
         return $this->adminTools();
     }
 
-    /** @return array{key: string, name: string, description: string, icon: string, route: string} */
+    /** @return array{key: string, category: string, name: string, description: string, icon: string, route: string} */
     private function formatTool(ToolCatalog $tool): array
     {
         return [
             'key' => (string) $tool->tool_key,
+            'category' => (string) $tool->category,
             'name' => (string) $tool->name,
             'description' => (string) $tool->description,
             'icon' => (string) $tool->icon,
@@ -157,7 +158,7 @@ final class ToolCatalogService
         ];
     }
 
-    /** @return array{key: string, name: string, description: string, icon: string, route: string, isPublished: bool, sortOrder: int} */
+    /** @return array{key: string, category: string, name: string, description: string, icon: string, route: string, isPublished: bool, sortOrder: int} */
     private function formatAdminTool(ToolCatalog $tool): array
     {
         return [

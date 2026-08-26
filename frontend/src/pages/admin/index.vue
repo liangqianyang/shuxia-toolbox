@@ -6,21 +6,24 @@
       <text class="admin__subtitle">上架工具会出现在用户的工具集中</text>
     </view>
 
-    <view v-if="tools.length" class="admin__list">
-      <view v-for="(tool, index) in tools" :key="tool.key" class="admin__tool">
-        <view class="admin__tool-top">
-          <view class="admin__icon">{{ tool.icon }}</view>
-          <view class="admin__copy">
-            <text class="admin__name">{{ tool.name }}</text>
-            <text class="admin__desc">{{ tool.description }}</text>
+    <view v-if="groups.length" class="admin__list">
+      <view v-for="group in groups" :key="group.category" class="admin__group">
+        <text class="admin__group-title">{{ group.title }}</text>
+        <view v-for="(tool, index) in group.tools" :key="tool.key" class="admin__tool">
+          <view class="admin__tool-top">
+            <view class="admin__icon">{{ tool.icon }}</view>
+            <view class="admin__copy">
+              <text class="admin__name">{{ tool.name }}</text>
+              <text class="admin__desc">{{ tool.description }}</text>
+            </view>
+            <switch :checked="tool.isPublished" color="#c64f3d" @change="changePublication(tool.key, $event)" />
           </view>
-          <switch :checked="tool.isPublished" color="#c64f3d" @change="changePublication(tool.key, $event)" />
-        </view>
-        <view class="admin__tool-bottom">
-          <text class="admin__status" :class="{ 'admin__status--off': !tool.isPublished }">{{ tool.isPublished ? '已上架' : '已下架' }}</text>
-          <view class="admin__order">
-            <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === 0 }" @tap="moveTool(index, -1)">↑</view>
-            <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === tools.length - 1 }" @tap="moveTool(index, 1)">↓</view>
+          <view class="admin__tool-bottom">
+            <text class="admin__status" :class="{ 'admin__status--off': !tool.isPublished }">{{ tool.isPublished ? '已上架' : '已下架' }}</text>
+            <view class="admin__order">
+              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === 0 }" @tap="moveTool(tool, -1)">↑</view>
+              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === group.tools.length - 1 }" @tap="moveTool(tool, 1)">↓</view>
+            </view>
           </view>
         </view>
       </view>
@@ -35,14 +38,27 @@
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
-import type { AdminTool } from '@/types/toolbox'
+import { computed, ref } from 'vue'
+import type { AdminTool, ToolCategory } from '@/types/toolbox'
 import { fetchAdminTools, saveAdminToolOrder, setAdminToolPublication } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
 
+const CATEGORY_TITLES: Record<ToolCategory, string> = { tool: '工具', game: '游戏' }
+
 const tools = ref<AdminTool[]>([])
 const accessError = ref('')
+
+/** 按 工具/游戏 分组展示；排序仍在全量列表上进行（sort_order 全局），组内相邻即全局同分类相邻 */
+const groups = computed(() =>
+  (Object.keys(CATEGORY_TITLES) as ToolCategory[])
+    .map((category) => ({
+      category,
+      title: CATEGORY_TITLES[category],
+      tools: tools.value.filter((tool) => (tool.category || 'tool') === category),
+    }))
+    .filter((group) => group.tools.length > 0),
+)
 
 onShow(() => {
   void loadTools()
@@ -68,12 +84,18 @@ async function changePublication(toolKey: string, event: Event) {
   }
 }
 
-async function moveTool(index: number, direction: number) {
-  const nextIndex = index + direction
-  if (nextIndex < 0 || nextIndex >= tools.value.length) return
+/** 组内上下移：在全量列表中与同分类的相邻项交换位置，保持跨分类相对顺序不变 */
+async function moveTool(tool: AdminTool, direction: number) {
+  const category = tool.category || 'tool'
+  const sameCategory = tools.value.filter((item) => (item.category || 'tool') === category)
+  const groupIndex = sameCategory.findIndex((item) => item.key === tool.key)
+  const neighbor = sameCategory[groupIndex + direction]
+  if (!neighbor) return
+
   const nextTools = [...tools.value]
-  const [tool] = nextTools.splice(index, 1)
-  nextTools.splice(nextIndex, 0, tool)
+  const a = nextTools.findIndex((item) => item.key === tool.key)
+  const b = nextTools.findIndex((item) => item.key === neighbor.key)
+  ;[nextTools[a], nextTools[b]] = [nextTools[b], nextTools[a]]
   tools.value = nextTools
   try {
     tools.value = await saveAdminToolOrder(nextTools.map((item) => item.key))
@@ -112,6 +134,20 @@ async function moveTool(index: number, direction: number) {
   &__list {
     display: flex;
     flex-direction: column;
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 32rpx;
+  }
+
+  &__group-title {
+    font-size: 24rpx;
+    font-weight: 600;
+    color: $color-text-secondary;
+    padding: 16rpx 0 8rpx;
+    border-bottom: 2rpx solid $color-border;
   }
 
   &__tool {

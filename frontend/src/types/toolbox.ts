@@ -1,5 +1,8 @@
+export type ToolCategory = 'tool' | 'game'
+
 export interface ToolboxTool {
   key: string
+  category: ToolCategory
   name: string
   description: string
   icon: string

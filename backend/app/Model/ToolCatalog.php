@@ -9,6 +9,7 @@ namespace App\Model;
  *
  * @property int $id
  * @property string $tool_key
+ * @property string $category
  * @property string $name
  * @property string $description
  * @property string $icon
@@ -22,6 +23,7 @@ final class ToolCatalog extends Model
 
     protected array $fillable = [
         'tool_key',
+        'category',
         'name',
         'description',
         'icon',

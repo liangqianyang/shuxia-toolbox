@@ -4,7 +4,7 @@
       <view class="lottery__brand-mark">🍁</view>
       <view class="lottery__brand-copy">
         <text class="lottery__brand-kicker">枫叶小屋</text>
-        <text class="lottery__brand-title">枫叶签筒</text>
+        <text class="lottery__brand-title">枫叶抽奖</text>
       </view>
       <view class="lottery__brand-actions">
         <view class="lottery__text-btn" @tap="openHistory">记录</view>
@@ -506,11 +506,11 @@
         <text class="lottery__falling-leaf lottery__falling-leaf--two">🍁</text>
         <text class="lottery__falling-leaf lottery__falling-leaf--three">🍁</text>
         <view class="lottery__sticks">
-          <text>枫</text><text>叶</text><text>签</text><text>筒</text><text>🍁</text>
+          <text>枫</text><text>叶</text><text>抽</text><text>奖</text><text>🎉</text>
         </view>
         <view class="lottery__tube">
           <text class="lottery__tube-leaf">🍁</text>
-          <text class="lottery__tube-name">枫叶签筒</text>
+          <text class="lottery__tube-name">枫叶抽奖</text>
         </view>
         <text class="lottery__rolling">{{ rollingText }}</text>
         <text class="lottery__draw-hint">{{ drawHint }}</text>
@@ -1482,7 +1482,7 @@ function padNumber(value: number): string {
 }
 
 function resultSummaryText(): string {
-  const title = activityName.value.trim() || '枫叶签筒'
+  const title = activityName.value.trim() || '枫叶抽奖'
   if (mode.value === 'prize') {
     const lines = awards.value.map((award, index) => `${index + 1}. ${award.recipient}｜${award.prizeName} × ${award.quantity}｜${award.source === 'special' ? '特别赠礼' : '随机抽中'}`)
     return `${title}\n${lines.join('\n')}`

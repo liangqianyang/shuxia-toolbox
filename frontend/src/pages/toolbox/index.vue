@@ -52,7 +52,8 @@ async function loadTools() {
   loading.value = true
   try {
     const data = await fetchHomeTools()
-    tools.value = data.catalog
+    // 工具箱只展示工具类；游戏类在「游戏」tab
+    tools.value = data.catalog.filter((item) => item.category !== 'game')
     selectedKeys.value = data.homeToolKeys
     await loadAnniversarySummary()
   } catch (error) {

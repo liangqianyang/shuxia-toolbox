@@ -6,18 +6,21 @@
       <text class="tool-library__subtitle">{{ selectedKeys.length }} 个工具显示在首页</text>
     </view>
 
-    <view v-if="tools.length" class="tool-library__list">
-      <view v-for="tool in tools" :key="tool.key" class="tool-library__item">
-        <view class="tool-library__icon">{{ tool.icon }}</view>
-        <view class="tool-library__copy">
-          <text class="tool-library__name">{{ tool.name }}</text>
-          <text class="tool-library__desc">{{ tool.description }}</text>
+    <view v-if="groups.length" class="tool-library__list">
+      <view v-for="group in groups" :key="group.category" class="tool-library__group">
+        <text class="tool-library__group-title">{{ group.title }}</text>
+        <view v-for="tool in group.tools" :key="tool.key" class="tool-library__item">
+          <view class="tool-library__icon">{{ tool.icon }}</view>
+          <view class="tool-library__copy">
+            <text class="tool-library__name">{{ tool.name }}</text>
+            <text class="tool-library__desc">{{ tool.description }}</text>
+          </view>
+          <switch
+            :checked="selectedKeys.includes(tool.key)"
+            color="#c64f3d"
+            @change="toggleTool(tool.key, $event)"
+          />
         </view>
-        <switch
-          :checked="selectedKeys.includes(tool.key)"
-          color="#c64f3d"
-          @change="toggleTool(tool.key, $event)"
-        />
       </view>
     </view>
 
@@ -30,15 +33,28 @@
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
-import type { ToolboxTool } from '@/types/toolbox'
+import { computed, ref } from 'vue'
+import type { ToolCategory, ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
 
+const CATEGORY_TITLES: Record<ToolCategory, string> = { tool: '工具', game: '游戏' }
+
 const tools = ref<ToolboxTool[]>([])
 const selectedKeys = ref<string[]>([])
 const loading = ref(true)
+
+/** 按 工具/游戏 分组展示，组内保持目录排序 */
+const groups = computed(() =>
+  (Object.keys(CATEGORY_TITLES) as ToolCategory[])
+    .map((category) => ({
+      category,
+      title: CATEGORY_TITLES[category],
+      tools: tools.value.filter((tool) => (tool.category || 'tool') === category),
+    }))
+    .filter((group) => group.tools.length > 0),
+)
 
 onShow(() => {
   void loadTools()
@@ -104,6 +120,20 @@ async function toggleTool(toolKey: string, event: Event) {
   &__list {
     display: flex;
     flex-direction: column;
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 32rpx;
+  }
+
+  &__group-title {
+    font-size: 24rpx;
+    font-weight: 600;
+    color: $color-text-secondary;
+    padding: 16rpx 0 8rpx;
+    border-bottom: 2rpx solid $color-border;
   }
 
   &__item {

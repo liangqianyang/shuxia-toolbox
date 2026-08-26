@@ -59,12 +59,12 @@ interface ToolPosition {
 }
 
 const FALLBACK_TOOLS: ToolboxTool[] = [
-  { key: 'beads', name: '拼豆图纸生成器', description: '上传图片，生成拼豆图纸和用豆量统计', icon: '🧩', route: '/pages/beads/index' },
-  { key: 'travel', name: '旅游攻略图生成器', description: '编辑行程，生成可分享的旅游攻略图', icon: '🗺️', route: '/pages/travel/index' },
-  { key: 'food', name: '今天吃什么', description: '选地点和偏好，随机抽一家附近美食或常吃店', icon: '🍜', route: '/pages/food/index' },
-  { key: 'lottery', name: '枫叶签筒', description: '抽奖品、随机抽取、随机分组，规则由你设置', icon: '🍁', route: '/pages/lottery/index' },
-  { key: 'anniversary', name: '时光纪念卡', description: '记录纪念日、倒数提醒，生成可保存的纪念卡', icon: '📅', route: '/pages/anniversary/index' },
-  { key: 'gomoku', name: '五子棋', description: '创建房间，邀请好友联机对弈', icon: '⚫', route: '/pages/gomoku/index' },
+  { key: 'beads', category: 'tool', name: '拼豆图纸生成器', description: '上传图片，生成拼豆图纸和用豆量统计', icon: '🧩', route: '/pages/beads/index' },
+  { key: 'travel', category: 'tool', name: '旅游攻略图生成器', description: '编辑行程，生成可分享的旅游攻略图', icon: '🗺️', route: '/pages/travel/index' },
+  { key: 'food', category: 'tool', name: '今天吃什么', description: '选地点和偏好，随机抽一家附近美食或常吃店', icon: '🍜', route: '/pages/food/index' },
+  { key: 'lottery', category: 'tool', name: '枫叶抽奖', description: '抽奖品、随机抽取、随机分组，规则由你设置', icon: '🎉', route: '/pages/lottery/index' },
+  { key: 'anniversary', category: 'tool', name: '时光纪念卡', description: '记录纪念日、倒数提醒，生成可保存的纪念卡', icon: '📅', route: '/pages/anniversary/index' },
+  { key: 'gomoku', category: 'game', name: '五子棋', description: '创建房间，邀请好友联机对弈', icon: '⚫', route: '/pages/gomoku/index' },
 ]
 
 const tools = ref<ToolboxTool[]>([])
