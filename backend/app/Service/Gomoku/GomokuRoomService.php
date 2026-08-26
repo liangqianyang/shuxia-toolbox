@@ -30,7 +30,7 @@ final class GomokuRoomService
     public const int UNDO_LIMIT = 3;
 
     /** 悔棋请求决策时限（秒）：超时未同意即视为拒绝。 */
-    public const int UNDO_DECISION_SECONDS = 5;
+    public const int UNDO_DECISION_SECONDS = 10;
 
     public function __construct(
         private readonly WechatUserService $users,

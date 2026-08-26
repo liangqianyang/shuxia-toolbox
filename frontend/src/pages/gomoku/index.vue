@@ -112,7 +112,8 @@ import {
   type BoardMetrics,
 } from '@/utils/gomoku'
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
-import type { GomokuColor, GomokuRoomState } from '@/types/gomoku'
+import type { GomokuColor } from '@/types/gomoku'
+import { playGomokuPlace, playGomokuWin } from '@/utils/gomokuAudio'
 
 const {
   state,
@@ -254,8 +255,34 @@ async function onBoardTap(event: unknown) {
   if (move) await tapIntersection(move.x, move.y)
 }
 
-// 状态变化即重画（含乐观落子与服务端推送）
-watch(state, () => drawBoard(), { deep: true })
+// 状态变化即重画（含乐观落子与服务端推送）；手数变多播落子音，自己五连获胜播胜利音
+let prevMovesCount = 0
+let prevStatus = ''
+watch(
+  state,
+  (next) => {
+    drawBoard()
+    if (!next) {
+      prevMovesCount = 0
+      prevStatus = ''
+      return
+    }
+    const firstLoad = prevStatus === ''
+    if (!firstLoad && next.movesCount > prevMovesCount) playGomokuPlace()
+    if (
+      !firstLoad
+      && next.status === 'finished'
+      && prevStatus !== 'finished'
+      && next.winReason === 'five'
+      && next.winner === myColor.value
+    ) {
+      playGomokuWin()
+    }
+    prevMovesCount = next.movesCount
+    prevStatus = next.status
+  },
+  { deep: true },
+)
 
 // ---------- 文案 ----------
 
