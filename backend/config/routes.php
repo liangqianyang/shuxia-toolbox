@@ -7,6 +7,8 @@ use App\Controller\AdminToolController;
 use App\Controller\AnniversaryController;
 use App\Controller\AuthController;
 use App\Controller\FoodController;
+use App\Controller\GomokuController;
+use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
 use App\Controller\TravelController;
 use App\Controller\ToolController;
@@ -56,6 +58,16 @@ Router::addGroup('/api', function (): void {
     Router::post('/food/room', [FoodController::class, 'saveRoom']);
     Router::get('/food/room/{code}', [FoodController::class, 'getRoom']);
 
+    // 联机五子棋：房间创建/加入、轮询同步（WS 降级通道）、落子、再来一局与离开。
+    Router::post('/gomoku/room', [GomokuController::class, 'create']);
+    Router::post('/gomoku/room/{code}/join', [GomokuController::class, 'join']);
+    Router::get('/gomoku/room/{code}', [GomokuController::class, 'state']);
+    Router::post('/gomoku/room/{code}/move', [GomokuController::class, 'move']);
+    Router::post('/gomoku/room/{code}/rematch', [GomokuController::class, 'rematch']);
+    Router::post('/gomoku/room/{code}/undo-request', [GomokuController::class, 'requestUndo']);
+    Router::post('/gomoku/room/{code}/undo-respond', [GomokuController::class, 'respondUndo']);
+    Router::post('/gomoku/room/{code}/leave', [GomokuController::class, 'leave']);
+
     // AI 旅行攻略：地点搜索、生成/局部重写行程，以及云保存分享码。
     Router::get('/travel/geocode', [TravelController::class, 'geocode']);
     Router::post('/travel/plan', [TravelController::class, 'plan']);
@@ -63,4 +75,9 @@ Router::addGroup('/api', function (): void {
     Router::post('/travel/replace-stop', [TravelController::class, 'replaceStop']);
     Router::post('/travel/share', [TravelController::class, 'saveShare']);
     Router::get('/travel/share/{code}', [TravelController::class, 'getShare']);
+});
+
+// 联机五子棋 WebSocket 通道：只负责连接管理与状态推送，对局变更仍走上面的 HTTP 接口。
+Router::addServer('ws', function (): void {
+    Router::get('/gomoku/ws', GomokuWsController::class);
 });

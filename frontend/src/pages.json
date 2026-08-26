@@ -37,6 +37,12 @@
       }
     },
     {
+      "path": "pages/gomoku/index",
+      "style": {
+        "navigationBarTitleText": "五子棋"
+      }
+    },
+    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"

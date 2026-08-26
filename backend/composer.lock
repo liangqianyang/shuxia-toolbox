@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6ebc5105d8bc32d711f732ffea40cafe",
+    "content-hash": "d81be3faa7e472c3c7d6c43ae8086579",
     "packages": [
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -3094,6 +3094,77 @@
                 "source": "https://github.com/hyperf/token-bucket/tree/v2.0.0"
             },
             "time": "2023-01-07T12:45:03+00:00"
+        },
+        {
+            "name": "hyperf/websocket-server",
+            "version": "v3.2.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/hyperf/websocket-server.git",
+                "reference": "e930dc399126325f497dc368135423cd86455ae9"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/hyperf/websocket-server/zipball/e930dc399126325f497dc368135423cd86455ae9",
+                "reference": "e930dc399126325f497dc368135423cd86455ae9",
+                "shasum": ""
+            },
+            "require": {
+                "hyperf/collection": "~3.2.0",
+                "hyperf/context": "~3.2.0",
+                "hyperf/contract": "~3.2.0",
+                "hyperf/coordinator": "~3.2.0",
+                "hyperf/engine": "^2.0",
+                "hyperf/exception-handler": "~3.2.0",
+                "hyperf/http-server": "~3.2.0",
+                "hyperf/support": "~3.2.0",
+                "php": ">=8.2",
+                "psr/container": "^1.0 || ^2.0",
+                "psr/event-dispatcher": "^1.0"
+            },
+            "type": "library",
+            "extra": {
+                "hyperf": {
+                    "config": "Hyperf\\WebSocketServer\\ConfigProvider"
+                },
+                "branch-alias": {
+                    "dev-master": "3.2-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Hyperf\\WebSocketServer\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "A websocket server library for Hyperf.",
+            "homepage": "https://hyperf.io",
+            "keywords": [
+                "hyperf",
+                "php",
+                "swoole",
+                "websocket"
+            ],
+            "support": {
+                "docs": "https://hyperf.wiki",
+                "issues": "https://github.com/hyperf/hyperf/issues",
+                "pull-request": "https://github.com/hyperf/hyperf/pulls",
+                "source": "https://github.com/hyperf/hyperf"
+            },
+            "funding": [
+                {
+                    "url": "https://hyperf.wiki/#/zh-cn/donate",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://opencollective.com/hyperf",
+                    "type": "open_collective"
+                }
+            ],
+            "time": "2026-06-15T09:37:20+00:00"
         },
         {
             "name": "malkusch/lock",
@@ -7354,7 +7425,8 @@
         "hyperf/rate-limit": 10,
         "hyperf/redis": 10,
         "hyperf/server": 10,
-        "hyperf/support": 10
+        "hyperf/support": 10,
+        "hyperf/websocket-server": 10
     },
     "prefer-stable": true,
     "prefer-lowest": false,

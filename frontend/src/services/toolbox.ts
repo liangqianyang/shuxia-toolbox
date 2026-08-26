@@ -14,6 +14,15 @@ interface LoginResponse {
 
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:9501').replace(/\/$/, '')
 const API_KEY = import.meta.env.VITE_API_KEY || ''
+
+/** 五子棋 WS 通道由 API_BASE 派生（http→ws，https→wss），apiKey/token 走 query（小程序 header 不可靠）。 */
+export function gomokuWsUrl(path: string, params: Record<string, string>): string {
+  const wsBase = API_BASE.replace(/^http/, 'ws')
+  const query = Object.entries({ apiKey: API_KEY, ...params })
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&')
+  return `${wsBase}${path}?${query}`
+}
 export const AUTH_STORAGE_KEY = 'shuxia-food-auth-token-v1'
 export const USER_STORAGE_KEY = 'shuxia-food-auth-user-v1'
 

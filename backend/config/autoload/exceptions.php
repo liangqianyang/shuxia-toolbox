@@ -9,5 +9,10 @@ return [
             \App\Exception\Handler\RateLimitExceptionHandler::class,
             \App\Exception\Handler\AppExceptionHandler::class,
         ],
+        // ws server 的握手阶段复用同一套异常转 envelope 逻辑
+        'ws' => [
+            \App\Exception\Handler\RateLimitExceptionHandler::class,
+            \App\Exception\Handler\AppExceptionHandler::class,
+        ],
     ],
 ];

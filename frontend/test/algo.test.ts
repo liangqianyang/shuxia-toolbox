@@ -20,6 +20,82 @@ import {
   validateSpecialGifts,
 } from '@/utils/lottery'
 import { __setPixels, type PixelBuffer } from './stubCanvasAdapter'
+import {
+  BOARD_SIZE,
+  CELL_BLACK,
+  CELL_WHITE,
+  boardFromMoves,
+  boardMetrics,
+  colorOfMoveIndex,
+  findWinLine,
+  intersectionToPoint,
+  isLegalMove,
+  pointToIntersection,
+} from '@/utils/gomoku'
+
+function testGomoku() {
+  // 胜负判定：横/竖/双斜/贴边/长连/阻断/不中
+  const place = (board: number[][], cells: Array<[number, number]>, color: number) => {
+    cells.forEach(([x, y]) => {
+      board[y][x] = color
+    })
+  }
+
+  const horizontal = boardFromMoves([])
+  place(horizontal, [[3, 5], [4, 5], [5, 5], [6, 5]], CELL_BLACK)
+  const hLine = findWinLine(horizontal, 7, 5, CELL_BLACK)
+  assert(Array.isArray(hLine) && hLine.length === 5, '横五连命中且连线长度为 5')
+
+  const vertical = boardFromMoves([])
+  place(vertical, [[7, 10], [7, 11], [7, 12], [7, 13]], CELL_WHITE)
+  assert(findWinLine(vertical, 7, 14, CELL_WHITE)?.length === 5, '贴边竖五连命中')
+
+  const diag = boardFromMoves([])
+  place(diag, [[2, 2], [3, 3], [4, 4], [6, 6]], CELL_BLACK)
+  assert(findWinLine(diag, 5, 5, CELL_BLACK)?.length === 5, '主对角线补中间一子命中')
+
+  const antiDiag = boardFromMoves([])
+  place(antiDiag, [[6, 8], [7, 7], [8, 6], [10, 4]], CELL_WHITE)
+  assert(findWinLine(antiDiag, 9, 5, CELL_WHITE)?.length === 5, '副对角线命中')
+
+  const overline = boardFromMoves([])
+  place(overline, [[3, 0], [4, 0], [5, 0], [6, 0], [8, 0]], CELL_BLACK)
+  assert(findWinLine(overline, 7, 0, CELL_BLACK)?.length === 6, '长连（6 子）休闲规则算赢')
+
+  const nearMiss = boardFromMoves([])
+  place(nearMiss, [[3, 3], [4, 3], [5, 3], [6, 3]], CELL_BLACK)
+  assert(findWinLine(nearMiss, 6, 3, CELL_BLACK) === null, '四连不中')
+  const blocked = boardFromMoves([])
+  place(blocked, [[4, 3], [5, 3], [6, 3], [7, 3]], CELL_BLACK)
+  place(blocked, [[8, 3]], CELL_WHITE)
+  assert(findWinLine(blocked, 7, 3, CELL_BLACK) === null, '被对手子阻断不穿过')
+  assert(findWinLine(boardFromMoves([]), 7, 7, CELL_BLACK) === null, '空盘孤子不误报')
+
+  // 落子序列 → 棋盘：奇偶交替黑白
+  const moves = [
+    { x: 7, y: 7 },
+    { x: 0, y: 0 },
+    { x: 7, y: 8 },
+  ]
+  const board = boardFromMoves(moves)
+  assert(board[7][7] === CELL_BLACK && board[0][0] === CELL_WHITE && board[8][7] === CELL_BLACK, '落子奇偶交替黑白')
+  assert(colorOfMoveIndex(0) === 'black' && colorOfMoveIndex(3) === 'white', 'colorOfMoveIndex 奇偶定色')
+  assert(!isLegalMove(board, 7, 7), '占用点不可落')
+  assert(!isLegalMove(board, -1, 0) && !isLegalMove(board, 0, BOARD_SIZE), '越界不可落')
+  assert(isLegalMove(board, 1, 1), '空点可落')
+
+  // 触摸点 → 交叉点
+  const metrics = boardMetrics(330)
+  const center = intersectionToPoint(7, 7, metrics)
+  const hit = pointToIntersection(center.px, center.py, metrics)
+  assert(hit?.x === 7 && hit?.y === 7, '精确命中天元')
+  const near = pointToIntersection(center.px + metrics.cell * 0.3, center.py - metrics.cell * 0.3, metrics)
+  assert(near?.x === 7 && near?.y === 7, '0.3 格偏移就近取整')
+  const miss = pointToIntersection(center.px + metrics.cell * 0.5, center.py, metrics)
+  assert(miss === null, '超过 0.45 格容差判 miss')
+  assert(pointToIntersection(-5, -5, metrics) === null, '棋盘外返回 null')
+}
+
 
 let failures = 0
 function assert(cond: boolean, label: string) {
@@ -854,6 +930,7 @@ async function main() {
   await testManualCellEdit()
   await testDefringe()
   testLotteryAlgorithms()
+  testGomoku()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)

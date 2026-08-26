@@ -64,6 +64,7 @@ const FALLBACK_TOOLS: ToolboxTool[] = [
   { key: 'food', name: '今天吃什么', description: '选地点和偏好，随机抽一家附近美食或常吃店', icon: '🍜', route: '/pages/food/index' },
   { key: 'lottery', name: '枫叶签筒', description: '抽奖品、随机抽取、随机分组，规则由你设置', icon: '🍁', route: '/pages/lottery/index' },
   { key: 'anniversary', name: '时光纪念卡', description: '记录纪念日、倒数提醒，生成可保存的纪念卡', icon: '📅', route: '/pages/anniversary/index' },
+  { key: 'gomoku', name: '五子棋', description: '创建房间，邀请好友联机对弈', icon: '⚫', route: '/pages/gomoku/index' },
 ]
 
 const tools = ref<ToolboxTool[]>([])
