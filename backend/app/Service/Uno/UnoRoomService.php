@@ -29,13 +29,13 @@ final class UnoRoomService
     private const int ONLINE_SECONDS = 60;
 
     /** 普通回合时限（秒）：超时自动摸 1 张并跳过。 */
-    public const int TURN_SECONDS = 20;
+    public const int TURN_SECONDS = 30;
 
     /** wild4 质疑窗口（秒）：超时视为放弃质疑。 */
-    public const int CHALLENGE_SECONDS = 10;
+    public const int CHALLENGE_SECONDS = 15;
 
     /** 剩 1 张未喊 UNO 的自喊宽限（秒）：宽限内只接受本人补喊，之后任何人可举报。 */
-    public const int UNO_SELF_SECONDS = 3;
+    public const int UNO_SELF_SECONDS = 5;
 
     /** 连续超时多少次进入挂机（挂机回合 5s 自动摸牌，任何真实操作解除）。 */
     public const int IDLE_LIMIT = 3;

@@ -17,6 +17,7 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
+          <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
         </view>
@@ -61,7 +62,7 @@
             </view>
             <view v-if="p.left" class="opp__tag">已离开</view>
             <view v-else-if="p.idle" class="opp__tag">挂机中</view>
-            <view v-else-if="p.unoDeclared" class="opp__tag opp__tag--uno">报单!</view>
+            <view v-else-if="p.unoDeclared" class="opp__tag opp__tag--uno">UNO!</view>
           </view>
         </view>
 
@@ -92,8 +93,8 @@
 
         <!-- UNO 条 -->
         <view v-if="canSayUno || canCatchUno" class="uno-bar">
-          <button v-if="canSayUno" class="uno-bar__say" :disabled="acting" @tap="sayUno">🍁 喊「报单」！</button>
-          <button v-if="canCatchUno" class="uno-bar__catch" :disabled="acting" @tap="reportUno(unoSeat)">TA 没报单，举报！</button>
+          <button v-if="canSayUno" class="uno-bar__say" :disabled="acting" @tap="sayUno">🍁 喊 UNO！</button>
+          <button v-if="canCatchUno" class="uno-bar__catch" :disabled="acting" @tap="reportUno(unoSeat)">TA 没喊 UNO，举报！</button>
         </view>
 
         <!-- 我的手牌 -->
@@ -125,10 +126,10 @@
           <view v-if="isMyTurn" class="hand__actions">
             <template v-if="selectedCard">
               <button v-if="myHandCount === 2" class="hand__btn hand__btn--uno" :disabled="acting" @tap="onPlay(true)">
-                喊「报单」并出牌
+                喊 UNO 并出牌
               </button>
               <button class="hand__btn" :disabled="acting" @tap="onPlay(false)">
-                {{ myHandCount === 2 ? '直接出牌（不报单）' : '出牌' }}
+                {{ myHandCount === 2 ? '直接出牌（不喊）' : '出牌' }}
               </button>
             </template>
             <button v-if="state.drawnCard && !selectedCard" class="hand__btn hand__btn--plain" :disabled="acting" @tap="pass">
@@ -157,10 +158,13 @@
       </template>
     </view>
 
-    <!-- 选色弹层 -->
+    <!-- 选色弹层：遮罩调浅，选色时仍能看清自己的手牌 -->
     <view v-if="colorPickerVisible" class="color-mask" @tap="cancelColorPick">
       <view class="color-panel" @tap.stop>
-        <view class="color-panel__title">选择一个季节</view>
+        <view class="color-panel__title">为它选择一个季节</view>
+        <view v-if="pendingWildCard && images[pendingWildCard]" class="color-panel__preview">
+          <image :src="images[pendingWildCard]" class="color-panel__card" mode="aspectFit" />
+        </view>
         <view class="color-panel__row">
           <view
             v-for="c in UNO_COLORS"
@@ -185,6 +189,7 @@ import { useUnoRoom } from '@/composables/useUnoRoom'
 import { useUnoCards } from '@/composables/useUnoCards'
 import { BACK_KEY } from '@/utils/unoCards'
 import { COLOR_META, UNO_COLORS, isWild } from '@/utils/uno'
+import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
 import type { UnoColor } from '@/types/uno'
 
 const {
@@ -219,7 +224,28 @@ const { images, ensure, preload } = useUnoCards()
 const joinCode = ref('')
 const selectedIndex = ref(-1)
 const colorPickerVisible = ref(false)
+const pendingWildCard = ref('')
+const soundOn = ref(unoSoundEnabled())
 let pendingWild: { card: string; declaredUno: boolean } | null = null
+
+function toggleSound() {
+  soundOn.value = !soundOn.value
+  setUnoSoundEnabled(soundOn.value)
+  uni.showToast({ title: soundOn.value ? '音效已开启' : '音效已关闭', icon: 'none' })
+}
+
+// 桌面事件 → 提示音：出牌/摸牌/喊 UNO/获胜（所有在线玩家都会听到，WS 推送驱动）
+watch(
+  () => state.value?.version,
+  () => {
+    const type = state.value?.lastEvent?.type
+    if (!type) return
+    if (type === 'win') playUnoSound('win')
+    else if (type === 'uno' || type === 'catch') playUnoSound('uno')
+    else if (['draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
+    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4'].includes(type)) playUnoSound('play')
+  },
+)
 
 const selectedCard = computed(() => {
   const hand = state.value?.myHand
@@ -305,6 +331,7 @@ function onPlay(declaredUno: boolean) {
   if (!card) return
   if (isWild(card)) {
     pendingWild = { card, declaredUno }
+    pendingWildCard.value = card
     colorPickerVisible.value = true
     return
   }
@@ -314,6 +341,7 @@ function onPlay(declaredUno: boolean) {
 
 function onPickColor(color: UnoColor) {
   colorPickerVisible.value = false
+  pendingWildCard.value = ''
   const pending = pendingWild
   pendingWild = null
   if (!pending) return
@@ -323,6 +351,7 @@ function onPickColor(color: UnoColor) {
 
 function cancelColorPick() {
   colorPickerVisible.value = false
+  pendingWildCard.value = ''
   pendingWild = null
 }
 
@@ -444,6 +473,7 @@ $maple-light: #FBE4D5;
   &-actions { display: flex; align-items: center; gap: 16rpx; }
 }
 .room__code { font-size: 30rpx; font-weight: 600; color: $ink; }
+.room__sound { font-size: 34rpx; padding: 8rpx; }
 .room__share {
   font-size: 24rpx;
   background: $maple-light;
@@ -673,7 +703,7 @@ $maple-light: #FBE4D5;
     transition: transform 0.15s ease;
     &:first-child { margin-left: 0; }
     &--selected { transform: translateY(-28rpx); }
-    &--dim { opacity: 0.45; filter: grayscale(0.6); }
+    &--dim { opacity: 0.78; filter: grayscale(0.3); }
   }
   &__img { width: 140rpx; height: 210rpx; border-radius: 16rpx; box-shadow: 0 4rpx 10rpx rgba(73, 62, 55, 0.15); }
   &__actions { display: flex; justify-content: center; gap: 20rpx; margin-top: 16rpx; min-height: 80rpx; }
@@ -733,7 +763,7 @@ $maple-light: #FBE4D5;
 .color-mask {
   position: fixed;
   inset: 0;
-  background: rgba(73, 62, 55, 0.5);
+  background: rgba(73, 62, 55, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -747,7 +777,9 @@ $maple-light: #FBE4D5;
   padding: 40rpx;
 
   &__title { text-align: center; font-size: 34rpx; font-weight: 700; color: $ink; }
-  &__row { display: flex; justify-content: space-between; margin-top: 32rpx; }
+  &__preview { display: flex; justify-content: center; margin-top: 20rpx; }
+  &__card { width: 120rpx; height: 180rpx; border-radius: 14rpx; box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.2); }
+  &__row { display: flex; justify-content: space-between; margin-top: 28rpx; }
   &__item {
     width: 120rpx;
     height: 120rpx;
