@@ -2,7 +2,7 @@
 
 export type DeckKey = 'guanyin' | 'guandi' | 'yuelao' | 'book'
 
-export type FortuneCategory = 'career' | 'wealth' | 'love' | 'health' | 'study' | 'other'
+export type FortuneCategory = 'luck' | 'career' | 'wealth' | 'love' | 'health' | 'study' | 'decision' | 'other'
 
 /** 签文（灵签类有 level/title/verse/gist/interpretation；答案之书只有 no/answer）。 */
 export interface FortuneStick {

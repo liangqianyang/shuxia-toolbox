@@ -10,6 +10,7 @@ use App\Model\FortuneDraw;
 use App\Model\FortuneShareBonus;
 use App\Service\Fortune\FortuneInterpreter;
 use Hyperf\DbConnection\Db;
+use Hyperf\Logger\LoggerFactory;
 use RuntimeException;
 use Throwable;
 
@@ -27,17 +28,20 @@ final class FortuneService
 
     /** 所问分类白名单（key => 展示名）。 */
     public const array CATEGORIES = [
+        'luck' => '运势',
         'career' => '事业',
         'wealth' => '财运',
         'love' => '姻缘',
         'health' => '健康',
         'study' => '学业',
+        'decision' => '抉择',
         'other' => '其他',
     ];
 
     public function __construct(
         private readonly FortuneInterpreter $interpreter,
         private readonly WechatContentSecurityService $security,
+        private readonly LoggerFactory $loggerFactory,
     ) {}
 
     /** 今日配额：剩余次数/已用分享加次/重置时间。 */
@@ -67,6 +71,10 @@ final class FortuneService
         }
         if (! isset(self::CATEGORIES[$category])) {
             throw new BizException(422, '未知问事分类');
+        }
+        // 月老灵签专问姻缘（前端会隐藏其他分类，这里防直接调接口绕过）。
+        if ($deck === 'yuelao' && $category !== 'love') {
+            throw new BizException(422, '月老灵签专问姻缘');
         }
 
         $question = $question !== null ? trim($question) : null;
@@ -160,7 +168,9 @@ final class FortuneService
                 $draw->question,
             );
         } catch (Throwable $e) {
-            throw new BizException(500, 'AI 解签失败：' . $e->getMessage(), null, $e);
+            // 厂商错误（401/超时等）含 URL 等技术细节，只记日志，对用户返回友好文案。
+            $this->loggerFactory->get('fortune', 'default')->warning('AI 解签失败: ' . $e->getMessage());
+            throw new BizException(500, '解签大师暂时忙碌，请稍后再试', null, $e);
         }
 
         $draw->ai_reading = json_encode($reading, JSON_UNESCAPED_UNICODE);

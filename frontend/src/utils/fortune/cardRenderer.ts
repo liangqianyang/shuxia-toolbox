@@ -161,16 +161,19 @@ function drawStickBody(ctx: CanvasRenderingContext2D, deck: DeckTheme, payload: 
   }
 
   // 竖排签诗：四句从右往左四列，每列自上而下。
+  // 行距按最长句动态计算（签诗 4-8 字不等，写死会叠到下面的总断）。
   const verse = (stick.verse ?? []).slice(0, 4)
   if (verse.length > 0) {
     const colGap = 96
-    const charGap = 74
     const fontSize = 52
+    const gistY = paperY + paperH - 60
+    const startY = paperY + 200
+    const maxRows = Math.max(...verse.map((line) => Array.from(line).length))
+    const charGap = maxRows > 1 ? Math.min(74, (gistY - 60 - startY) / (maxRows - 1)) : 74
     ctx.font = `${fontSize}px ${SERIF}`
     ctx.fillStyle = deck.ink
     const totalW = (verse.length - 1) * colGap
     const startX = w / 2 + totalW / 2
-    const startY = paperY + 240
     verse.forEach((line, col) => {
       const x = startX - col * colGap
       const chars = Array.from(line)
@@ -178,13 +181,17 @@ function drawStickBody(ctx: CanvasRenderingContext2D, deck: DeckTheme, payload: 
         ctx.fillText(ch, x, startY + row * charGap)
       })
     })
-  }
 
-  // 总断
-  if (stick.gist) {
+    // 总断
+    if (stick.gist) {
+      ctx.font = `500 36px ${SERIF}`
+      ctx.fillStyle = deck.primary
+      ctx.fillText(`【 ${stick.gist} 】`, w / 2, gistY)
+    }
+  } else if (stick.gist) {
     ctx.font = `500 36px ${SERIF}`
     ctx.fillStyle = deck.primary
-    ctx.fillText(`【 ${stick.gist} 】`, w / 2, paperY + paperH - 64)
+    ctx.fillText(`【 ${stick.gist} 】`, w / 2, paperY + paperH - 60)
   }
   ctx.restore()
 }
@@ -244,10 +251,10 @@ function drawLuckyHint(ctx: CanvasRenderingContext2D, deck: DeckTheme, payload: 
   ctx.textAlign = 'center'
   ctx.font = `34px ${SERIF}`
   const maxW = w - 320
-  const y = h - 300
+  const y = h - 260
   ctx.fillStyle = deck.accent
   ctx.font = `600 34px ${SERIF}`
-  ctx.fillText('✦ 开运 ✦', w / 2, y - 56)
+  ctx.fillText('✦ 开运 ✦', w / 2, y - 60)
   ctx.fillStyle = hexWithAlpha(deck.ink, 0.85)
   wrapCentered(ctx, hint, w / 2, y, maxW, 50, 2)
   ctx.restore()

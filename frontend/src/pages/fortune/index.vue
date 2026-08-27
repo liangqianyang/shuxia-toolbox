@@ -39,25 +39,27 @@
         <text class="fortune__ask-title" :style="{ color: theme.primaryDeep }">{{ theme.icon }} {{ theme.name }}</text>
       </view>
 
-      <text class="fortune__ask-label">所问何事</text>
-      <view class="fortune__categories">
-        <view
-          v-for="c in FORTUNE_CATEGORIES"
-          :key="c.key"
-          class="fortune__category"
-          :class="{ 'fortune__category--active': category === c.key }"
-          :style="category === c.key ? { background: theme.primary, borderColor: theme.primary } : {}"
-          @tap="category = c.key"
-        >
-          <text>{{ c.icon }} {{ c.label }}</text>
+      <template v-if="availableCategories.length > 1">
+        <text class="fortune__ask-label">所问何事</text>
+        <view class="fortune__categories">
+          <view
+            v-for="c in availableCategories"
+            :key="c.key"
+            class="fortune__category"
+            :class="{ 'fortune__category--active': category === c.key }"
+            :style="category === c.key ? { background: theme.primary, borderColor: theme.primary } : {}"
+            @tap="category = c.key"
+          >
+            <text>{{ c.icon }} {{ c.label }}</text>
+          </view>
         </view>
-      </view>
+      </template>
 
       <text class="fortune__ask-label">默念你的问题（选填，AI 解签会结合它）</text>
       <textarea
         v-model="question"
         class="fortune__question"
-        :placeholder="isBook ? '例如：我该接受这个新机会吗？' : '例如：最近的事业调动顺利吗？'"
+        :placeholder="theme.askPlaceholder"
         maxlength="100"
       />
 
@@ -170,8 +172,11 @@
         <text v-if="grailResult" class="fortune__grail-result" :style="{ color: theme.primaryDeep }">
           {{ GRAIL_COPY[grailResult].title }} · {{ GRAIL_COPY[grailResult].desc }}
         </text>
-        <button class="fortune__ghost-btn" :disabled="grailThrowing" @tap="castGrail">
-          {{ grailResult ? '再掷一次' : '掷杯请示神明' }}
+        <text v-if="grailCastsLeft <= 0" class="fortune__grail-result" :style="{ color: theme.primaryDeep }">
+          三掷已过，圣意已决，不必再问。
+        </text>
+        <button class="fortune__ghost-btn" :disabled="grailThrowing || grailCastsLeft <= 0" @tap="castGrail">
+          {{ grailResult ? `再掷一次（剩 ${grailCastsLeft} 次）` : `掷杯请示神明（共 ${grailCastsLeft} 次）` }}
         </button>
       </view>
 
@@ -234,7 +239,7 @@ import { useFortune } from '@/composables/useFortune'
 import { useFortuneShake } from '@/composables/useFortuneShake'
 import { canvasToFile, getCanvasNode, openAuthSetting, saveImageToAlbum } from '@/utils/canvasAdapter'
 import { renderFortuneCard } from '@/utils/fortune/cardRenderer'
-import { DECK_LIST, FORTUNE_CATEGORIES, GRAIL_COPY, isTopStick, levelSeal } from '@/utils/fortune/theme'
+import { DECK_LIST, FORTUNE_CATEGORIES, GRAIL_COPY, deckCategories, isTopStick, levelSeal } from '@/utils/fortune/theme'
 import type { FortuneCategory } from '@/types/fortune'
 
 const instance = getCurrentInstance()
@@ -253,6 +258,7 @@ const {
   grailThrowing,
   grailResult,
   grailCups,
+  grailCastsLeft,
   isBook,
   loadQuota,
   selectDeck,
@@ -267,6 +273,7 @@ const {
 } = useFortune()
 
 const theme = computed(() => DECK_LIST.find((d) => d.key === deck.value) ?? DECK_LIST[0])
+const availableCategories = computed(() => deckCategories(theme.value))
 const seal = computed(() => levelSeal(String(draw.value?.stick.level ?? '')))
 const topStick = computed(() => !isBook.value && isTopStick(draw.value?.stick.level))
 const quotaExhausted = computed(() => quota.value !== null && quota.value.remaining <= 0)

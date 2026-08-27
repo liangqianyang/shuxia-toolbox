@@ -6,7 +6,7 @@
  */
 import { computed, ref } from 'vue'
 import { requestUserApi } from '@/services/toolbox'
-import { throwGrail } from '@/utils/fortune/theme'
+import { DECK_THEMES, GRAIL_MAX_CASTS, throwGrail } from '@/utils/fortune/theme'
 import type {
   DeckKey,
   FortuneCategory,
@@ -34,12 +34,14 @@ export function useFortune() {
   const interpretError = ref('')
   const drawing = ref(false)
 
-  /** 掷杯：throwing 动画中，result 落定后的结果。 */
+  /** 掷杯：throwing 动画中，result 落定后的结果；每签最多掷 GRAIL_MAX_CASTS 次。 */
   const grailThrowing = ref(false)
   const grailResult = ref<GrailResult | null>(null)
   const grailCups = ref<[boolean, boolean]>([false, false])
+  const grailCastCount = ref(0)
 
   const isBook = computed(() => deck.value === 'book')
+  const grailCastsLeft = computed(() => Math.max(0, GRAIL_MAX_CASTS - grailCastCount.value))
 
   async function loadQuota(): Promise<void> {
     try {
@@ -51,6 +53,10 @@ export function useFortune() {
 
   function selectDeck(key: DeckKey): void {
     deck.value = key
+    // 每个签种有自己的默认问事分类（关帝→事业、月老→姻缘），不再一刀切「其他」；
+    // 换签种同时清空上次的问题（姻缘的问题带到关帝就串戏了）；同一签种「再抽一次」仍保留问题。
+    category.value = DECK_THEMES[key].defaultCategory
+    question.value = ''
     stage.value = 'ask'
   }
 
@@ -78,6 +84,7 @@ export function useFortune() {
       reading.value = null
       interpretError.value = ''
       grailResult.value = null
+      grailCastCount.value = 0
       stage.value = 'reveal'
       return true
     } catch (error) {
@@ -91,9 +98,10 @@ export function useFortune() {
     }
   }
 
-  /** 掷杯请示（纯前端随机 + 动画，灵签类限定）。 */
+  /** 掷杯请示（纯前端随机 + 动画，灵签类限定，每签最多 GRAIL_MAX_CASTS 次）。 */
   function castGrail(): void {
-    if (grailThrowing.value || isBook.value) return
+    if (grailThrowing.value || isBook.value || grailCastsLeft.value <= 0) return
+    grailCastCount.value += 1
     grailThrowing.value = true
     grailResult.value = null
     try {
@@ -123,8 +131,9 @@ export function useFortune() {
         INTERPRET_TIMEOUT,
       )
       reading.value = result.reading
-    } catch (error) {
-      interpretError.value = error instanceof Error ? error.message : '解签失败，请稍后再试'
+    } catch {
+      // 后端错误信息含厂商/URL 等技术细节，不直接展示，统一给友好文案。
+      interpretError.value = '解签大师暂时忙碌，请稍后再试'
     } finally {
       interpretLoading.value = false
     }
@@ -145,6 +154,7 @@ export function useFortune() {
     draw.value = null
     reading.value = null
     grailResult.value = null
+    grailCastCount.value = 0
     stage.value = 'shake'
   }
 
@@ -152,6 +162,7 @@ export function useFortune() {
     draw.value = null
     reading.value = null
     grailResult.value = null
+    grailCastCount.value = 0
     stage.value = 'deck'
   }
 
@@ -169,6 +180,8 @@ export function useFortune() {
     grailThrowing,
     grailResult,
     grailCups,
+    grailCastCount,
+    grailCastsLeft,
     isBook,
     loadQuota,
     selectDeck,
