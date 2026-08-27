@@ -8,7 +8,7 @@
 
     <view v-if="tools.length" class="toolbox__list">
       <view v-for="tool in tools" :key="tool.key" class="toolbox__card card" @tap="openTool(tool)">
-        <view class="toolbox__icon">{{ tool.icon }}</view>
+        <ToolIcon class="toolbox__icon" :icon="tool.icon" />
         <view class="toolbox__copy">
           <view class="toolbox__name-row">
             <text class="toolbox__name">{{ tool.name }}</text>
@@ -33,6 +33,7 @@
 import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import AppBottomNav from '@/components/AppBottomNav.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
 import type { ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools } from '@/services/toolbox'
 import { fetchAnniversaries } from '@/services/anniversary'

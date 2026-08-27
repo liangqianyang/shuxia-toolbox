@@ -32,6 +32,38 @@ import {
   isLegalMove,
   pointToIntersection,
 } from '@/utils/gomoku'
+import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand } from '@/utils/uno'
+
+function testUno() {
+  // 牌编码解析
+  assert(cardColor('r5') === 'r' && cardValue('r5') === '5', '数字牌解析')
+  assert(cardColor('yS') === 'y' && cardValue('yS') === 'S', '功能牌解析')
+  assert(isWild('wW') && isWild('wF') && !isWild('b7'), '百搭判定')
+  assert(isValidCard('r0') && isValidCard('g9') && isValidCard('bS') && isValidCard('yR') && isValidCard('rD') && isValidCard('wW') && isValidCard('wF'), '合法牌全部通过')
+  assert(!isValidCard('w5') && !isValidCard('x1') && !isValidCard('rX') && !isValidCard('w') && !isValidCard(''), '非法牌全部拒绝')
+
+  // canPlay：颜色匹配 / 面值匹配 / 百搭恒可出 / 均不匹配不可出
+  assert(canPlay('r5', 'r9', 'r'), '同色可出')
+  assert(canPlay('b5', 'r5', 'r'), '同数字可出')
+  assert(canPlay('gS', 'rS', 'r'), '同功能可出')
+  assert(canPlay('wW', 'r5', 'r') && canPlay('wF', 'r5', 'r'), '百搭恒可出（bluff 合法，靠质疑）')
+  assert(!canPlay('b5', 'r9', 'r'), '颜色数字都不匹配不可出')
+  assert(canPlay('y3', 'wW', 'y'), '顶牌是百搭时按 currentColor 匹配')
+  assert(!canPlay('r3', 'wW', 'y'), '顶牌是百搭时颜色不符不可出')
+
+  // 计分：数字按面值，功能 20，百搭 50
+  assert(scoreHand([]) === 0, '空手牌 0 分')
+  assert(scoreHand(['r0', 'y9', 'b3']) === 12, '数字牌按面值')
+  assert(scoreHand(['rS', 'gR', 'yD']) === 60, '功能牌 20×3')
+  assert(scoreHand(['wW', 'wF']) === 100, '百搭 50×2')
+  assert(scoreHand(['r5', 'bD', 'wF']) === 75, '混合计分')
+
+  // 展示名
+  assert(cardLabel('r5') === '夏·5', '数字牌展示名（r=夏）')
+  assert(cardLabel('gD') === '春·+2', '功能牌展示名')
+  assert(cardLabel('wF') === '王牌+4' && cardLabel('wW') === '变色牌', '百搭展示名')
+}
+
 
 function testGomoku() {
   // 胜负判定：横/竖/双斜/贴边/长连/阻断/不中
@@ -931,6 +963,7 @@ async function main() {
   await testDefringe()
   testLotteryAlgorithms()
   testGomoku()
+  testUno()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)

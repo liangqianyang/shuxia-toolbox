@@ -1,5 +1,7 @@
 <template>
-  <view class="home">
+  <!-- 拖动排序时锁定页面滚动（page-meta 必须是页面第一个节点） -->
+  <page-meta :page-style="draggingToolKey ? 'overflow: hidden;' : ''">
+    <view class="home">
     <view class="home__header">
       <view class="home__header-copy">
         <text class="home__title">枫叶小屋</text>
@@ -20,11 +22,11 @@
         :class="{ 'home__tool-card--dragging': draggingToolKey === tool.key, 'home__tool-card--sorting': sorting }"
         @tap.stop="onToolTap(tool)"
         @longpress.stop="beginSort(tool.key)"
-        @touchmove.stop="onToolDragMove($event)"
+        @touchmove="onToolDragMove($event)"
         @touchend.stop="endToolDrag"
         @touchcancel.stop="endToolDrag"
       >
-        <view class="home__tool-icon">{{ tool.icon }}</view>
+        <ToolIcon class="home__tool-icon" :icon="tool.icon" />
         <view class="home__tool-body">
           <text class="home__tool-title">{{ tool.name }}</text>
           <text class="home__tool-desc">{{ toolDescription(tool) }}</text>
@@ -40,13 +42,15 @@
       <text>暂时没有可展示的工具</text>
     </view>
     <AppBottomNav active="home" />
-  </view>
+    </view>
+  </page-meta>
 </template>
 
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppBottomNav from '@/components/AppBottomNav.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
 import type { ToolboxHomeData, ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
 import { fetchAnniversaries } from '@/services/anniversary'

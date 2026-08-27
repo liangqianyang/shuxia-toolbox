@@ -10,7 +10,7 @@
       <view v-for="group in groups" :key="group.category" class="tool-library__group">
         <text class="tool-library__group-title">{{ group.title }}</text>
         <view v-for="tool in group.tools" :key="tool.key" class="tool-library__item">
-          <view class="tool-library__icon">{{ tool.icon }}</view>
+          <ToolIcon class="tool-library__icon" :icon="tool.icon" />
           <view class="tool-library__copy">
             <text class="tool-library__name">{{ tool.name }}</text>
             <text class="tool-library__desc">{{ tool.description }}</text>
@@ -35,6 +35,7 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { ToolCategory, ToolboxTool } from '@/types/toolbox'
+import ToolIcon from '@/components/ToolIcon.vue'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }

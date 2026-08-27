@@ -8,7 +8,7 @@
 
     <view v-if="games.length" class="games__list">
       <view v-for="game in games" :key="game.key" class="games__card card" @tap="openGame(game)">
-        <view class="games__icon">{{ game.icon }}</view>
+        <ToolIcon class="games__icon" :icon="game.icon" />
         <view class="games__copy">
           <view class="games__name-row">
             <text class="games__name">{{ game.name }}</text>
@@ -32,6 +32,7 @@
 import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import AppBottomNav from '@/components/AppBottomNav.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
 import type { ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools } from '@/services/toolbox'
 

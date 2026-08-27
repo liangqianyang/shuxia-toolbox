@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>枫趣牌局 · 图标</title>
+<style>html,body{margin:0;padding:0;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c" width="512" height="512"></canvas>
+<script>
+// 「枫趣牌局」应用图标：两张斜牌 + 枫叶小精灵探头（Q版，与游戏内牌面同一画风）
+// 生成方式：headless Chrome 截图 → 256×256 PNG（见 docs/ 说明）
+const ctx = document.getElementById('c').getContext('2d');
+const S = 512;
+const CREAM = '#FFF8ED', RED = '#E85D4A', RED_DEEP = '#C94A3A', GREEN = '#21483D',
+      GOLD = '#F4B942', INK = '#493E37', PAPER = '#FFFFFF';
+
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 圆叶（与 unoCards.ts 同一套枫叶坐标 + 二次贝塞尔磨圆）
+const LEAF = [
+  [0,-100],[12,-56],[40,-72],[34,-32],[76,-44],[50,-4],[86,16],[30,28],
+  [18,72],[8,46],[10,96],[-10,96],[-8,46],[-18,72],[-30,28],[-86,16],
+  [-50,-4],[-76,-44],[-34,-32],[-40,-72],[-12,-56]
+];
+function blobPath() {
+  const n = LEAF.length;
+  const mid = (a, b) => [(a[0]+b[0])/2, (a[1]+b[1])/2];
+  const m0 = mid(LEAF[n-1], LEAF[0]);
+  ctx.moveTo(m0[0], m0[1]);
+  for (let i = 0; i < n; i++) {
+    const m = mid(LEAF[i], LEAF[(i+1)%n]);
+    ctx.quadraticCurveTo(LEAF[i][0], LEAF[i][1], m[0], m[1]);
+  }
+  ctx.closePath();
+}
+function drawLeafQ(cx, cy, size, rot, color) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(size/100, size/100);
+  ctx.beginPath(); blobPath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 7; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.restore();
+}
+function drawFace(cx, cy, s, o) {
+  o = o || {};
+  const dx = s*0.26, ey = cy - s*0.14;
+  ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineCap = 'round';
+  [[-1, o.winkL], [1, o.winkR]].forEach(([side, wink]) => {
+    const x = cx + side*dx;
+    if (wink) {
+      ctx.beginPath(); ctx.arc(x, ey, s*0.08, Math.PI*1.15, Math.PI*1.85);
+      ctx.lineWidth = s*0.05; ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(x, ey, s*0.085, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x + s*0.03, ey - s*0.03, s*0.03, 0, 7); ctx.fill();
+      ctx.fillStyle = INK;
+    }
+  });
+  ctx.lineWidth = s*0.05;
+  if (o.open) {
+    ctx.beginPath(); ctx.arc(cx, cy + s*0.06, s*0.13, 0.1*Math.PI, 0.9*Math.PI);
+    ctx.closePath(); ctx.fillStyle = '#8a3b2e'; ctx.fill(); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(cx, cy + s*0.02, s*0.14, 0.2*Math.PI, 0.8*Math.PI); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,110,120,.4)';
+  ctx.beginPath(); ctx.ellipse(cx - s*0.46, cy + s*0.04, s*0.13, s*0.075, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + s*0.46, cy + s*0.04, s*0.13, s*0.075, 0, 0, 7); ctx.fill();
+}
+
+// ---- 背景：奶油白圆角方块 + 浅枫色圆点 ----
+rr(0, 0, S, S, 112);
+ctx.fillStyle = CREAM; ctx.fill();
+ctx.save();
+rr(0, 0, S, S, 112); ctx.clip();
+ctx.globalAlpha = 0.5; ctx.fillStyle = '#FBE4D5';
+[[64,80],[452,64],[40,420],[470,440],[120,470],[400,40]].forEach(([x,y]) => {
+  ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.fill();
+});
+// 金色小星星
+ctx.globalAlpha = 1;
+function sparkle(x, y, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.quadraticCurveTo(x, y, x, y + r);
+  ctx.quadraticCurveTo(x, y, x - r, y);
+  ctx.quadraticCurveTo(x, y, x, y - r);
+  ctx.fill();
+}
+sparkle(96, 150, 14, GOLD);
+sparkle(428, 380, 11, GOLD);
+sparkle(418, 130, 9, GOLD);
+
+// ---- 后面的红牌背（右倾） ----
+ctx.save();
+ctx.translate(322, 300); ctx.rotate(0.18);
+ctx.shadowColor = 'rgba(73,62,55,.25)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+rr(-88, -128, 176, 256, 22);
+ctx.fillStyle = RED; ctx.fill();
+ctx.shadowColor = 'transparent';
+rr(-76, -116, 152, 232, 14);
+ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 4; ctx.stroke();
+// 牌背波点
+ctx.globalAlpha = 0.3; ctx.fillStyle = '#fff';
+for (let i = 0; i < 12; i++) {
+  ctx.beginPath();
+  ctx.arc(-60 + (i%4)*40, -90 + Math.floor(i/4)*70, 5, 0, 7);
+  ctx.fill();
+}
+ctx.globalAlpha = 1;
+ctx.restore();
+
+// ---- 前面的白牌（左倾，露红色 7 + 小枫叶） ----
+ctx.save();
+ctx.translate(196, 316); ctx.rotate(-0.14);
+ctx.shadowColor = 'rgba(73,62,55,.25)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+rr(-88, -128, 176, 256, 22);
+ctx.fillStyle = PAPER; ctx.fill();
+ctx.shadowColor = 'transparent';
+rr(-88, -128, 176, 256, 22);
+ctx.lineWidth = 5; ctx.strokeStyle = INK; ctx.stroke();
+// 角落 7
+ctx.fillStyle = RED;
+ctx.font = '900 52px sans-serif';
+ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+ctx.fillText('7', -56, -92);
+// 中央小枫叶
+drawLeafQ(8, 16, 52, -0.1, RED);
+ctx.restore();
+
+// ---- 枫叶小精灵从牌后探头（眨眼笑） ----
+drawLeafQ(300, 158, 92, 0.12, RED);
+drawFace(300, 158, 92, { winkR: true, open: true });
+// 头顶一片小叶子装饰（金色小枫）
+drawLeafQ(196, 96, 30, -0.5, GOLD);
+ctx.restore(); // 对应 clip 的 save
+</script>
+</body>
+</html>

@@ -206,8 +206,22 @@ export function loadImagePixels(src: string, maxDim = 1200): Promise<PixelBuffer
   // #endif
 }
 
-/** 取页面内 <canvas type="2d"> 节点（MP 必须传组件实例） */
-export function getCanvasNode(selector: string, component?: unknown): Promise<CanvasNode> {
+/** 创建离屏 2D canvas（MP 用 wx.createOffscreenCanvas，H5 用 document.createElement） */
+export function createDrawingCanvas(width: number, height: number): { canvas: any; ctx: any } {
+  // #ifdef MP-WEIXIN
+  const mpCanvas = wx.createOffscreenCanvas({ type: '2d', width, height })
+  return { canvas: mpCanvas, ctx: mpCanvas.getContext('2d') }
+  // #endif
+
+  // #ifdef H5
+  const h5Canvas = document.createElement('canvas')
+  h5Canvas.width = width
+  h5Canvas.height = height
+  return { canvas: h5Canvas, ctx: h5Canvas.getContext('2d') }
+  // #endif
+}
+
+/** 取页面内 <canvas type="2d"> 节点（MP 必须传组件实例） */export function getCanvasNode(selector: string, component?: unknown): Promise<CanvasNode> {
   // #ifdef MP-WEIXIN
   return new Promise((resolve, reject) => {
     const query = component

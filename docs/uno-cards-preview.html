@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>枫叶四季 UNO · 概念草图</title>
+<style>
+  body { background:#2b2620; display:flex; justify-content:center; padding:24px; margin:0; }
+  canvas { max-width:100%; height:auto; border-radius:8px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const cvs = document.getElementById('c');
+const W = 1540, H = 2090, dpr = window.devicePixelRatio || 1;
+cvs.width = W * dpr; cvs.height = H * dpr;
+cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+const ctx = cvs.getContext('2d');
+ctx.scale(dpr, dpr);
+ctx.fillStyle = '#2b2620'; ctx.fillRect(0, 0, W, H);
+
+const KAI = '"Kaiti SC","STKaiti","KaiTi","TW-Kai",serif';
+const PAPER = '#f6efdd', INK = '#3a3128', BACKRED = '#8e2f22';
+const SEASONS = {
+  spring: { name: '春', color: '#5a9e6f', deep: '#3f7a54' },
+  summer: { name: '夏', color: '#c0392b', deep: '#96271c' },
+  autumn: { name: '秋', color: '#e0a526', deep: '#b57d12' },
+  winter: { name: '冬', color: '#41729f', deep: '#2d5578' },
+};
+const CW = 210, CH = 315; // card size
+
+// ---- helpers ----
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 11-point maple leaf (flag-style polygon, round joins soften the tips)
+const LEAF = [
+  [0,-100],[12,-56],[40,-72],[34,-32],[76,-44],[50,-4],[86,16],[30,28],
+  [18,72],[8,46],[10,96],[-10,96],[-8,46],[-18,72],[-30,28],[-86,16],
+  [-50,-4],[-76,-44],[-34,-32],[-40,-72],[-12,-56]
+];
+function drawLeaf(cx, cy, size, rot, color, outline) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(size / 100, size / 100);
+  ctx.beginPath();
+  LEAF.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 3;
+  ctx.strokeStyle = outline || color; ctx.stroke();
+  ctx.restore();
+}
+
+function speckle(x, y, w, h, light) {
+  ctx.save();
+  for (let i = 0; i < 46; i++) {
+    ctx.fillStyle = light ? 'rgba(246,239,221,.05)' : 'rgba(58,49,40,.05)';
+    ctx.beginPath();
+    ctx.arc(x + Math.random() * w, y + Math.random() * h, 0.6 + Math.random() * 1.4, 0, 7);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function cardBase(x, y) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+  rr(x, y, CW, CH, 16); ctx.fillStyle = PAPER; ctx.fill();
+  ctx.restore();
+  speckle(x, y, CW, CH, false);
+  rr(x + 8, y + 8, CW - 16, CH - 16, 11);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke();
+}
+
+function cardBaseDark(x, y) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+  rr(x, y, CW, CH, 16); ctx.fillStyle = '#352b21'; ctx.fill();
+  ctx.restore();
+  speckle(x, y, CW, CH, true);
+  rr(x + 8, y + 8, CW - 16, CH - 16, 11);
+  ctx.strokeStyle = PAPER; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function clipCard(x, y) { rr(x, y, CW, CH, 16); }
+
+// corner: season seal (色盲友好的文字色标) + number
+function corner(cx, cy, rot, sk, label, onDark) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot);
+  rr(-13, -13, 26, 26, 5);
+  ctx.fillStyle = sk ? SEASONS[sk].color : PAPER; ctx.fill();
+  ctx.fillStyle = sk ? PAPER : INK;
+  ctx.font = '16px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(sk ? SEASONS[sk].name : '变', 0, 1);
+  ctx.fillStyle = onDark ? PAPER : INK;
+  ctx.font = '700 30px ' + KAI;
+  ctx.fillText(label, 0, 44);
+  ctx.restore();
+}
+function corners(x, y, sk, label, onDark) {
+  corner(x + 18, y + 20, 0, sk, label, onDark);
+  corner(x + CW - 18, y + CH - 20, Math.PI, sk, label, onDark);
+}
+
+// ---- A · 经典斜带 ----
+function cardA(x, y, sk, num) {
+  cardBase(x, y);
+  ctx.save();
+  clipCard(x, y); ctx.clip();
+  ctx.translate(x + CW / 2, y + CH / 2); ctx.rotate(-0.42);
+  ctx.fillStyle = SEASONS[sk].color;
+  ctx.fillRect(-CW, -CH * 0.28, CW * 2, CH * 0.56);
+  ctx.fillStyle = PAPER;
+  ctx.beginPath(); ctx.ellipse(0, 0, CW * 0.42, CH * 0.30, 0, 0, 7); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = SEASONS[sk].deep;
+  ctx.font = '700 124px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(num, x + CW / 2, y + CH / 2 + 8);
+  corners(x, y, sk, num);
+}
+
+// ---- B · 大枫叶 ----
+function cardB(x, y, sk, num) {
+  cardBase(x, y);
+  drawLeaf(x + CW / 2, y + CH / 2 - 4, 112, -0.1, SEASONS[sk].color, SEASONS[sk].deep);
+  ctx.fillStyle = PAPER;
+  ctx.font = '700 104px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(num, x + CW / 2, y + CH / 2 + 4);
+  corners(x, y, sk, num);
+}
+
+// ---- 功能牌 ----
+// 反转：双叶追逐 + 虚线轮回环
+function cardReverse(x, y, sk) {
+  cardBase(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 4;
+  ctx.save();
+  ctx.setLineDash([12, 9]);
+  ctx.strokeStyle = SEASONS[sk].color; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(cx, cy, 62, 0.35, Math.PI * 2 - 0.35); ctx.stroke();
+  ctx.restore();
+  const a1 = 0.5;
+  drawLeaf(cx + 62 * Math.cos(a1), cy + 62 * Math.sin(a1), 46, a1 + Math.PI / 2 + 0.55, SEASONS[sk].color);
+  drawLeaf(cx + 62 * Math.cos(a1 + Math.PI), cy + 62 * Math.sin(a1 + Math.PI), 46, a1 + Math.PI * 1.5 + 0.55, SEASONS[sk].deep);
+  corners(x, y, sk, '回');
+}
+
+// 跳过：朱砂印章「止」
+function cardSkip(x, y, sk) {
+  cardBase(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 4;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(-0.08);
+  rr(-70, -70, 140, 140, 18);
+  ctx.fillStyle = '#a53524'; ctx.fill();
+  rr(-56, -56, 112, 112, 12);
+  ctx.strokeStyle = PAPER; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = PAPER;
+  ctx.font = '700 92px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('止', 0, 8);
+  ctx.restore();
+  corners(x, y, sk, '止');
+}
+
+// +2：两片叠叶
+function cardPlus2(x, y, sk) {
+  cardBase(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 26;
+  drawLeaf(cx - 26, cy - 10, 92, -0.42, SEASONS[sk].color);
+  drawLeaf(cx + 30, cy + 16, 92, 0.3, SEASONS[sk].deep);
+  ctx.font = '700 62px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 7; ctx.strokeStyle = INK;
+  ctx.strokeText('+2', cx, y + CH - 74);
+  ctx.fillStyle = PAPER; ctx.fillText('+2', cx, y + CH - 74);
+  corners(x, y, sk, '+2');
+}
+
+// 变色：四季轮转盘（深色牌）
+function cardWild(x, y) {
+  cardBaseDark(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 4;
+  const cols = ['#5a9e6f', '#c0392b', '#e0a526', '#41729f'];
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 80, -Math.PI / 2 + i * Math.PI / 2, -Math.PI / 2 + (i + 1) * Math.PI / 2);
+    ctx.closePath(); ctx.fillStyle = cols[i]; ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, 80, 0, 7);
+  ctx.strokeStyle = PAPER; ctx.lineWidth = 4; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 26, 0, 7);
+  ctx.fillStyle = PAPER; ctx.fill();
+  drawLeaf(cx, cy, 26, -0.15, INK);
+  corners(x, y, null, '变', true);
+}
+
+// +4：四叶风车（深色牌）
+function cardWild4(x, y) {
+  cardBaseDark(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 10;
+  const cols = ['#5a9e6f', '#c0392b', '#e0a526', '#41729f'];
+  const offs = [[-36, -36], [36, -36], [36, 36], [-36, 36]];
+  offs.forEach((o, i) => {
+    const rot = Math.atan2(o[1], o[0]) + Math.PI / 2;
+    drawLeaf(cx + o[0], cy + o[1], 56, rot, cols[i]);
+  });
+  ctx.beginPath(); ctx.arc(cx, cy, 30, 0, 7);
+  ctx.fillStyle = PAPER; ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.font = '700 36px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('+4', cx, cy + 2);
+  corners(x, y, null, '+4', true);
+}
+
+// 牌背：枫红底 + 米色大叶 + 小屋剪影
+function cabin(cx, cy, s, color, doorColor) {
+  ctx.fillStyle = color;
+  ctx.fillRect(cx - s * 0.5, cy - s * 0.1, s, s * 0.6);
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.66, cy - s * 0.05);
+  ctx.lineTo(cx, cy - s * 0.58);
+  ctx.lineTo(cx + s * 0.66, cy - s * 0.05);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(cx + s * 0.28, cy - s * 0.5, s * 0.12, s * 0.24); // chimney
+  ctx.fillStyle = doorColor;
+  ctx.fillRect(cx - s * 0.1, cy + s * 0.14, s * 0.2, s * 0.36); // door
+}
+function cardBack(x, y) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+  rr(x, y, CW, CH, 16); ctx.fillStyle = BACKRED; ctx.fill();
+  ctx.restore();
+  rr(x + 9, y + 9, CW - 18, CH - 18, 11);
+  ctx.strokeStyle = PAPER; ctx.lineWidth = 2.5; ctx.stroke();
+  rr(x + 16, y + 16, CW - 32, CH - 32, 8);
+  ctx.lineWidth = 1.2; ctx.stroke();
+  drawLeaf(x + CW / 2, y + CH / 2 - 28, 118, -0.08, PAPER);
+  cabin(x + CW / 2, y + CH / 2 + 96, 52, PAPER, BACKRED);
+  ctx.fillStyle = PAPER;
+  ctx.font = '24px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('枫 叶 小 屋', x + CW / 2, y + CH - 42);
+}
+
+// ================= C · Q版 =================
+const ROUND = '"Yuanti SC","Chalkboard SE","Comic Sans MS",sans-serif';
+const INKQ = '#4a3b32', PAPERQ = '#fdf6e8';
+const QS = {
+  spring: { name: '春', color: '#83cc90', deep: '#5aa568' },
+  summer: { name: '夏', color: '#f4735f', deep: '#d05240' },
+  autumn: { name: '秋', color: '#ffc95e', deep: '#e2a437' },
+  winter: { name: '冬', color: '#7ab5e3', deep: '#5a93c4' },
+};
+
+// 把国旗风的尖角枫叶二次贝塞尔平滑成圆滚滚的糖感叶子
+function blobPath() {
+  const p = LEAF, n = p.length;
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const m0 = mid(p[n - 1], p[0]);
+  ctx.moveTo(m0[0], m0[1]);
+  for (let i = 0; i < n; i++) {
+    const m = mid(p[i], p[(i + 1) % n]);
+    ctx.quadraticCurveTo(p[i][0], p[i][1], m[0], m[1]);
+  }
+  ctx.closePath();
+}
+function drawLeafQ(cx, cy, size, rot, color) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(size / 100, size / 100);
+  ctx.beginPath(); blobPath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 7; ctx.strokeStyle = INKQ; ctx.stroke();
+  ctx.restore();
+}
+
+function swirl(cx, cy, r) {
+  ctx.beginPath();
+  for (let a = 0; a < Math.PI * 3; a += 0.3) {
+    const rr2 = r * a / (Math.PI * 3);
+    const px = cx + rr2 * Math.cos(a), py = cy + rr2 * Math.sin(a);
+    a ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.strokeStyle = INKQ; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+}
+
+// s = 叶子尺寸（和 drawLeafQ 的 size 对应），o: {dizzy, winkL, winkR, open}
+function faceQ(cx, cy, s, o) {
+  o = o || {};
+  const dx = s * 0.26, ey = cy - s * 0.14;
+  ctx.strokeStyle = INKQ; ctx.fillStyle = INKQ; ctx.lineCap = 'round';
+  if (o.dizzy) {
+    swirl(cx - dx, ey, s * 0.12); swirl(cx + dx, ey, s * 0.12);
+  } else {
+    [[-1, o.winkL], [1, o.winkR]].forEach(([side, wink]) => {
+      const x = cx + side * dx;
+      if (wink) {
+        ctx.beginPath(); ctx.arc(x, ey, s * 0.08, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.lineWidth = s * 0.05; ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(x, ey, s * 0.085, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(x + s * 0.03, ey - s * 0.03, s * 0.03, 0, 7); ctx.fill();
+        ctx.fillStyle = INKQ;
+      }
+    });
+  }
+  ctx.lineWidth = s * 0.05;
+  if (o.open) {
+    ctx.beginPath(); ctx.arc(cx, cy + s * 0.06, s * 0.13, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.closePath(); ctx.fillStyle = '#8a3b2e'; ctx.fill(); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(cx, cy + s * 0.02, s * 0.14, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,110,120,.4)';
+  ctx.beginPath(); ctx.ellipse(cx - s * 0.46, cy + s * 0.04, s * 0.13, s * 0.075, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + s * 0.46, cy + s * 0.04, s * 0.13, s * 0.075, 0, 0, 7); ctx.fill();
+}
+
+function cardBaseQ(x, y) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+  rr(x, y, CW, CH, 22); ctx.fillStyle = PAPERQ; ctx.fill();
+  ctx.restore();
+  const cols = ['#83cc90', '#f4735f', '#ffc95e', '#7ab5e3'];
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = cols[i % 4];
+    ctx.beginPath();
+    ctx.arc(x + 14 + Math.random() * (CW - 28), y + 14 + Math.random() * (CH - 28), 2.6, 0, 7);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  rr(x + 7, y + 7, CW - 14, CH - 14, 16);
+  ctx.strokeStyle = INKQ; ctx.lineWidth = 4; ctx.stroke();
+}
+
+// 贴纸风文字：白色外晕 + 深色描边
+function stickerText(t, cx, cy, px, fill) {
+  ctx.font = '900 ' + px + 'px ' + ROUND;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = px * 0.22; ctx.strokeStyle = '#fff'; ctx.strokeText(t, cx, cy);
+  ctx.lineWidth = px * 0.09; ctx.strokeStyle = INKQ; ctx.strokeText(t, cx, cy);
+  ctx.fillStyle = fill; ctx.fillText(t, cx, cy);
+}
+
+function cornerQ(cx, cy, rot, sk, label) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot);
+  if (sk) {
+    ctx.beginPath(); ctx.arc(0, 0, 14, 0, 7);
+    ctx.fillStyle = QS[sk].color; ctx.fill();
+  } else {
+    const cols = ['#83cc90', '#f4735f', '#ffc95e', '#7ab5e3'];
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 14, -Math.PI / 2 + i * Math.PI / 2, -Math.PI / 2 + (i + 1) * Math.PI / 2);
+      ctx.closePath(); ctx.fillStyle = cols[i]; ctx.fill();
+    }
+  }
+  ctx.beginPath(); ctx.arc(0, 0, 14, 0, 7);
+  ctx.lineWidth = 2.5; ctx.strokeStyle = INKQ; ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 15px ' + ROUND; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(sk ? QS[sk].name : '变', 0, 1);
+  ctx.fillStyle = INKQ; ctx.font = '900 28px ' + ROUND;
+  ctx.fillText(label, 0, 42);
+  ctx.restore();
+}
+function cornersQ(x, y, sk, label) {
+  cornerQ(x + 20, y + 22, 0, sk, label);
+  cornerQ(x + CW - 20, y + CH - 22, Math.PI, sk, label);
+}
+
+// Q 数字牌：数字漂浮在上方，下面是枫叶小精灵
+function cardQ(x, y, sk, num) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 + 40;
+  stickerText(num, cx, y + 62, 62, QS[sk].deep);
+  drawLeafQ(cx, cy, 92, -0.06, QS[sk].color);
+  faceQ(cx, cy, 92, {});
+  cornersQ(x, y, sk, num);
+}
+
+// Q 反转：两只晕头转向的小叶子互相追逐
+function cardQReverse(x, y, sk) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2;
+  ctx.save();
+  ctx.setLineDash([11, 9]);
+  ctx.strokeStyle = QS[sk].deep; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(cx, cy, 60, 0.35, Math.PI * 2 - 0.35); ctx.stroke();
+  ctx.restore();
+  const a1 = 0.5;
+  [[a1, QS[sk].color], [a1 + Math.PI, QS[sk].deep]].forEach(([a, col]) => {
+    const lx = cx + 60 * Math.cos(a), ly = cy + 60 * Math.sin(a);
+    drawLeafQ(lx, ly, 44, a + Math.PI / 2 + 0.55, col);
+    faceQ(lx, ly, 44, { dizzy: true });
+  });
+  cornersQ(x, y, sk, '回');
+}
+
+// Q 跳过：眨眼的小叶子举着「止」牌
+function cardQSkip(x, y, sk) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 - 12;
+  drawLeafQ(cx - 16, cy, 92, -0.1, QS[sk].color);
+  faceQ(cx - 16, cy, 92, { winkR: true, open: true });
+  // 小手举牌
+  ctx.strokeStyle = INKQ; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx + 34, cy + 34); ctx.lineTo(cx + 58, cy + 58); ctx.stroke();
+  ctx.save();
+  ctx.translate(cx + 66, cy + 82); ctx.rotate(0.12);
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = Math.PI / 8 + i * Math.PI / 4;
+    i ? ctx.lineTo(38 * Math.cos(a), 38 * Math.sin(a)) : ctx.moveTo(38 * Math.cos(a), 38 * Math.sin(a));
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#e84c3d'; ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = '900 30px ' + ROUND;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('止', 0, 2);
+  ctx.restore();
+  cornersQ(x, y, sk, '止');
+}
+
+// Q +2：大叶子背着小叶子
+function cardQPlus2(x, y, sk) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2 + 26;
+  stickerText('+2', cx, y + 56, 52, QS[sk].deep);
+  drawLeafQ(cx - 12, cy, 84, -0.08, QS[sk].color);
+  faceQ(cx - 12, cy, 84, {});
+  drawLeafQ(cx + 22, cy - 56, 52, 0.18, QS[sk].deep);
+  faceQ(cx + 22, cy - 56, 52, { open: true });
+  cornersQ(x, y, sk, '+2');
+}
+
+// Q 变色：四季糖球，中间一张小脸
+function cardQWild(x, y) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2;
+  const cols = ['#83cc90', '#f4735f', '#ffc95e', '#7ab5e3'];
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 72, -Math.PI / 2 + i * Math.PI / 2, -Math.PI / 2 + (i + 1) * Math.PI / 2);
+    ctx.closePath(); ctx.fillStyle = cols[i]; ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, 72, 0, 7);
+  ctx.lineWidth = 5; ctx.strokeStyle = INKQ; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 30, 0, 7);
+  ctx.fillStyle = PAPERQ; ctx.fill(); ctx.lineWidth = 3; ctx.stroke();
+  faceQ(cx, cy + 2, 36, { open: true });
+  cornersQ(x, y, null, '变');
+}
+
+// Q +4：四只小叶精围着 +4 蹦跳
+function cardQWild4(x, y) {
+  cardBaseQ(x, y);
+  const cx = x + CW / 2, cy = y + CH / 2;
+  const cols = ['#83cc90', '#f4735f', '#ffc95e', '#7ab5e3'];
+  const offs = [[-46, -44, -0.3], [46, -44, 0.3], [46, 44, 0.25], [-46, 44, -0.25]];
+  offs.forEach((o, i) => {
+    drawLeafQ(cx + o[0], cy + o[1], 40, o[2], cols[i]);
+    faceQ(cx + o[0], cy + o[1], 40, { open: i % 2 === 0 });
+  });
+  stickerText('+4', cx, cy, 56, '#fff');
+  cornersQ(x, y, null, '+4');
+}
+
+// Q 牌背：奶油红点底 + 眨眼大叶脸 + 小屋
+function cabinQ(cx, cy, s, color, doorColor) {
+  ctx.fillStyle = color;
+  rr(cx - s * 0.55, cy - s * 0.1, s * 1.1, s * 0.62, s * 0.12); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.68, cy - s * 0.06);
+  ctx.lineTo(cx, cy - s * 0.6);
+  ctx.lineTo(cx + s * 0.68, cy - s * 0.06);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(cx + s * 0.28, cy - s * 0.52, s * 0.13, s * 0.26);
+  ctx.fillStyle = doorColor;
+  rr(cx - s * 0.11, cy + s * 0.12, s * 0.22, s * 0.4, s * 0.08); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx - s * 0.3, cy + s * 0.12, s * 0.08, 0, 7); ctx.fill();
+}
+function cardQBack(x, y) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+  rr(x, y, CW, CH, 22); ctx.fillStyle = '#f4735f'; ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#fff';
+  for (let i = 0; i < 20; i++) {
+    ctx.beginPath();
+    ctx.arc(x + 16 + Math.random() * (CW - 32), y + 16 + Math.random() * (CH - 32), 3, 0, 7);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  rr(x + 7, y + 7, CW - 14, CH - 14, 16);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke();
+  drawLeafQ(x + CW / 2, y + CH / 2 - 30, 108, -0.06, PAPERQ);
+  faceQ(x + CW / 2, y + CH / 2 - 30, 108, { winkR: true, open: true });
+  cabinQ(x + CW / 2, y + CH / 2 + 92, 50, PAPERQ, '#f4735f');
+  stickerText('枫叶小屋', x + CW / 2, y + CH - 40, 26, '#fff');
+}
+
+// ---- layout ----
+function label(text, y) {
+  ctx.fillStyle = '#d8cfc0';
+  ctx.font = '22px ' + KAI; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 75, y);
+}
+const X0 = 75, DX = 236;
+const demoNums = ['5', '0', '7', '3', '9', '2'];
+const demoSeasons = ['spring', 'summer', 'autumn', 'winter', 'summer', 'spring'];
+
+ctx.fillStyle = '#e8dfca';
+ctx.font = '700 34px ' + KAI; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+ctx.fillText('枫叶四季 UNO · 概念草图', W / 2, 46);
+ctx.fillStyle = '#9a8f7a'; ctx.font = '17px ' + KAI;
+ctx.fillText('方向 2 · 国风枫叶主题 — A 经典斜带 / B 大枫叶 / C Q版 · 全部 Canvas 程序化绘制', W / 2, 80);
+
+label('A · 经典斜带构图（数字牌）', 122);
+demoNums.forEach((n, i) => cardA(X0 + i * DX, 146, demoSeasons[i], n));
+
+label('B · 大枫叶构图（数字牌 · 推荐）', 502);
+demoNums.forEach((n, i) => cardB(X0 + i * DX, 526, demoSeasons[i], n));
+
+label('功能牌 + 牌背（B 系列）', 882);
+cardReverse(X0 + 0 * DX, 906, 'summer');
+cardSkip(X0 + 1 * DX, 906, 'winter');
+cardPlus2(X0 + 2 * DX, 906, 'spring');
+cardWild(X0 + 3 * DX, 906);
+cardWild4(X0 + 4 * DX, 906);
+cardBack(X0 + 5 * DX, 906);
+
+label('C · Q版 · 数字牌（枫叶小精灵）', 1302);
+demoNums.forEach((n, i) => cardQ(X0 + i * DX, 1326, demoSeasons[i], n));
+
+label('C · Q版 · 功能牌 + 牌背', 1682);
+cardQReverse(X0 + 0 * DX, 1706, 'summer');
+cardQSkip(X0 + 1 * DX, 1706, 'winter');
+cardQPlus2(X0 + 2 * DX, 1706, 'spring');
+cardQWild(X0 + 3 * DX, 1706);
+cardQWild4(X0 + 4 * DX, 1706);
+cardQBack(X0 + 5 * DX, 1706);
+
+ctx.fillStyle = '#8a7f6c'; ctx.font = '15px ' + KAI; ctx.textAlign = 'center';
+ctx.fillText('四色 = 四季枫叶：春绿 / 夏红 / 秋黄 / 冬蓝 · 角落印章色标兼作色盲辅助 · 双牌堆（>5 人）牌背一致', W / 2, 2058);
+</script>
+</body>
+</html>

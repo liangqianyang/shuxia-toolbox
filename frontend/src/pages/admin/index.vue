@@ -29,7 +29,7 @@
         <text class="admin__group-title">{{ group.title }}</text>
         <view v-for="(tool, index) in group.tools" :key="tool.key" class="admin__tool">
           <view class="admin__tool-top">
-            <view class="admin__icon">{{ tool.icon }}</view>
+            <ToolIcon class="admin__icon" :icon="tool.icon" />
             <view class="admin__copy">
               <text class="admin__name">{{ tool.name }}</text>
               <text class="admin__desc">{{ tool.description }}</text>
@@ -58,6 +58,7 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { AdminTool, ToolCategory } from '@/types/toolbox'
+import ToolIcon from '@/components/ToolIcon.vue'
 import { fetchAdminFeatures, fetchAdminTools, saveAdminToolOrder, setAdminAiEnabled, setAdminToolPublication } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }

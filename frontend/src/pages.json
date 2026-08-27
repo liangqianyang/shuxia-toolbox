@@ -55,6 +55,12 @@
       }
     },
     {
+      "path": "pages/uno/index",
+      "style": {
+        "navigationBarTitleText": "枫趣牌局"
+      }
+    },
+    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"

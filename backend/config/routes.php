@@ -15,6 +15,8 @@ use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
 use App\Controller\TravelController;
 use App\Controller\ToolController;
+use App\Controller\UnoController;
+use App\Controller\UnoWsController;
 use Hyperf\HttpServer\Router\Router;
 
 // 容器/负载均衡健康检查，不需要 API Key。
@@ -76,6 +78,21 @@ Router::addGroup('/api', function (): void {
     Router::post('/gomoku/room/{code}/undo-respond', [GomokuController::class, 'respondUndo']);
     Router::post('/gomoku/room/{code}/leave', [GomokuController::class, 'leave']);
 
+    // UNO 联机：房间创建/加入/开局、轮询同步（WS 降级通道）、出牌/摸牌/不出、
+    // +4 质疑、喊/举报 UNO、再来一局与离开。回合超时由 Timer 清扫器 + 写操作懒检查推进。
+    Router::post('/uno/room', [UnoController::class, 'create']);
+    Router::post('/uno/room/{code}/join', [UnoController::class, 'join']);
+    Router::get('/uno/room/{code}', [UnoController::class, 'state']);
+    Router::post('/uno/room/{code}/start', [UnoController::class, 'start']);
+    Router::post('/uno/room/{code}/play', [UnoController::class, 'play']);
+    Router::post('/uno/room/{code}/draw', [UnoController::class, 'draw']);
+    Router::post('/uno/room/{code}/pass', [UnoController::class, 'pass']);
+    Router::post('/uno/room/{code}/challenge', [UnoController::class, 'challenge']);
+    Router::post('/uno/room/{code}/declare-uno', [UnoController::class, 'declareUno']);
+    Router::post('/uno/room/{code}/catch-uno', [UnoController::class, 'catchUno']);
+    Router::post('/uno/room/{code}/rematch', [UnoController::class, 'rematch']);
+    Router::post('/uno/room/{code}/leave', [UnoController::class, 'leave']);
+
     // 每日灵签：配额、抽签（服务端权威随机）、AI 解签（缓存）、分享加次、历史。
     Router::get('/fortune/quota', [FortuneController::class, 'quota']);
     Router::post('/fortune/draw', [FortuneController::class, 'draw']);
@@ -92,7 +109,8 @@ Router::addGroup('/api', function (): void {
     Router::get('/travel/share/{code}', [TravelController::class, 'getShare']);
 });
 
-// 联机五子棋 WebSocket 通道：只负责连接管理与状态推送，对局变更仍走上面的 HTTP 接口。
+// 联机游戏 WebSocket 通道：只负责连接管理与状态推送，对局变更仍走上面的 HTTP 接口。
 Router::addServer('ws', function (): void {
     Router::get('/gomoku/ws', GomokuWsController::class);
+    Router::get('/uno/ws', UnoWsController::class);
 });
