@@ -94,8 +94,8 @@ export async function saveAdminToolOrder(toolKeys: string[]): Promise<AdminTool[
   return response.tools
 }
 
-export async function requestUserApi<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>): Promise<T> {
-  return requestWithSession(() => request<T>(path, method, data, true))
+export async function requestUserApi<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, timeout?: number): Promise<T> {
+  return requestWithSession(() => request<T>(path, method, data, true, timeout))
 }
 
 async function requestWithSession<T>(operation: () => Promise<T>): Promise<T> {
@@ -154,7 +154,7 @@ function getWechatProfile(): Promise<Record<string, unknown>> {
   })
 }
 
-function request<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, withUserToken = false): Promise<T> {
+function request<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, withUserToken = false, timeout = 8000): Promise<T> {
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = { 'X-API-Key': API_KEY }
     if (withUserToken) {
@@ -166,7 +166,7 @@ function request<T>(path: string, method: 'GET' | 'POST', data?: Record<string, 
       method,
       data,
       header: headers,
-      timeout: 8000,
+      timeout,
       success: (result) => {
         const body = result.data as ApiEnvelope<T>
         if (!body || body.code !== 0) {

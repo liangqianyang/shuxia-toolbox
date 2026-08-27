@@ -7,6 +7,7 @@ use App\Controller\AdminToolController;
 use App\Controller\AnniversaryController;
 use App\Controller\AuthController;
 use App\Controller\FoodController;
+use App\Controller\FortuneController;
 use App\Controller\GomokuController;
 use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
@@ -67,6 +68,13 @@ Router::addGroup('/api', function (): void {
     Router::post('/gomoku/room/{code}/undo-request', [GomokuController::class, 'requestUndo']);
     Router::post('/gomoku/room/{code}/undo-respond', [GomokuController::class, 'respondUndo']);
     Router::post('/gomoku/room/{code}/leave', [GomokuController::class, 'leave']);
+
+    // 每日灵签：配额、抽签（服务端权威随机）、AI 解签（缓存）、分享加次、历史。
+    Router::get('/fortune/quota', [FortuneController::class, 'quota']);
+    Router::post('/fortune/draw', [FortuneController::class, 'draw']);
+    Router::post('/fortune/interpret', [FortuneController::class, 'interpret']);
+    Router::post('/fortune/share-bonus', [FortuneController::class, 'shareBonus']);
+    Router::get('/fortune/history', [FortuneController::class, 'history']);
 
     // AI 旅行攻略：地点搜索、生成/局部重写行程，以及云保存分享码。
     Router::get('/travel/geocode', [TravelController::class, 'geocode']);

@@ -37,6 +37,18 @@
       }
     },
     {
+      "path": "pages/fortune/index",
+      "style": {
+        "navigationBarTitleText": "每日灵签"
+      }
+    },
+    {
+      "path": "pages/fortune/history",
+      "style": {
+        "navigationBarTitleText": "我的签文"
+      }
+    },
+    {
       "path": "pages/gomoku/index",
       "style": {
         "navigationBarTitleText": "五子棋"
