@@ -6,6 +6,24 @@
       <text class="admin__subtitle">上架工具会出现在用户的工具集中</text>
     </view>
 
+    <!-- 全局功能开关：AI 关闭时服务端硬拦截所有 AI 接口，前端同步隐藏入口 -->
+    <view v-if="!accessError" class="admin__group">
+      <text class="admin__group-title">功能开关</text>
+      <view class="admin__tool">
+        <view class="admin__tool-top">
+          <view class="admin__icon">🤖</view>
+          <view class="admin__copy">
+            <text class="admin__name">AI 功能总开关</text>
+            <text class="admin__desc">控制 AI 解签、AI 行程规划等全部 AI 能力；关闭后所有 AI 接口立即不可用</text>
+          </view>
+          <switch :checked="aiEnabled" color="#c64f3d" @change="changeAiEnabled" />
+        </view>
+        <view class="admin__tool-bottom">
+          <text class="admin__status" :class="{ 'admin__status--off': !aiEnabled }">{{ aiEnabled ? '已开启' : '已关闭' }}</text>
+        </view>
+      </view>
+    </view>
+
     <view v-if="groups.length" class="admin__list">
       <view v-for="group in groups" :key="group.category" class="admin__group">
         <text class="admin__group-title">{{ group.title }}</text>
@@ -40,13 +58,14 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { AdminTool, ToolCategory } from '@/types/toolbox'
-import { fetchAdminTools, saveAdminToolOrder, setAdminToolPublication } from '@/services/toolbox'
+import { fetchAdminFeatures, fetchAdminTools, saveAdminToolOrder, setAdminAiEnabled, setAdminToolPublication } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
 
 const CATEGORY_TITLES: Record<ToolCategory, string> = { tool: '工具', game: '游戏' }
 
 const tools = ref<AdminTool[]>([])
+const aiEnabled = ref(false)
 const accessError = ref('')
 
 /** 按 工具/游戏 分组展示；排序仍在全量列表上进行（sort_order 全局），组内相邻即全局同分类相邻 */
@@ -67,9 +86,23 @@ onShow(() => {
 async function loadTools() {
   accessError.value = ''
   try {
-    tools.value = await fetchAdminTools()
+    const [toolList, features] = await Promise.all([fetchAdminTools(), fetchAdminFeatures()])
+    tools.value = toolList
+    aiEnabled.value = features.aiEnabled
   } catch (error) {
     accessError.value = error instanceof Error ? error.message : '读取运营工具失败'
+  }
+}
+
+async function changeAiEnabled(event: Event) {
+  const next = (event as unknown as SwitchEvent).detail.value
+  try {
+    const features = await setAdminAiEnabled(next)
+    aiEnabled.value = features.aiEnabled
+    uni.showToast({ title: features.aiEnabled ? 'AI 功能已开启' : 'AI 功能已关闭', icon: 'none' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '更新失败', icon: 'none' })
+    await loadTools()
   }
 }
 

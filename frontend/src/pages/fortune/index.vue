@@ -7,7 +7,7 @@
       </view>
       <text class="fortune__title">每日灵签</text>
       <view class="fortune__header-side fortune__header-side--right" @tap="goHistory">
-        <text class="fortune__history-link">我的签文</text>
+        <text class="fortune__quota fortune__quota--link">📜 我的签文</text>
       </view>
     </view>
 
@@ -35,7 +35,9 @@
     <!-- 阶段二：问事 -->
     <view v-else-if="stage === 'ask'" class="fortune__stage">
       <view class="fortune__ask-head">
-        <text class="fortune__back" @tap="backToDeck">‹ 换签种</text>
+        <view class="fortune__back-pill" :style="{ borderColor: theme.primaryDeep, color: theme.primaryDeep }" @tap="backToDeck">
+          <text class="fortune__back-pill-text">‹ 换签种</text>
+        </view>
         <text class="fortune__ask-title" :style="{ color: theme.primaryDeep }">{{ theme.icon }} {{ theme.name }}</text>
       </view>
 
@@ -55,7 +57,7 @@
         </view>
       </template>
 
-      <text class="fortune__ask-label">默念你的问题（选填，AI 解签会结合它）</text>
+      <text class="fortune__ask-label">默念你的问题（选填{{ aiEnabled ? '，AI 解签会结合它' : '' }}）</text>
       <textarea
         v-model="question"
         class="fortune__question"
@@ -180,8 +182,8 @@
         </button>
       </view>
 
-      <!-- AI 大师解签 -->
-      <view class="fortune__reading">
+      <!-- AI 大师解签（全局 AI 开关关闭时整块隐藏，服务端同时硬拦截） -->
+      <view v-if="aiEnabled" class="fortune__reading">
         <template v-if="reading">
           <text class="fortune__reading-title" :style="{ color: theme.primaryDeep }">大师详解</text>
           <view class="fortune__reading-block">
@@ -237,12 +239,15 @@ import { computed, getCurrentInstance, nextTick, onUnmounted, ref, watch } from 
 import { onHide, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import { useFortune } from '@/composables/useFortune'
 import { useFortuneShake } from '@/composables/useFortuneShake'
+import { useFeatures } from '@/composables/useFeatures'
 import { canvasToFile, getCanvasNode, openAuthSetting, saveImageToAlbum } from '@/utils/canvasAdapter'
 import { renderFortuneCard } from '@/utils/fortune/cardRenderer'
 import { DECK_LIST, FORTUNE_CATEGORIES, GRAIL_COPY, deckCategories, isTopStick, levelSeal } from '@/utils/fortune/theme'
 import type { FortuneCategory } from '@/types/fortune'
 
 const instance = getCurrentInstance()
+
+const { aiEnabled, refreshFeatures } = useFeatures()
 
 const {
   stage,
@@ -316,6 +321,7 @@ watch(stage, (value) => {
 })
 
 onShow(() => {
+  void refreshFeatures()
   void loadQuota()
   if (stage.value === 'shake') shake.start()
 })
@@ -377,7 +383,9 @@ onShareAppMessage(() => {
   }
   const stickInfo = draw.value && !isBook.value
     ? `我抽到了${theme.value.name}第${draw.value.stick.no}签「${seal.value.label}」`
-    : '观音关帝月老灵签 + 答案之书，摇一摇抽签，AI 大师解签'
+    : aiEnabled.value
+      ? '观音关帝月老灵签 + 答案之书，摇一摇抽签，AI 大师解签'
+      : '观音关帝月老灵签 + 答案之书，摇一摇抽签'
   return {
     title: `${stickInfo}，来测测你今日运势`,
     path: '/pages/fortune/index',
@@ -496,6 +504,11 @@ function goHistory(): void {
     border-radius: 999rpx;
     padding: 8rpx 20rpx;
     box-shadow: $shadow-card;
+
+    &--link {
+      color: $color-primary-dark;
+      font-weight: 600;
+    }
   }
 
   &__title {
@@ -503,11 +516,6 @@ function goHistory(): void {
     font-weight: 700;
     color: $color-text;
     font-family: "Songti SC", "STSong", serif;
-  }
-
-  &__history-link {
-    font-size: 24rpx;
-    color: $color-primary-dark;
   }
 
   &__stage {
@@ -567,7 +575,17 @@ function goHistory(): void {
 
   &__ask-head { display: flex; align-items: center; margin-bottom: 32rpx; }
 
-  &__back { font-size: 26rpx; color: $color-text-secondary; width: 160rpx; }
+  &__back-pill {
+    width: 160rpx;
+    padding: 10rpx 0;
+    border: 2rpx solid;
+    border-radius: 999rpx;
+    text-align: center;
+    background: $color-card;
+    box-shadow: $shadow-card;
+  }
+
+  &__back-pill-text { font-size: 24rpx; font-weight: 600; }
 
   &__ask-title {
     flex: 1;

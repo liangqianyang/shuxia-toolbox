@@ -64,7 +64,7 @@ const FALLBACK_TOOLS: ToolboxTool[] = [
   { key: 'food', category: 'tool', name: '今天吃什么', description: '选地点和偏好，随机抽一家附近美食或常吃店', icon: '🍜', route: '/pages/food/index' },
   { key: 'lottery', category: 'tool', name: '枫叶抽奖', description: '抽奖品、随机抽取、随机分组，规则由你设置', icon: '🎉', route: '/pages/lottery/index' },
   { key: 'anniversary', category: 'tool', name: '时光纪念卡', description: '记录纪念日、倒数提醒，生成可保存的纪念卡', icon: '📅', route: '/pages/anniversary/index' },
-  { key: 'fortune', category: 'tool', name: '每日灵签', description: '观音关帝月老灵签 + 答案之书，摇一摇抽签，AI 大师解签', icon: '🎋', route: '/pages/fortune/index' },
+  { key: 'fortune', category: 'tool', name: '每日灵签', description: '观音关帝月老灵签 + 答案之书，摇一摇抽签，每日三签', icon: '🎋', route: '/pages/fortune/index' },
   { key: 'gomoku', category: 'game', name: '五子棋', description: '创建房间，邀请好友联机对弈', icon: '⚫', route: '/pages/gomoku/index' },
 ]
 

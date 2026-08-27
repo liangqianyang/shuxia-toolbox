@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Controller\AdminFeatureController;
 use App\Controller\BeadController;
 use App\Controller\AdminToolController;
 use App\Controller\AnniversaryController;
 use App\Controller\AuthController;
+use App\Controller\FeatureController;
 use App\Controller\FoodController;
 use App\Controller\FortuneController;
 use App\Controller\GomokuController;
@@ -39,6 +41,11 @@ Router::addGroup('/api', function (): void {
     Router::post('/anniversaries/{id}/delete', [AnniversaryController::class, 'delete']);
     Router::post('/anniversaries/{id}/calendar-added', [AnniversaryController::class, 'markCalendarAdded']);
     Router::post('/anniversaries/{id}/subscribe', [AnniversaryController::class, 'subscribe']);
+
+    // 全局功能开关：公开只读（前端决定 AI 入口展示）+ 运营台读写。
+    Router::get('/config/features', [FeatureController::class, 'index']);
+    Router::get('/admin/features', [AdminFeatureController::class, 'index']);
+    Router::post('/admin/features', [AdminFeatureController::class, 'save']);
 
     // 工具运营台：仅由 ADMIN_WECHAT_OPENIDS 指定的管理员账号访问。
     Router::get('/admin/tools', [AdminToolController::class, 'index']);

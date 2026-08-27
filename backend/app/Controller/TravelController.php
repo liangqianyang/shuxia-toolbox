@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Exception\BizException;
 use App\Middleware\ApiKeyMiddleware;
+use App\Service\FeatureFlagService;
 use App\Service\TravelShareService;
 use App\Service\TravelService;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -17,6 +18,7 @@ class TravelController extends AbstractController
     public function __construct(
         private readonly TravelService $travel,
         private readonly TravelShareService $shares,
+        private readonly FeatureFlagService $flags,
     ) {}
 
     /**
@@ -48,6 +50,7 @@ class TravelController extends AbstractController
     #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function plan(RequestInterface $request): array
     {
+        $this->flags->requireAiEnabled();
         $destination = trim((string) $request->input('destination', ''));
         if ($destination === '') {
             throw new BizException(422, '目的地不能为空');
@@ -113,6 +116,7 @@ class TravelController extends AbstractController
     #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function refineDay(RequestInterface $request): array
     {
+        $this->flags->requireAiEnabled();
         $dayIndex = (int) $request->input('day_index', 0);
         if ($dayIndex < 1) {
             throw new BizException(422, 'day_index 不合法');
@@ -160,6 +164,7 @@ class TravelController extends AbstractController
     #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function replaceStop(RequestInterface $request): array
     {
+        $this->flags->requireAiEnabled();
         $dayIndex = (int) $request->input('day_index', 0);
         if ($dayIndex < 1) {
             throw new BizException(422, 'day_index 不合法');

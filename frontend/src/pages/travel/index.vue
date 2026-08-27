@@ -1,5 +1,13 @@
 <template>
-  <view class="travel">
+  <!-- 全局 AI 开关关闭时整页替换为维护提示（旅游攻略核心就是 AI 规划，服务端同时硬拦截） -->
+  <view v-if="featuresReady && !aiEnabled" class="travel travel--off">
+    <view class="travel__off">
+      <text class="travel__off-icon">🛠️</text>
+      <text class="travel__off-title">行程规划升级维护中</text>
+      <text class="travel__off-desc">该功能暂时不可用，请稍后再来看看</text>
+    </view>
+  </view>
+  <view v-else-if="featuresReady" class="travel">
     <!-- 输入：出发地 + 目的地 + 出行方式 + 天数/时长 + 偏好 -->
     <view class="card travel__ai">
       <view class="travel__ai-head">
@@ -558,6 +566,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
+import { useFeatures } from '@/composables/useFeatures'
 import TravelStopCard from '@/components/TravelStopCard.vue'
 import { useTravelEditor } from '@/composables/useTravelEditor'
 import { useTravelImages } from '@/composables/useTravelImages'
@@ -867,6 +876,8 @@ function pickAiPlace(field: 'origin' | 'destination', candidate: GeocodeCandidat
 
 const { cards, cssWidth, cssHeight, rendered, saving, renderAll, saveOne, saveAll, release } = useTravelImages()
 const instance = getCurrentInstance()?.proxy
+
+const { aiEnabled, featuresReady, refreshFeatures } = useFeatures()
 const BASE_RECOMMENDED_CARD_KEYS = ['route-real', 'route-by-day', 'multi-route', 'poi', 'timeline', 'food', 'packing']
 type CardPresetId = 'recommended' | 'daily' | 'share' | 'map' | 'custom'
 const CARD_SUITES: Array<{ id: Exclude<CardPresetId, 'recommended' | 'custom'>; label: string; hint: string }> = [
@@ -1111,6 +1122,7 @@ watch(
 )
 
 onLoad((query) => {
+  void refreshFeatures()
   const raw = query?.share
   pendingShareCode.value = Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
 })
@@ -1474,6 +1486,39 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     display: flex;
     flex-direction: column;
     gap: 24rpx;
+  }
+
+  // ---------- AI 开关关闭时的整页维护提示 ----------
+  &--off {
+    min-height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__off {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20rpx;
+    padding: 80rpx 48rpx;
+    text-align: center;
+
+    &-icon {
+      font-size: 64rpx;
+    }
+
+    &-title {
+      font-size: 34rpx;
+      font-weight: 700;
+      color: $color-text;
+    }
+
+    &-desc {
+      font-size: 26rpx;
+      color: $color-text-secondary;
+    }
   }
 
   &__ai {

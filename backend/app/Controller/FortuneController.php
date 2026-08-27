@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Exception\BizException;
 use App\Middleware\ApiKeyMiddleware;
+use App\Service\FeatureFlagService;
 use App\Service\FortuneService;
 use App\Service\WechatUserService;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -22,6 +23,7 @@ final class FortuneController extends AbstractController
     public function __construct(
         private readonly FortuneService $fortune,
         private readonly WechatUserService $users,
+        private readonly FeatureFlagService $flags,
     ) {}
 
     /** 今日配额：{limit, used, remaining, bonusLeft, resetAt}。 */
@@ -53,6 +55,7 @@ final class FortuneController extends AbstractController
     #[RateLimit(create: 1, capacity: 2, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function interpret(RequestInterface $request): array
     {
+        $this->flags->requireAiEnabled();
         $userId = $this->requireUserId($request);
         $drawId = (int) $request->input('drawId', 0);
         if ($drawId <= 0) {

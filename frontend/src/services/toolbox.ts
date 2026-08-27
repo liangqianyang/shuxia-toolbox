@@ -94,6 +94,23 @@ export async function saveAdminToolOrder(toolKeys: string[]): Promise<AdminTool[
   return response.tools
 }
 
+export interface FeatureFlags {
+  aiEnabled: boolean
+}
+
+/** 公开的全局功能开关（无需登录）：决定 AI 入口是否展示，服务端另有硬拦截兜底。 */
+export async function fetchFeatures(): Promise<FeatureFlags> {
+  return request<FeatureFlags>('/api/config/features', 'GET')
+}
+
+export async function fetchAdminFeatures(): Promise<FeatureFlags> {
+  return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'GET', undefined, true))
+}
+
+export async function setAdminAiEnabled(aiEnabled: boolean): Promise<FeatureFlags> {
+  return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'POST', { aiEnabled }, true))
+}
+
 export async function requestUserApi<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, timeout?: number): Promise<T> {
   return requestWithSession(() => request<T>(path, method, data, true, timeout))
 }
