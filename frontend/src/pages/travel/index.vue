@@ -1,15 +1,7 @@
 <template>
-  <!-- 全局 AI 开关关闭时整页替换为维护提示（旅游攻略核心就是 AI 规划，服务端同时硬拦截） -->
-  <view v-if="featuresReady && !aiEnabled" class="travel travel--off">
-    <view class="travel__off">
-      <text class="travel__off-icon">🛠️</text>
-      <text class="travel__off-title">行程规划升级维护中</text>
-      <text class="travel__off-desc">该功能暂时不可用，请稍后再来看看</text>
-    </view>
-  </view>
-  <view v-else-if="featuresReady" class="travel">
-    <!-- 输入：出发地 + 目的地 + 出行方式 + 天数/时长 + 偏好 -->
-    <view class="card travel__ai">
+  <view class="travel">
+    <!-- AI 规划行程（全局 AI 开关关闭时整卡隐藏，保留手动编辑/生成攻略图等基础能力，服务端同时硬拦截） -->
+    <view v-if="aiEnabled" class="card travel__ai">
       <view class="travel__ai-head">
         <text class="section-title">AI 规划行程</text>
         <text class="caption">填出发地、目的地和出行方式，AI 联网生成路线 + 多张攻略图（约 10-30s）</text>
@@ -239,11 +231,11 @@
       </view>
     </view>
 
-    <!-- 跨城段（可编辑：AI 联网估算不准可手动修正，改完点「应用到攻略图」重画路线规划图）-->
+    <!-- 跨城段（可编辑：估算不准可手动修正，改完点「应用到攻略图」重画路线规划图）-->
     <view v-if="trip.intercity" class="card travel__intercity">
       <view class="travel__intercity-head">
         <text class="section-title">跨城交通</text>
-        <text class="caption">AI 联网估算，不准可手动修正</text>
+        <text class="caption">{{ aiEnabled ? 'AI 联网估算，不准可手动修正' : '估算不准可手动修正' }}</text>
       </view>
       <view class="travel__intercity-od">
         <input
@@ -303,6 +295,7 @@
           @input="markDirty"
         />
         <text
+          v-if="aiEnabled"
           class="travel__day-ai"
           :class="{ 'travel__day-ai--disabled': refiningDayId === day.id }"
           @tap="onRefineDay(day.id)"
@@ -349,6 +342,7 @@
           :key="stop.id"
           :stop="stop"
           :replacing="replacingStopId === stop.id"
+          :ai-enabled="aiEnabled"
           :on-geocode="(q) => geocodeStop(day.id, stop.id, q)"
           @update="(patch) => updateStop(day.id, stop.id, patch)"
           @remove="removeStop(day.id, stop.id)"
@@ -420,7 +414,7 @@
         <view v-if="card.key === 'food' && trip.food.length > 0" class="travel__food">
           <view class="travel__food-head">
             <text class="section-title">必吃美食</text>
-            <text class="caption">AI 生成，可增删改</text>
+            <text class="caption">{{ aiEnabled ? 'AI 生成，可增删改' : '可增删改' }}</text>
           </view>
           <view v-for="(f, fi) in trip.food" :key="fi" class="travel__food-row">
             <text class="travel__food-num">{{ fi + 1 }}</text>
@@ -459,7 +453,7 @@
     >
       <view class="travel__pack-head">
         <text class="section-title">出行清单</text>
-        <text class="caption">AI 按天气+特色生成，分两组可增删改</text>
+        <text class="caption">{{ aiEnabled ? 'AI 按天气+特色生成，分两组可增删改' : '分两组可增删改' }}</text>
       </view>
       <!-- 必带物品 -->
       <view class="travel__pack-group">
@@ -877,7 +871,7 @@ function pickAiPlace(field: 'origin' | 'destination', candidate: GeocodeCandidat
 const { cards, cssWidth, cssHeight, rendered, saving, renderAll, saveOne, saveAll, release } = useTravelImages()
 const instance = getCurrentInstance()?.proxy
 
-const { aiEnabled, featuresReady, refreshFeatures } = useFeatures()
+const { aiEnabled, refreshFeatures } = useFeatures()
 const BASE_RECOMMENDED_CARD_KEYS = ['route-real', 'route-by-day', 'multi-route', 'poi', 'timeline', 'food', 'packing']
 type CardPresetId = 'recommended' | 'daily' | 'share' | 'map' | 'custom'
 const CARD_SUITES: Array<{ id: Exclude<CardPresetId, 'recommended' | 'custom'>; label: string; hint: string }> = [
@@ -1486,39 +1480,6 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     display: flex;
     flex-direction: column;
     gap: 24rpx;
-  }
-
-  // ---------- AI 开关关闭时的整页维护提示 ----------
-  &--off {
-    min-height: 100vh;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  &__off {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20rpx;
-    padding: 80rpx 48rpx;
-    text-align: center;
-
-    &-icon {
-      font-size: 64rpx;
-    }
-
-    &-title {
-      font-size: 34rpx;
-      font-weight: 700;
-      color: $color-text;
-    }
-
-    &-desc {
-      font-size: 26rpx;
-      color: $color-text-secondary;
-    }
   }
 
   &__ai {

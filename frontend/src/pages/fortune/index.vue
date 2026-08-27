@@ -241,7 +241,7 @@ import { useFortune } from '@/composables/useFortune'
 import { useFortuneShake } from '@/composables/useFortuneShake'
 import { useFeatures } from '@/composables/useFeatures'
 import { canvasToFile, getCanvasNode, openAuthSetting, saveImageToAlbum } from '@/utils/canvasAdapter'
-import { renderFortuneCard } from '@/utils/fortune/cardRenderer'
+import { renderFortuneCard, renderFortuneShareCover, SHARE_COVER_H, SHARE_COVER_W } from '@/utils/fortune/cardRenderer'
 import { DECK_LIST, FORTUNE_CATEGORIES, GRAIL_COPY, deckCategories, isTopStick, levelSeal } from '@/utils/fortune/theme'
 import type { FortuneCategory } from '@/types/fortune'
 
@@ -323,6 +323,7 @@ watch(stage, (value) => {
 onShow(() => {
   void refreshFeatures()
   void loadQuota()
+  void refreshShareImage()
   if (stage.value === 'shake') shake.start()
 })
 
@@ -374,6 +375,41 @@ watch(topStick, (value) => {
 
 // ---------- 分享 ----------
 
+/**
+ * 会话分享卡封面：onShareAppMessage 是同步回调，必须提前渲染好 5:4 封面图，
+ * 否则微信用页面截图兜底——抽签页留白多，分享出去很难看。
+ * 抽签后重渲为带签信息（第几签/签题/签级）的专属封面，未抽签是通用封面。
+ */
+const shareImagePath = ref('')
+let shareImageRendering = false
+
+async function refreshShareImage(): Promise<void> {
+  if (shareImageRendering || exporting.value) return
+  shareImageRendering = true
+  try {
+    await nextTick()
+    const { canvas, ctx } = await getCanvasNode('#fortune-export-canvas', instance)
+    canvas.width = SHARE_COVER_W
+    canvas.height = SHARE_COVER_H
+    await renderFortuneShareCover(canvas, ctx, {
+      deck: theme.value,
+      stick: draw.value?.stick ?? null,
+      date: new Date().toISOString().slice(0, 10),
+    })
+    shareImagePath.value = await canvasToFile(canvas, SHARE_COVER_W, SHARE_COVER_H)
+    canvas.width = 1
+    canvas.height = 1
+  } catch {
+    // 封面渲染失败不阻塞分享：imageUrl 为空时微信回退页面截图。
+  } finally {
+    shareImageRendering = false
+  }
+}
+
+watch([draw, deck], () => {
+  void refreshShareImage()
+})
+
 onShareAppMessage(() => {
   // 次数用完时的「分享加签」按钮也走这里：发起分享即加次（小程序无法校验真实分享结果，行规做法）。
   if (quotaExhausted.value && quota.value && quota.value.bonusLeft > 0) {
@@ -389,6 +425,7 @@ onShareAppMessage(() => {
   return {
     title: `${stickInfo}，来测测你今日运势`,
     path: '/pages/fortune/index',
+    imageUrl: shareImagePath.value || undefined,
   }
 })
 

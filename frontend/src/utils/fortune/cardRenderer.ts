@@ -26,6 +26,90 @@ const W = 1080
 const H = 1440
 const SERIF = '"Songti SC", "STSong", serif'
 
+/** 微信会话分享卡图片是 5:4：专渲一张横版封面，避免默认页面截图的大片留白。 */
+export const SHARE_COVER_W = 750
+export const SHARE_COVER_H = 600
+
+export interface FortuneShareCoverPayload {
+  deck: DeckTheme
+  /** 已抽签时带上签信息（第几签/签题/签级），未抽签为通用封面 */
+  stick?: FortuneStick | null
+  date: string
+}
+
+/** 渲染 5:4 分享封面（onShareAppMessage 的 imageUrl；需提前渲染好，分享回调是同步的）。 */
+export async function renderFortuneShareCover(
+  canvas: unknown,
+  ctx: CanvasRenderingContext2D,
+  payload: FortuneShareCoverPayload,
+  width = SHARE_COVER_W,
+  height = SHARE_COVER_H,
+): Promise<void> {
+  const { deck, stick } = payload
+  const cx = width / 2
+
+  drawBackground(ctx, deck, width, height)
+  drawFrame(ctx, deck, width, height, stick ? isTopStick(stick.level) : false)
+
+  ctx.save()
+  ctx.textAlign = 'center'
+
+  // 签种名
+  ctx.fillStyle = deck.primaryDeep
+  ctx.font = `600 52px ${SERIF}`
+  ctx.fillText(deck.name, cx, 128)
+
+  if (stick && deck.key === 'book') {
+    // 答案之书：答案大字居中
+    ctx.fillStyle = deck.primaryDeep
+    ctx.font = `600 56px ${SERIF}`
+    wrapCentered(ctx, String(stick.answer ?? ''), cx, 290, width - 220, 74, 2)
+    ctx.fillStyle = hexWithAlpha(deck.ink, 0.5)
+    ctx.font = `26px ${SERIF}`
+    ctx.fillText(`—— 第 ${stick.no} 页 ——`, cx, 430)
+  } else if (stick) {
+    // 灵签：第几签 · 签题 + 签级 + 总断/首句签诗
+    ctx.fillStyle = deck.ink
+    ctx.font = `500 46px ${SERIF}`
+    const head = stick.title ? `第${stick.no}签 · ${stick.title}` : `第${stick.no}签`
+    ctx.fillText(head, cx, 240)
+
+    const seal = levelSeal(String(stick.level ?? ''))
+    if (seal.label) {
+      ctx.fillStyle = seal.color
+      ctx.font = `600 32px ${SERIF}`
+      ctx.fillText(`「 ${seal.label} 」`, cx, 300)
+    }
+
+    const sub = stick.gist?.trim() || (stick.verse ?? [])[0] || ''
+    if (sub) {
+      ctx.fillStyle = hexWithAlpha(deck.ink, 0.75)
+      ctx.font = `30px ${SERIF}`
+      wrapCentered(ctx, sub, cx, 370, width - 260, 44, 2)
+    }
+  } else {
+    // 通用封面：slogan
+    ctx.fillStyle = hexWithAlpha(deck.ink, 0.8)
+    ctx.font = `34px ${SERIF}`
+    ctx.fillText('摇一摇，抽今日一签', cx, 270)
+    ctx.fillStyle = hexWithAlpha(deck.ink, 0.5)
+    ctx.font = `26px ${SERIF}`
+    ctx.fillText('观音 · 关帝 · 月老 · 答案之书', cx, 330)
+  }
+
+  // 落款
+  ctx.fillStyle = hexWithAlpha(deck.primaryDeep, 0.75)
+  ctx.font = `28px ${SERIF}`
+  ctx.fillText('枫叶小屋 · 每日灵签', cx, height - 92)
+  ctx.fillStyle = hexWithAlpha(deck.ink, 0.45)
+  ctx.font = `22px ${SERIF}`
+  ctx.fillText(`${payload.date} · 心诚则灵`, cx, height - 52)
+
+  ctx.restore()
+  void canvas
+}
+
+
 export async function renderFortuneCard(
   canvas: unknown,
   ctx: CanvasRenderingContext2D,

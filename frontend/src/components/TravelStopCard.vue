@@ -170,6 +170,7 @@
     <!-- 操作 -->
     <view class="stop__ops">
       <text
+        v-if="aiEnabled"
         class="stop__op"
         :class="{ 'stop__op--disabled': replacing || stop.locked }"
         @tap="requestReplace"
@@ -206,6 +207,8 @@ const props = defineProps<{
   stop: Stop
   onGeocode: (query: string) => Promise<GeocodeCandidate[]>
   replacing?: boolean
+  /** 全局 AI 开关：关闭时隐藏「替换」（走 AI 换点）按钮 */
+  aiEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
