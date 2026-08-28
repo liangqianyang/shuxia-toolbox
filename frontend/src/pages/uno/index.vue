@@ -1006,26 +1006,33 @@ $maple-light: #FBE4D5;
 
     &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
-  &__join { display: flex; gap: 20rpx; margin-top: 40rpx; }
+  &__join { display: flex; align-items: center; gap: 16rpx; margin-top: 40rpx; }
+  // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
   &__input {
     width: 320rpx;
     height: 88rpx;
-    background: $maple-light;
-    border-radius: 16rpx;
     padding: 0 24rpx;
+    background: #ffffff;
+    border: 2rpx solid #f0e4d7;
+    border-radius: 20rpx;
     color: $ink;
-    font-size: 32rpx;
+    font-size: 28rpx;
+    box-sizing: border-box;
+    text-align: center;
+    letter-spacing: 8rpx;
   }
   &__join-btn {
+    width: 160rpx;
     height: 88rpx;
     line-height: 88rpx;
-    background: $felt;
-    color: $cream;
-    font-weight: 700;
-    border-radius: 16rpx;
-    font-size: 30rpx;
+    border-radius: 20rpx;
+    background: #ffffff;
+    color: #a8744b;
+    border: 2rpx solid #c8956c;
+    font-size: 28rpx;
+    box-sizing: border-box;
 
-    &[disabled] { background: rgba($felt, 0.45); color: rgba(255, 248, 237, 0.9); }
+    &[disabled] { opacity: 0.55; }
   }
 }
 
