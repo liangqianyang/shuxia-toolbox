@@ -28,6 +28,7 @@ final class UnoChat
         'calm' => '稳了稳了',
         'careful_next' => '下家小心点',
         'scared' => '怕了吧',
+        'so_mean' => '你们真过分',
         // 出 +4 后
         'no_other_cards' => '我真没有别的牌了！',
         'doubt_me' => '不信你质疑啊',
@@ -45,10 +46,16 @@ final class UnoChat
         'my_last_red' => '我最后一张是红的，信我',
         'my_last_not_green' => '我最后一张不是绿色',
         'guess_my_color' => '猜猜我最后一张什么颜色~',
+        'about_to_win' => '我好像要赢了~',
         // 示弱（误导用）
         'bad_hand' => '我牌好烂…',
         'no_red_left' => '没红牌了没红牌了',
+        'no_yellow_left' => '没黄牌了没黄牌了',
+        'no_blue_left' => '没蓝牌了没蓝牌了',
+        'no_green_left' => '没绿牌了没绿牌了',
         'sob' => '呜呜呜',
+        'let_me_win' => '让我赢吧😭',
+        'beg_you' => '求求了🙏',
     ];
 
     /** 表情面板：Unicode emoji 白名单（kind=emoji 时直接以表情字符为 id）。 */

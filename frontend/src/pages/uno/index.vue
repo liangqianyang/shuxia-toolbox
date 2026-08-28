@@ -13,14 +13,10 @@
     </view>
 
     <!-- 房间 -->
-    <view v-else class="room">
+    <view v-else class="room" :class="{ 'room--playing': state.status === 'playing' }">
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
-          <view class="room__chat-btn" @tap="openChatPanel">
-            <text>💬</text>
-            <view v-if="unreadChat > 0" class="room__chat-badge">{{ unreadChat > 9 ? '9+' : unreadChat }}</view>
-          </view>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -37,7 +33,6 @@
       <view v-if="state.status === 'waiting'" class="waiting">
         <view class="waiting__players">
           <view v-for="p in state.players" :key="p.userId" class="waiting__player">
-            <view v-if="chatBubbles[p.seat]" class="seat-bubble seat-bubble--waiting" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[p.seat] }">{{ chatBubbles[p.seat] }}</view>
             <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="waiting__avatar" />
             <view v-else class="waiting__avatar waiting__avatar--placeholder">🍁</view>
             <text class="waiting__name">{{ p.nickname }}</text>
@@ -208,6 +203,22 @@
         </view>
         </template>
       </template>
+
+      <!-- 底部聊天条：固定在屏幕底部，最近 3 条消息以列表形式常驻（新的从下方进入，超过 3 条顶部消失），
+           点任意处展开完整面板。仅对局进行中显示（用户拍板：只有真正玩游戏的界面需要）。 -->
+      <view v-if="state.status === 'playing'" class="chat-bar" @tap="openChatPanel()">
+        <view v-if="chatFeed.length" class="chat-bar__feed">
+          <view v-for="m in chatFeed" :key="m.seq" class="chat-bar__feed-item">
+            <text class="chat-bar__feed-name">{{ m.userId === myUserId ? '我' : chatSenderName(m) }}：</text>
+            <text class="chat-bar__feed-text" :class="{ 'chat-bar__feed-text--emoji': m.kind === 'emoji' }">{{ m.text }}</text>
+          </view>
+        </view>
+        <view class="chat-bar__trigger" @tap.stop="openChatPanel()">
+          <text class="chat-bar__icon">💬</text>
+          <text class="chat-bar__hint">快捷嘴炮…</text>
+          <view v-if="unreadChat > 0" class="chat-bar__badge">{{ unreadChat > 9 ? '9+' : unreadChat }}</view>
+        </view>
+      </view>
     </view>
 
     <!-- 聊天面板：快捷句 / 表情 / 自由文字 + 最近消息 -->
@@ -794,6 +805,12 @@ const chatLog = computed<UnoChatMessage[]>(() => {
   return (state.value?.chat ?? []).slice(-30).reverse()
 })
 
+/** 底部聊天条常驻显示的最近几条消息（新的在底部，超过 CHAT_FEED_KEEP 条顶部的消失）。 */
+const CHAT_FEED_KEEP = 5
+const chatFeed = computed<UnoChatMessage[]>(() => {
+  return (state.value?.chat ?? []).slice(-CHAT_FEED_KEEP)
+})
+
 function chatSenderName(m: UnoChatMessage): string {
   return state.value?.players.find((p) => p.seat === m.seat)?.nickname ?? '牌友'
 }
@@ -859,7 +876,11 @@ watch(
   },
 )
 
-function openChatPanel() {
+function openChatPanel(preferred?: 'phrase' | 'emoji' | 'text') {
+  // 聊天条的「说点什么…」是输入样式，点了直接落到文字 tab；文字开关关闭时退回快捷句
+  if (preferred) {
+    chatTab.value = preferred === 'text' && !unoChatTextEnabled.value ? 'phrase' : preferred
+  }
   chatPanelVisible.value = true
   unreadChat.value = 0
 }
@@ -884,20 +905,19 @@ function startChatCooldown() {
   cooldownTimer = setTimeout(tick, 1000)
 }
 
+// 乐观发送：点按立即关面板 + 进冷却（体感即时），请求后台异步跑，失败由 sendChat 内部 toast
 async function sendPhraseMsg(id: string) {
   if (chatCooldown.value > 0) return
-  if (await sendChat('phrase', id)) {
-    closeChatPanel()
-    startChatCooldown()
-  }
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('phrase', id)
 }
 
 async function sendEmojiMsg(emoji: string) {
   if (chatCooldown.value > 0) return
-  if (await sendChat('emoji', emoji)) {
-    closeChatPanel()
-    startChatCooldown()
-  }
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('emoji', emoji)
 }
 
 async function sendTextMsg() {
@@ -911,11 +931,10 @@ async function sendTextMsg() {
     uni.showToast({ title: '文字聊天维护中，用快捷句吧', icon: 'none' })
     return
   }
-  if (await sendChat('text', text)) {
-    chatInput.value = ''
-    closeChatPanel()
-    startChatCooldown()
-  }
+  chatInput.value = ''
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('text', text)
 }
 
 // ---------- 生命周期 ----------
@@ -1012,6 +1031,8 @@ $maple-light: #FBE4D5;
 
 // ---------- 房间公共 ----------
 .room { padding: 24rpx; }
+// 对局中底部有固定的聊天条（消息流 + 入口），留出内容空间防遮挡
+.room--playing { padding-bottom: calc(330rpx + env(safe-area-inset-bottom)); }
 
 .room__header {
   display: flex;
@@ -1032,7 +1053,16 @@ $maple-light: #FBE4D5;
   height: 56rpx;
   line-height: 56rpx;
 }
-.room__leave { font-size: 26rpx; color: rgba(73, 62, 55, 0.55); padding: 8rpx; }
+.room__leave {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $red;
+  background: rgba(232, 93, 74, 0.12);
+  border-radius: 28rpx;
+  padding: 0 28rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+}
 
 // ---------- 资料引导 ----------
 .profile-banner {
@@ -1553,7 +1583,6 @@ $maple-light: #FBE4D5;
 
   &--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
   &--opp { bottom: calc(100% + 8rpx); }
-  &--waiting { bottom: calc(100% + 8rpx); }
   &--mine { top: -64rpx; left: 24rpx; transform: none; background: $maple-light; }
 }
 
@@ -1562,26 +1591,68 @@ $maple-light: #FBE4D5;
   to { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
-.room__chat-btn {
-  position: relative;
-  font-size: 34rpx;
-  padding: 8rpx;
+// 底部聊天条：固定在屏幕底部，消息流（最近 3 条，新的从下方滑入，顶部超出消失）+ 快捷入口
+.chat-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 248, 237, 0.95);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+
+  &__feed { display: flex; flex-direction: column; gap: 4rpx; }
+  &__feed-item {
+    display: flex;
+    align-items: baseline;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 24rpx;
+    animation: feed-in 0.2s ease-out;
+  }
+  &__feed-name { color: rgba(73, 62, 55, 0.5); flex-shrink: 0; }
+  &__feed-text { color: rgba(73, 62, 55, 0.85); overflow: hidden; text-overflow: ellipsis; }
+  &__feed-text--emoji { font-size: 30rpx; }
+
+  &__trigger {
+    position: relative;
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    height: 60rpx;
+    padding: 0 26rpx;
+    background: #fff;
+    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    border-radius: 30rpx;
+  }
+  &__icon { font-size: 26rpx; }
+  &__hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); }
+  &__badge {
+    position: absolute;
+    top: -10rpx;
+    right: -6rpx;
+    min-width: 30rpx;
+    height: 30rpx;
+    line-height: 30rpx;
+    padding: 0 6rpx;
+    box-sizing: border-box;
+    border-radius: 15rpx;
+    background: $red;
+    color: #fff;
+    font-size: 20rpx;
+    text-align: center;
+  }
 }
 
-.room__chat-badge {
-  position: absolute;
-  top: 0;
-  right: -6rpx;
-  min-width: 30rpx;
-  height: 30rpx;
-  line-height: 30rpx;
-  padding: 0 6rpx;
-  box-sizing: border-box;
-  border-radius: 15rpx;
-  background: $red;
-  color: #fff;
-  font-size: 20rpx;
-  text-align: center;
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .chat-mask {

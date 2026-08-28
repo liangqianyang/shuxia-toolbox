@@ -22,6 +22,7 @@ export const UNO_PHRASE_GROUPS: UnoPhraseGroup[] = [
       { id: 'calm', text: '稳了稳了' },
       { id: 'careful_next', text: '下家小心点' },
       { id: 'scared', text: '怕了吧' },
+      { id: 'so_mean', text: '你们真过分' },
     ],
   },
   {
@@ -47,6 +48,7 @@ export const UNO_PHRASE_GROUPS: UnoPhraseGroup[] = [
       { id: 'my_last_red', text: '我最后一张是红的，信我' },
       { id: 'my_last_not_green', text: '我最后一张不是绿色' },
       { id: 'guess_my_color', text: '猜猜我最后一张什么颜色~' },
+      { id: 'about_to_win', text: '我好像要赢了~' },
     ],
   },
   {
@@ -55,7 +57,12 @@ export const UNO_PHRASE_GROUPS: UnoPhraseGroup[] = [
     phrases: [
       { id: 'bad_hand', text: '我牌好烂…' },
       { id: 'no_red_left', text: '没红牌了没红牌了' },
+      { id: 'no_yellow_left', text: '没黄牌了没黄牌了' },
+      { id: 'no_blue_left', text: '没蓝牌了没蓝牌了' },
+      { id: 'no_green_left', text: '没绿牌了没绿牌了' },
       { id: 'sob', text: '呜呜呜' },
+      { id: 'let_me_win', text: '让我赢吧😭' },
+      { id: 'beg_you', text: '求求了🙏' },
     ],
   },
 ]
