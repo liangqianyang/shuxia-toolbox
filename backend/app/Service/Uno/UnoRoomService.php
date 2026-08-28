@@ -167,7 +167,13 @@ final class UnoRoomService
                 throw new BizException(422, '这张牌不在你手上');
             }
             $top = end($state['discard']);
-            if (! UnoRule::canPlay($card, (string) $top, (string) $state['currentColor'])) {
+            if (($state['drawStack'] ?? null) !== null) {
+                // 加牌叠加：只能出 +2/+4 继续叠（任意颜色），否则去摸累计牌
+                $v = UnoRule::cardValue($card);
+                if ($v !== 'D' && $v !== 'F') {
+                    throw new BizException(422, '对方出了加牌，你只能出 +2/+4 叠加，或点牌堆全摸');
+                }
+            } elseif (! UnoRule::canPlay($card, (string) $top, (string) $state['currentColor'])) {
                 throw new BizException(422, '这张牌出不了：颜色或数字要匹配');
             }
 
@@ -215,6 +221,7 @@ final class UnoRoomService
     /**
      * 摸牌：玩家自主决定何时摸（手上有能出的牌也可以摸）；摸完后本轮可出任意能出的牌
      * （不限于摸到的），也可直接选择不出（pass）。drawnCard 仅作前端「新摸的牌」标记。
+     * 若有累计加牌（drawStack），摸牌 = 吃掉全部累计加牌并跳过（叠加规则）。
      *
      * @return array<string, mixed>
      */
@@ -224,6 +231,29 @@ final class UnoRoomService
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             [$seat, $state] = $this->requireMyTurn($room, $userId);
+
+            $stackCount = (int) ($state['drawStack']['count'] ?? 0);
+            if ($stackCount > 0) {
+                // 叠加加牌：全摸并跳过
+                $uid = (string) $userId;
+                foreach (UnoRule::drawCards($state, $stackCount) as $c) {
+                    $state['hands'][$uid][] = $c;
+                }
+                $state['drawStack'] = null;
+                $state['drawnCard'] = null;
+                $state['unoVulnerable'] = null;
+                $state['currentSeat'] = UnoRule::advanceSeat($state, $room->seats, 1);
+                $state['lastEvent'] = ['type' => 'stack_draw', 'seat' => $seat, 'count' => $stackCount];
+                $state['idleStrikes'][$uid] = 0;
+                $state['unoDeclared'] = $this->pruneUnoDeclared($state, $room->seats);
+                $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+                $room->state = $state;
+                $this->touchSeenAt($room, $userId);
+                $room->version++;
+                $room->save();
+                return $room;
+            }
+
             if (($state['drawnCard'] ?? null) !== null) {
                 throw new BizException(422, '已经摸过了，请选择出牌或不出');
             }
@@ -346,6 +376,46 @@ final class UnoRoomService
             }
 
             $result = UnoRule::resolveWild4($state, $room->seats, true);
+            $state = $result['state'];
+            $state['lastEvent'] = $result['event'];
+
+            $room->state = $state;
+            $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * 不质疑 +4：被 +4 的下家主动放弃质疑，立即摸 4 张并跳过（同超时结算）。
+     *
+     * @return array<string, mixed>
+     */
+    public function declineChallenge(string $code, int $userId): array
+    {
+        $room = Db::transaction(function () use ($code, $userId) {
+            $room = $this->lockByCode($code);
+            $this->applyDueTimeoutIfNeeded($room, $userId);
+            $seat = $this->requireSeated($room, $userId);
+            if ($room->status !== 'playing') {
+                throw new BizException(422, '对局不在进行中');
+            }
+            $state = $room->state;
+            $pending = $state['pendingWild4'] ?? null;
+            if ($pending === null) {
+                throw new BizException(422, '没有可处理的 +4');
+            }
+            if ((int) $pending['toSeat'] !== $seat) {
+                throw new BizException(422, '只有被 +4 的玩家能操作');
+            }
+
+            $result = UnoRule::resolveWild4($state, $room->seats, false);
             $state = $result['state'];
             $state['lastEvent'] = $result['event'];
 
@@ -692,6 +762,7 @@ final class UnoRoomService
             'drawnCard' => $drawn !== null && $mySeat !== null && (int) $drawn['seat'] === $mySeat ? (string) $drawn['card'] : null,
             'challenge' => $challenge,
             'colorPick' => $colorPick,
+            'drawStack' => isset($state['drawStack']['count']) ? ['count' => (int) $state['drawStack']['count']] : null,
             'uno' => $uno,
             'lastEvent' => $state['lastEvent'] ?? null,
             'winnerUserId' => $room->winner_user_id,

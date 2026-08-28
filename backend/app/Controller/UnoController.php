@@ -79,6 +79,12 @@ final class UnoController extends AbstractController
         return $this->ok($this->rooms->challenge($code, $this->requireUserId($request)));
     }
 
+    #[RateLimit(create: 4, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function declineChallenge(string $code, RequestInterface $request): array
+    {
+        return $this->ok($this->rooms->declineChallenge($code, $this->requireUserId($request)));
+    }
+
     #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function declareUno(string $code, RequestInterface $request): array
     {

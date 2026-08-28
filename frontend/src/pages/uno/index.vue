@@ -23,13 +23,20 @@
         </view>
       </view>
 
+      <!-- 资料提示：没设置过头像昵称时引导完善 -->
+      <view v-if="showProfileBanner" class="profile-banner" @tap="openProfileEditor">
+        <text>🍁 你还没有头像昵称，点我设置，让牌友认出你</text>
+        <text class="profile-banner__go">去设置 ›</text>
+      </view>
+
       <!-- 等待开局 -->
       <view v-if="state.status === 'waiting'" class="waiting">
         <view class="waiting__players">
           <view v-for="p in state.players" :key="p.userId" class="waiting__player">
-            <image v-if="p.avatarUrl" :src="p.avatarUrl" class="waiting__avatar" />
+            <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="waiting__avatar" />
             <view v-else class="waiting__avatar waiting__avatar--placeholder">🍁</view>
-            <text class="waiting__name">{{ p.nickname }}{{ p.seat === state.ownerSeat ? '（房主）' : '' }}</text>
+            <text class="waiting__name">{{ p.nickname }}</text>
+            <text v-if="p.seat === state.ownerSeat" class="waiting__owner">房主</text>
             <view class="waiting__dot" :class="{ 'waiting__dot--off': !p.online }" />
           </view>
         </view>
@@ -50,7 +57,7 @@
             :class="{ 'opp--current': p.seat === state.currentSeat, 'opp--left': p.left }"
           >
             <view class="opp__avatar-wrap">
-              <image v-if="p.avatarUrl" :src="p.avatarUrl" class="opp__avatar" />
+              <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="opp__avatar" />
               <view v-else class="opp__avatar opp__avatar--placeholder">🍁</view>
               <view class="opp__dot" :class="{ 'opp__dot--off': !p.online }" />
               <view v-if="p.seat === state.currentSeat && state.status === 'playing'" class="opp__timer">{{ turnCountdown }}</view>
@@ -72,7 +79,7 @@
             <view class="table__pile" @tap="onDeckTap">
               <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
               <text class="table__pile-count">{{ state.deckCount }}</text>
-              <text v-if="isMyTurn && !state.drawnCard" class="table__pile-hint">点我摸牌</text>
+              <text v-if="isMyTurn && !state.drawnCard" class="table__pile-hint">{{ state.drawStack ? `摸 ${state.drawStack.count} 张` : '点我摸牌' }}</text>
             </view>
             <view class="table__info">
               <view class="table__color" :style="{ background: colorMeta.color }">{{ colorMeta.season }}</view>
@@ -85,11 +92,17 @@
           <view class="event-banner" :class="{ 'event-banner--show': bannerVisible }">{{ bannerText }}</view>
         </view>
 
+        <!-- 叠加加牌提示条 -->
+        <view v-if="state.drawStack" class="stack-bar">
+          <text class="stack-bar__text">🃏 加牌累计 {{ state.drawStack.count }} 张！{{ isMyTurn ? '出 +2/+4 继续叠，或点牌堆全摸' : '等待应对…' }}</text>
+        </view>
+
         <!-- +4 质疑条 -->
         <view v-if="state.challenge" class="challenge">
           <template v-if="state.challenge.mine">
             <text class="challenge__text">被 +4 了！怀疑对方手上有同色牌？（{{ challengeCountdown }}s）</text>
             <button class="challenge__btn" :disabled="acting" @tap="challenge">质疑</button>
+            <button class="challenge__btn challenge__btn--plain" :disabled="acting" @tap="decline">不质疑，摸 4 张</button>
           </template>
           <text v-else class="challenge__text">等待被 +4 的玩家决定是否质疑…（{{ challengeCountdown }}s）</text>
         </view>
@@ -164,6 +177,21 @@
       </template>
     </view>
 
+    <!-- 资料设置弹层（微信头像选择 + 昵称输入） -->
+    <view v-if="profileEditorVisible" class="color-mask" @tap="profileEditorVisible = false">
+      <view class="color-panel" @tap.stop>
+        <view class="color-panel__title">设置昵称和头像</view>
+        <view class="profile">
+          <button class="profile__avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+            <image v-if="profileAvatar" :src="profileAvatar" class="profile__avatar" mode="aspectFill" />
+            <text v-else class="profile__avatar-hint">🍁<br/>选头像</text>
+          </button>
+          <input v-model="profileNickname" class="profile__nickname" type="nickname" placeholder="输入昵称" maxlength="20" />
+          <button class="profile__save" :disabled="savingProfile" @tap="saveMyProfile">保存</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 选色弹层：出百搭牌选色 / 开局首张变色牌选色；面板上移以便看清手牌 -->
     <view v-if="colorPickerVisible" class="color-mask" @tap="onMaskTap">
       <view class="color-panel" @tap.stop>
@@ -194,6 +222,7 @@ import { computed, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useUnoRoom } from '@/composables/useUnoRoom'
 import { useUnoCards } from '@/composables/useUnoCards'
+import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
 import { BACK_KEY } from '@/utils/unoCards'
 import { COLOR_META, UNO_COLORS, cardLabel, isWild } from '@/utils/uno'
 import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
@@ -205,6 +234,7 @@ const {
   isSeated,
   isOwner,
   isMyTurn,
+  myPlayer,
   opponents,
   myHandCount,
   turnCountdown,
@@ -218,6 +248,7 @@ const {
   draw,
   pass,
   challenge,
+  decline,
   chooseStartColor,
   sayUno,
   reportUno,
@@ -241,6 +272,60 @@ function toggleSound() {
   soundOn.value = !soundOn.value
   setUnoSoundEnabled(soundOn.value)
   uni.showToast({ title: soundOn.value ? '音效已开启' : '音效已关闭', icon: 'none' })
+}
+
+/** 头像相对路径（/uploads/avatar/…）补全为后端绝对地址 */
+function avatarOf(url: string): string {
+  return url ? resolveAvatarUrl(url) : ''
+}
+
+// ---------- 房间内完善资料（微信头像昵称授权） ----------
+
+const profileEditorVisible = ref(false)
+const profileNickname = ref('')
+const profileAvatar = ref('')
+const savingProfile = ref(false)
+
+/** 已入座但还没设置过头像昵称时，显示引导横幅 */
+const showProfileBanner = computed(() => {
+  const me = myPlayer.value
+  return Boolean(me && (!me.avatarUrl || !me.nickname || me.nickname === '牌友'))
+})
+
+function openProfileEditor() {
+  profileNickname.value = myPlayer.value?.nickname === '牌友' ? '' : (myPlayer.value?.nickname ?? '')
+  profileAvatar.value = myPlayer.value?.avatarUrl ? avatarOf(myPlayer.value.avatarUrl) : ''
+  profileEditorVisible.value = true
+}
+
+function onChooseAvatar(event: { detail?: { avatarUrl?: string } }) {
+  const url = String(event.detail?.avatarUrl || '')
+  if (url) profileAvatar.value = url
+}
+
+async function saveMyProfile() {
+  if (savingProfile.value) return
+  const nickname = profileNickname.value.trim()
+  if (!nickname) {
+    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    return
+  }
+  savingProfile.value = true
+  try {
+    let avatarUrl = profileAvatar.value
+    if (avatarUrl.startsWith('wxfile://') || avatarUrl.startsWith('http://tmp/')) {
+      avatarUrl = await uploadAvatar(avatarUrl)
+    } else if (myPlayer.value?.avatarUrl && avatarUrl === avatarOf(myPlayer.value.avatarUrl)) {
+      avatarUrl = myPlayer.value.avatarUrl // 已存在后端的头像，回传相对路径即可
+    }
+    await saveUserProfile({ nickname, avatarUrl })
+    profileEditorVisible.value = false
+    uni.showToast({ title: '资料已保存', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '资料保存失败', icon: 'none' })
+  } finally {
+    savingProfile.value = false
+  }
 }
 
 // ---------- 动作播报条（对手出了什么牌、变了什么色，全员可见） ----------
@@ -270,11 +355,17 @@ function eventText(ev: { type: string; card?: string; [key: string]: unknown }):
     case 'reverse':
       return `${name} 出了反转牌，方向掉转`
     case 'draw2':
-      return `${name} 出了 +2，${seatName(ev.toSeat)} 摸 2 张`
+      return ev.stackCount && Number(ev.stackCount) > 2
+        ? `${name} 叠加 +2，累计要摸 ${ev.stackCount} 张！`
+        : `${name} 出了 +2，${seatName(ev.toSeat)} 可叠加或摸 2 张`
     case 'wild':
       return `${name} 出了变色牌，指定${seasonName(ev.color)}季`
     case 'wild4':
-      return `${name} 出了王牌 +4 并指定${seasonName(ev.color)}季，${seatName(ev.toSeat)} 可质疑`
+      return ev.stacked
+        ? `${name} 叠加 +4，累计要摸 ${ev.stackCount} 张！`
+        : `${name} 出了王牌 +4 并指定${seasonName(ev.color)}季，${seatName(ev.toSeat)} 可质疑`
+    case 'stack_draw':
+      return `${name} 摸了 ${ev.count} 张加牌并跳过`
     case 'wild4_draw':
       return `${seatName(ev.toSeat)} 摸 4 张并跳过`
     case 'challenge_guilty':
@@ -324,7 +415,7 @@ watch(
     if (type === 'win') playUnoSound('win')
     else if (type === 'uno' || type === 'catch') playUnoSound('uno')
     else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
-    else if (['draw', 'draw_pass', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
+    else if (['draw', 'draw_pass', 'stack_draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
     else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4', 'color_pick'].includes(type)) playUnoSound('play')
     showBanner(eventText(ev))
   },
@@ -432,7 +523,7 @@ function onCardTap(index: number) {
     return
   }
   if (!canIPlay(card)) {
-    uni.showToast({ title: state.value?.drawnCard ? '摸牌后只能出刚摸的那张' : '这张牌出不了', icon: 'none' })
+    uni.showToast({ title: state.value?.drawStack ? '只能出 +2/+4 叠加，或点牌堆全摸' : '这张牌出不了', icon: 'none' })
     return
   }
   selectedIndex.value = index
@@ -630,6 +721,61 @@ $maple-light: #FBE4D5;
 }
 .room__leave { font-size: 26rpx; color: rgba(73, 62, 55, 0.55); padding: 8rpx; }
 
+// ---------- 资料引导 ----------
+.profile-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 8rpx 20rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 20rpx;
+  background: #FDF3D8;
+  border: 2rpx dashed $gold;
+  font-size: 26rpx;
+  color: $ink;
+
+  &__go { color: $red; font-weight: 600; }
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 28rpx;
+  gap: 24rpx;
+
+  &__avatar-btn {
+    width: 140rpx;
+    height: 140rpx;
+    border-radius: 50%;
+    padding: 0;
+    background: $maple-light;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  &__avatar { width: 140rpx; height: 140rpx; border-radius: 50%; }
+  &__avatar-hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.55); text-align: center; line-height: 1.4; }
+  &__nickname {
+    width: 100%;
+    height: 88rpx;
+    background: $maple-light;
+    border-radius: 16rpx;
+    padding: 0 24rpx;
+    box-sizing: border-box;
+    font-size: 30rpx;
+    color: $ink;
+  }
+  &__save {
+    width: 100%;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 40rpx;
+  }
+}
+
 // ---------- 等待开局 ----------
 .waiting {
   display: flex;
@@ -644,7 +790,7 @@ $maple-light: #FBE4D5;
     gap: 28rpx;
     max-width: 640rpx;
   }
-  &__player { display: flex; flex-direction: column; align-items: center; width: 140rpx; position: relative; }
+  &__player { display: flex; flex-direction: column; align-items: center; min-width: 140rpx; position: relative; }
   &__avatar {
     width: 96rpx;
     height: 96rpx;
@@ -652,7 +798,16 @@ $maple-light: #FBE4D5;
     background: $maple-light;
     &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 48rpx; }
   }
-  &__name { font-size: 24rpx; margin-top: 10rpx; max-width: 140rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__name { font-size: 26rpx; margin-top: 10rpx; max-width: 240rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__owner {
+    margin-top: 4rpx;
+    font-size: 18rpx;
+    font-weight: 700;
+    color: $ink;
+    background: $gold;
+    padding: 2rpx 14rpx;
+    border-radius: 16rpx;
+  }
   &__dot {
     position: absolute;
     top: 4rpx;
@@ -687,8 +842,8 @@ $maple-light: #FBE4D5;
 }
 
 .opp {
-  width: 150rpx;
-  padding: 12rpx 6rpx;
+  min-width: 150rpx;
+  padding: 12rpx 16rpx;
   border-radius: 20rpx;
   display: flex;
   flex-direction: column;
@@ -734,7 +889,7 @@ $maple-light: #FBE4D5;
     justify-content: center;
     font-weight: 700;
   }
-  &__name { font-size: 22rpx; margin-top: 8rpx; max-width: 138rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__name { font-size: 24rpx; margin-top: 8rpx; max-width: 220rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   &__cards { display: flex; align-items: center; margin-top: 6rpx; }
   &__back { width: 30rpx; height: 45rpx; border-radius: 6rpx; }
   &__count { font-size: 24rpx; margin-left: 8rpx; font-weight: 600; }
@@ -821,12 +976,13 @@ $maple-light: #FBE4D5;
   &__direction { font-size: 22rpx; color: rgba(255, 248, 237, 0.8); }
 }
 
-// ---------- 质疑 / UNO 条 ----------
+// ---------- 质疑 / UNO 条 / 叠加条 ----------
 .challenge,
 .uno-bar {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 20rpx;
   margin: 12rpx 24rpx;
   padding: 16rpx 24rpx;
@@ -842,7 +998,21 @@ $maple-light: #FBE4D5;
     padding: 0 36rpx;
     height: 64rpx;
     line-height: 64rpx;
+
+    &--plain { background: rgba(73, 62, 55, 0.12); color: $ink; }
   }
+}
+
+.stack-bar {
+  display: flex;
+  justify-content: center;
+  margin: 12rpx 24rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 20rpx;
+  background: rgba(232, 93, 74, 0.14);
+  border: 2rpx dashed $red;
+
+  &__text { font-size: 26rpx; font-weight: 600; color: $red; }
 }
 
 .uno-bar {

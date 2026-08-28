@@ -89,6 +89,7 @@ Router::addGroup('/api', function (): void {
     Router::post('/uno/room/{code}/pass', [UnoController::class, 'pass']);
     Router::post('/uno/room/{code}/choose-color', [UnoController::class, 'chooseColor']);
     Router::post('/uno/room/{code}/challenge', [UnoController::class, 'challenge']);
+    Router::post('/uno/room/{code}/decline-challenge', [UnoController::class, 'declineChallenge']);
     Router::post('/uno/room/{code}/declare-uno', [UnoController::class, 'declareUno']);
     Router::post('/uno/room/{code}/catch-uno', [UnoController::class, 'catchUno']);
     Router::post('/uno/room/{code}/rematch', [UnoController::class, 'rematch']);

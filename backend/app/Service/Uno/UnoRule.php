@@ -223,6 +223,7 @@ final class UnoRule
             'currentColor' => self::isWild($first) ? '' : self::cardColor($first),
             'direction' => 1,
             'currentSeat' => 0,
+            'drawStack' => null,
             'pendingColorPick' => self::isWild($first) ? ['seat' => 0] : null,
             'pendingWild4' => null,
             'unoVulnerable' => null,
@@ -284,15 +285,17 @@ final class UnoRule
         $win = count($hand) === 0;
 
         if ($win) {
-            // 官方：以 +2/+4 收尾时，下家仍须先摸牌再计分
+            // 以 +2/+4 收尾获胜时，下家仍须先摸牌再计分；叠加局摸累计总数
             if ($value === 'D' || $value === 'F') {
+                $amount = (int) ($state['drawStack']['count'] ?? 0) + ($value === 'D' ? 2 : 4);
                 $target = self::advanceSeat($state, $seats, 1);
                 $tuid = (string) $seats[$target];
-                foreach (self::drawCards($state, $value === 'D' ? 2 : 4) as $c) {
+                foreach (self::drawCards($state, $amount) as $c) {
                     $state['hands'][$tuid][] = $c;
                 }
             }
             $state['pendingWild4'] = null;
+            $state['drawStack'] = null;
             $event['type'] = 'win';
             return ['state' => $state, 'event' => $event, 'win' => true, 'needsUnoCheck' => false];
         }
@@ -304,38 +307,42 @@ final class UnoRule
                 $event['skippedSeat'] = self::advanceSeat($state, $seats, 1);
                 break;
             case 'R':
-                if (self::activePlayerCount($state, $seats) === 2) {
-                    // 2 人局 reverse 视为 skip
-                    $state['currentSeat'] = self::advanceSeat($state, $seats, 2);
-                } else {
-                    $state['direction'] = -((int) $state['direction']);
-                    $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
-                }
+                // 恒翻方向（2 人局也有视觉反馈）；2 人局 reverse 同时视为 skip（多走一格回到自己）
+                $state['direction'] = -((int) $state['direction']);
+                $state['currentSeat'] = self::advanceSeat($state, $seats, self::activePlayerCount($state, $seats) === 2 ? 2 : 1);
                 $event['type'] = 'reverse';
                 $event['direction'] = (int) $state['direction'];
                 break;
             case 'D':
-                $target = self::advanceSeat($state, $seats, 1);
-                $tuid = (string) $seats[$target];
-                foreach (self::drawCards($state, 2) as $c) {
-                    $state['hands'][$tuid][] = $c;
-                }
-                $state['currentSeat'] = self::advanceSeat($state, $seats, 2);
+                // 叠加村规：+2 不立即罚摸，累计进 drawStack，下家可出任意 +2/+4 继续叠或选择全摸
+                $state['drawStack'] = ['count' => (int) ($state['drawStack']['count'] ?? 0) + 2];
+                $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
                 $event['type'] = 'draw2';
-                $event['toSeat'] = $target;
+                $event['stackCount'] = (int) $state['drawStack']['count'];
+                $event['toSeat'] = (int) $state['currentSeat'];
                 break;
             case 'F':
-                $target = self::advanceSeat($state, $seats, 1);
-                $state['pendingWild4'] = [
-                    'fromSeat' => $seat,
-                    'toSeat' => $target,
-                    'prevColor' => $colorBefore,
-                    'prevTop' => $topBefore,
-                    'at' => time(),
-                ];
-                $state['currentSeat'] = $target;
-                $event['type'] = 'wild4';
-                $event['toSeat'] = $target;
+                if (($state['drawStack'] ?? null) !== null) {
+                    // 叠在加牌上的 +4：不可质疑，继续累计
+                    $state['drawStack'] = ['count' => (int) $state['drawStack']['count'] + 4];
+                    $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
+                    $event['type'] = 'wild4';
+                    $event['stackCount'] = (int) $state['drawStack']['count'];
+                    $event['toSeat'] = (int) $state['currentSeat'];
+                    $event['stacked'] = true;
+                } else {
+                    $target = self::advanceSeat($state, $seats, 1);
+                    $state['pendingWild4'] = [
+                        'fromSeat' => $seat,
+                        'toSeat' => $target,
+                        'prevColor' => $colorBefore,
+                        'prevTop' => $topBefore,
+                        'at' => time(),
+                    ];
+                    $state['currentSeat'] = $target;
+                    $event['type'] = 'wild4';
+                    $event['toSeat'] = $target;
+                }
                 break;
             default:
                 $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
@@ -383,7 +390,7 @@ final class UnoRule
     }
 
     /**
-     * 回合超时/挂机自动：摸 1 张直接跳过（不给立即出的机会）。
+     * 回合超时/挂机自动：有累计加牌时全摸（叠加规则），否则摸 1 张；均直接跳过。
      *
      * @param array<string, mixed> $state
      * @param array<int, int> $seats
@@ -393,10 +400,12 @@ final class UnoRule
     {
         $seat = (int) $state['currentSeat'];
         $uid = (string) $seats[$seat];
-        $cards = self::drawCards($state, 1);
+        $stackCount = (int) ($state['drawStack']['count'] ?? 0);
+        $cards = self::drawCards($state, max(1, $stackCount));
         if ($cards !== []) {
-            $state['hands'][$uid][] = $cards[0];
+            $state['hands'][$uid] = array_merge($state['hands'][$uid], $cards);
         }
+        $state['drawStack'] = null;
         $state['drawnCard'] = null;
         $state['unoVulnerable'] = null; // 下家已行动，举报窗口结束
         $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
