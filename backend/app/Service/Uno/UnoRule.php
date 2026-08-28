@@ -331,9 +331,10 @@ final class UnoRule
 
         switch ($value) {
             case 'S':
+                // 先算被跳过的人（基于当前座位），再推进回合——顺序反了会把出牌者自己标记成被跳过
+                $event['skippedSeat'] = self::advanceSeat($state, $seats, 1);
                 $state['currentSeat'] = self::advanceSeat($state, $seats, 2);
                 $event['type'] = 'skip';
-                $event['skippedSeat'] = self::advanceSeat($state, $seats, 1);
                 break;
             case 'R':
                 // 恒翻方向（2 人局也有视觉反馈）；2 人局 reverse 同时视为 skip（多走一格回到自己）

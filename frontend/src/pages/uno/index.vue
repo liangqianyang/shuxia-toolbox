@@ -417,6 +417,8 @@ function eventText(ev: { type: string; card?: string; [key: string]: unknown }):
       return `${name} 出完所有手牌！`
     case 'leave':
       return `${name} 离开了牌局`
+    case 'win_last_man':
+      return `其他玩家都已离开或离线，${name} 获胜！`
     case 'dealer_draw':
       return `${name} 抽到了 ${label}`
     case 'dealer':
@@ -445,7 +447,7 @@ watch(
     const ev = state.value?.lastEvent
     if (!ev?.type) return
     const type = ev.type
-    if (type === 'win') playUnoSound('win')
+    if (type === 'win' || type === 'win_last_man') playUnoSound('win')
     else if (type === 'uno' || type === 'catch' || type === 'dealer') playUnoSound('uno')
     else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
     else if (['draw', 'draw_pass', 'stack_draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
@@ -481,7 +483,7 @@ const winnerName = computed(() => {
 const winReasonText = computed(() => {
   const reason = state.value?.winReason
   if (reason === 'forfeit') return '对手逃跑，判你获胜'
-  if (reason === 'last_man') return '成为最后的玩家'
+  if (reason === 'last_man') return '其他玩家都已离开或离线，你是最后的玩家'
   return '出完了所有手牌'
 })
 

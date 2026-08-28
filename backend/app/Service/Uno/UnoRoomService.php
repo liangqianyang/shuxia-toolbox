@@ -780,6 +780,78 @@ final class UnoRoomService
         return $swept;
     }
 
+    /** 其他玩家离线超过多久（秒）视为离场不再回来，判最后在线的人获胜。 */
+    private const int OFFLINE_FORFEIT_SECONDS = 120;
+
+    /**
+     * Timer 清扫入口 2：把所有「只剩一人在线」的进行中对局判负结束——
+     * 覆盖「其他人直接划走小程序没点离开」的场景（leave 接口根本不会被调用）。
+     * 全部离线（包括我）的局不动：暂停保留，回来还能继续。
+     * 返回结束的房间数。
+     */
+    public function sweepLonelyRooms(): int
+    {
+        $rooms = UnoRoom::query()->where('status', 'playing')->limit(50)->get();
+        $ended = 0;
+        foreach ($rooms as $room) {
+            $changed = Db::transaction(function () use ($room) {
+                $room = $this->lockByCode((string) $room->code);
+                if ($room->status !== 'playing') {
+                    return null;
+                }
+                $state = $room->state;
+                if (($state['phase'] ?? 'playing') === 'dealerDraw') {
+                    return null;
+                }
+                $seats = $room->seats;
+                $left = $state['leftSeats'] ?? [];
+                $active = [];
+                foreach ($seats as $i => $uid) {
+                    if (! in_array($i, $left, true)) {
+                        $active[$i] = (int) $uid;
+                    }
+                }
+                if (count($active) < 2) {
+                    return null;
+                }
+                $onlineIds = $this->pusher->onlineUserIds((string) $room->code);
+                $seenAt = $room->seen_at ?? [];
+                $now = time();
+                $online = [];
+                $othersGone = true;
+                foreach ($active as $i => $uid) {
+                    $fresh = isset($seenAt[(string) $uid]) ? strtotime((string) $seenAt[(string) $uid]) : 0;
+                    $isOnline = in_array($uid, $onlineIds, true) || $fresh >= $now - self::ONLINE_SECONDS;
+                    if ($isOnline) {
+                        $online[] = $i;
+                        continue;
+                    }
+                    if ($fresh >= $now - self::OFFLINE_FORFEIT_SECONDS) {
+                        $othersGone = false; // 刚离线不久，可能切后台马上回来
+                    }
+                }
+                if (count($online) !== 1 || ! $othersGone) {
+                    return null;
+                }
+                $winnerSeat = $online[0];
+                $state['lastEvent'] = ['type' => 'win_last_man', 'seat' => $winnerSeat];
+                $room->state = $state;
+                $room->status = 'finished';
+                $room->winner_user_id = $seats[$winnerSeat];
+                $room->win_reason = 'last_man';
+                $room->turn_deadline_at = null;
+                $room->version++;
+                $room->save();
+                return $room;
+            });
+            if ($changed instanceof UnoRoom) {
+                $this->broadcast($changed);
+                ++$ended;
+            }
+        }
+        return $ended;
+    }
+
     /** 序列化为对外状态（按请求者视角裁剪隐藏信息）；HTTP 接口与 WS 推送共用同一 shape。 */
     public function serialize(UnoRoom $room, int $requesterId): array
     {

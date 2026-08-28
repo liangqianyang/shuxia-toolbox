@@ -41,9 +41,9 @@ final class UnoTurnSweepListener implements ListenerInterface
 
         $timer = new Timer($this->logger);
         $timer->tick(1.0, function (): void {
-            $swept = $this->rooms->sweepDueRooms();
+            $swept = $this->rooms->sweepDueRooms() + $this->rooms->sweepLonelyRooms();
             if ($swept > 0) {
-                $this->logger->info(sprintf('[uno] swept %d due room(s)', $swept));
+                $this->logger->info(sprintf('[uno] swept %d due/lonely room(s)', $swept));
             }
         });
         $this->logger->info('[uno] turn sweep timer registered (1s interval)');
