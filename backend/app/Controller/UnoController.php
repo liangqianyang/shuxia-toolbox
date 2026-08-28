@@ -67,6 +67,13 @@ final class UnoController extends AbstractController
     }
 
     #[RateLimit(create: 4, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function chooseColor(string $code, RequestInterface $request): array
+    {
+        $color = (string) $request->input('color', '');
+        return $this->ok($this->rooms->chooseColor($code, $this->requireUserId($request), $color));
+    }
+
+    #[RateLimit(create: 4, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function challenge(string $code, RequestInterface $request): array
     {
         return $this->ok($this->rooms->challenge($code, $this->requireUserId($request)));

@@ -11,6 +11,7 @@ import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
 import {
   catchUno,
   challengeWild4,
+  chooseColor,
   createRoom,
   declareUno,
   drawCard,
@@ -186,6 +187,12 @@ export function useUnoRoom() {
     await act(() => challengeWild4(current.code))
   }
 
+  async function chooseStartColor(color: UnoColor) {
+    const current = state.value
+    if (!current) return
+    await act(() => chooseColor(current.code, color))
+  }
+
   async function sayUno() {
     const current = state.value
     if (!current) return
@@ -349,6 +356,7 @@ export function useUnoRoom() {
     draw,
     pass,
     challenge,
+    chooseStartColor,
     sayUno,
     reportUno,
     requestRematch,

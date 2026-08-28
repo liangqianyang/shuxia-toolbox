@@ -14,7 +14,7 @@ namespace App\Service\Uno;
  * - 摸牌后仅可立即出「摸的那张」（官方），否则 pass；
  * - wild4 永远允许出（官方允许 bluff），合法性由下家质疑判定；
  * - 以 +2/+4 收尾获胜时，下家仍须先摸牌再计分（官方）；
- * - 首张翻到百搭则洗回重翻（官方仅 wF 重翻，wW 需首位选色——为免开局多一个选色态，一并重翻）。
+ * - 首张翻到 +4 洗回重翻（官方）；翻到变色牌则保留，由首位玩家选色开局（官方）。
  *
  * 前端 src/utils/uno.ts 有一份平行实现，仅用于即时 UI 反馈与单测，冲突以本类为准。
  */
@@ -209,9 +209,9 @@ final class UnoRule
         foreach ($seats as $uid) {
             $hands[(string) $uid] = array_splice($deck, 0, self::HAND_SIZE);
         }
-        // 翻首张：百搭洗回重翻
+        // 翻首张：仅 +4 洗回重翻（官方）；变色牌保留，由首位玩家选色开局
         $first = array_pop($deck);
-        while (self::isWild($first)) {
+        while (self::cardValue($first) === 'F') {
             $deck[] = $first;
             self::shuffle($deck);
             $first = array_pop($deck);
@@ -220,9 +220,10 @@ final class UnoRule
             'deck' => $deck,
             'hands' => $hands,
             'discard' => [$first],
-            'currentColor' => self::cardColor($first),
+            'currentColor' => self::isWild($first) ? '' : self::cardColor($first),
             'direction' => 1,
             'currentSeat' => 0,
+            'pendingColorPick' => self::isWild($first) ? ['seat' => 0] : null,
             'pendingWild4' => null,
             'unoVulnerable' => null,
             'unoDeclared' => [],

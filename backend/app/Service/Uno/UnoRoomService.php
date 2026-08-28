@@ -194,6 +194,7 @@ final class UnoRoomService
                 if ($result['needsUnoCheck']) {
                     if ($declaredUno) {
                         $state['unoDeclared'][] = $seat;
+                        $result['event']['unoDeclared'] = true; // 出牌同时喊了 UNO，前端据此播 UNO 音效
                     } else {
                         $state['unoVulnerable'] = ['seat' => $seat, 'at' => time()];
                     }
@@ -272,6 +273,48 @@ final class UnoRoomService
 
             $room->state = $state;
             $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * 首张翻到变色牌时，首位玩家选择开局颜色（官方规则）。
+     *
+     * @return array<string, mixed>
+     */
+    public function chooseColor(string $code, int $userId, string $color): array
+    {
+        if (! in_array($color, UnoRule::COLORS, true)) {
+            throw new BizException(422, '颜色不正确');
+        }
+
+        $room = Db::transaction(function () use ($code, $userId, $color) {
+            $room = $this->lockByCode($code);
+            $this->applyDueTimeoutIfNeeded($room);
+            $seat = $this->requireSeated($room, $userId);
+            if ($room->status !== 'playing') {
+                throw new BizException(422, '对局不在进行中');
+            }
+            $state = $room->state;
+            $pending = $state['pendingColorPick'] ?? null;
+            if ($pending === null) {
+                throw new BizException(422, '现在不需要选色');
+            }
+            if ((int) $pending['seat'] !== $seat) {
+                throw new BizException(422, '只有首位玩家能选开局颜色');
+            }
+            $state['currentColor'] = $color;
+            $state['pendingColorPick'] = null;
+            $state['lastEvent'] = ['type' => 'color_pick', 'seat' => $seat, 'color' => $color];
+
+            $room->state = $state;
             $this->touchSeenAt($room, $userId);
             $room->version++;
             $room->save();
@@ -613,6 +656,15 @@ final class UnoRoomService
             ];
         }
 
+        $colorPickPending = $state['pendingColorPick'] ?? null;
+        $colorPick = null;
+        if ($playing && $colorPickPending !== null) {
+            $colorPick = [
+                'seat' => (int) $colorPickPending['seat'],
+                'mine' => $mySeat !== null && (int) $colorPickPending['seat'] === $mySeat,
+            ];
+        }
+
         $vuln = $state['unoVulnerable'] ?? null;
         $uno = null;
         if ($playing && $vuln !== null) {
@@ -643,6 +695,7 @@ final class UnoRoomService
             'myHand' => $playing && $mySeat !== null ? array_values($state['hands'][(string) $requesterId] ?? []) : null,
             'drawnCard' => $drawn !== null && $mySeat !== null && (int) $drawn['seat'] === $mySeat ? (string) $drawn['card'] : null,
             'challenge' => $challenge,
+            'colorPick' => $colorPick,
             'uno' => $uno,
             'lastEvent' => $state['lastEvent'] ?? null,
             'winnerUserId' => $room->winner_user_id,
@@ -677,14 +730,26 @@ final class UnoRoomService
         $state = $room->state;
         $seats = $room->seats;
         if ($exceptUserId !== null) {
-            $pending = $state['pendingWild4'] ?? null;
-            $affectedSeat = $pending !== null ? (int) $pending['toSeat'] : (int) $state['currentSeat'];
+            $pending = $state['pendingWild4'] ?? $state['pendingColorPick'] ?? null;
+            $affectedSeat = $pending !== null
+                ? (int) ($pending['toSeat'] ?? $pending['seat'])
+                : (int) $state['currentSeat'];
             if ((int) ($seats[$affectedSeat] ?? 0) === $exceptUserId) {
                 $room->turn_deadline_at = $this->nextDeadline($state, $seats);
                 return false;
             }
         }
-        if (($state['pendingWild4'] ?? null) !== null) {
+        if (($state['pendingColorPick'] ?? null) !== null) {
+            // 开局选色超时：随机选色（与变色牌超时语义一致）
+            $pickSeat = (int) $state['pendingColorPick']['seat'];
+            $color = UnoRule::COLORS[random_int(0, 3)];
+            $state['currentColor'] = $color;
+            $state['pendingColorPick'] = null;
+            $result = ['state' => $state, 'event' => ['type' => 'color_pick', 'seat' => $pickSeat, 'color' => $color, 'auto' => true]];
+            $state = $result['state'];
+            $uid = (string) $seats[$pickSeat];
+            $state['idleStrikes'][$uid] = (int) ($state['idleStrikes'][$uid] ?? 0) + 1;
+        } elseif (($state['pendingWild4'] ?? null) !== null) {
             $result = UnoRule::resolveWild4($state, $seats, false);
         } else {
             $result = UnoRule::applyTimeoutDraw($state, $seats);
@@ -729,6 +794,9 @@ final class UnoRoomService
         $state = $room->state;
         if (in_array($seat, $state['leftSeats'] ?? [], true)) {
             throw new BizException(403, '你已离开本局');
+        }
+        if (($state['pendingColorPick'] ?? null) !== null) {
+            throw new BizException(422, '等待首位玩家选择开局颜色');
         }
         if (($state['pendingWild4'] ?? null) !== null) {
             throw new BizException(422, '等待 +4 质疑结果');

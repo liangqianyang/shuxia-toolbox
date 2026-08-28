@@ -70,6 +70,8 @@ export interface UnoRoomState {
   /** 摸牌后仅可出的那张（仅本人可见） */
   drawnCard: string | null
   challenge: UnoChallenge | null
+  /** 首张翻出变色牌：等待首位玩家选择开局颜色 */
+  colorPick: { seat: number; mine: boolean } | null
   uno: UnoVulnerable | null
   lastEvent: UnoEvent | null
   winnerUserId: number | null

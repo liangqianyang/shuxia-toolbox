@@ -101,7 +101,8 @@
         <view class="hand">
           <view class="hand__status">
             <template v-if="state.status === 'playing'">
-              <text v-if="isMyTurn" class="hand__status--mine">
+              <text v-if="state.colorPick && !state.colorPick.mine">等待 {{ colorPickPlayerName }} 选择开局颜色…</text>
+              <text v-else-if="isMyTurn" class="hand__status--mine">
                 {{ state.drawnCard ? '可以出刚摸的牌，或选择不出' : '轮到你了' }}（{{ turnCountdown }}s）
               </text>
               <text v-else>等待 {{ currentPlayerName }} 出牌…</text>
@@ -117,6 +118,7 @@
                   'hand__card--selected': selectedIndex === i,
                   'hand__card--dim': isMyTurn && !canIPlay(card),
                 }"
+                :style="{ marginLeft: i === 0 ? '0' : '-' + cardOverlap + 'rpx' }"
                 @tap="onCardTap(i)"
               >
                 <image v-if="images[card]" :src="images[card]" class="hand__img" mode="aspectFit" />
@@ -158,11 +160,11 @@
       </template>
     </view>
 
-    <!-- 选色弹层：遮罩调浅，选色时仍能看清自己的手牌 -->
-    <view v-if="colorPickerVisible" class="color-mask" @tap="cancelColorPick">
+    <!-- 选色弹层：出百搭牌选色 / 开局首张变色牌选色；面板上移以便看清手牌 -->
+    <view v-if="colorPickerVisible" class="color-mask" @tap="onMaskTap">
       <view class="color-panel" @tap.stop>
-        <view class="color-panel__title">为它选择一个季节</view>
-        <view v-if="pendingWildCard && images[pendingWildCard]" class="color-panel__preview">
+        <view class="color-panel__title">{{ colorPickMode === 'start' ? '你翻开了变色牌，选择开局季节' : '为它选择一个季节' }}</view>
+        <view v-if="colorPickMode === 'wild' && pendingWildCard && images[pendingWildCard]" class="color-panel__preview">
           <image :src="images[pendingWildCard]" class="color-panel__card" mode="aspectFit" />
         </view>
         <view class="color-panel__row">
@@ -177,6 +179,7 @@
             <text class="color-panel__cname">{{ COLOR_META[c].name }}</text>
           </view>
         </view>
+        <button v-if="colorPickMode === 'wild'" class="color-panel__cancel" @tap="cancelColorPick">先不出这张</button>
       </view>
     </view>
   </view>
@@ -211,6 +214,7 @@ const {
   draw,
   pass,
   challenge,
+  chooseStartColor,
   sayUno,
   reportUno,
   requestRematch,
@@ -224,6 +228,7 @@ const { images, ensure, preload } = useUnoCards()
 const joinCode = ref('')
 const selectedIndex = ref(-1)
 const colorPickerVisible = ref(false)
+const colorPickMode = ref<'wild' | 'start'>('wild')
 const pendingWildCard = ref('')
 const soundOn = ref(unoSoundEnabled())
 let pendingWild: { card: string; declaredUno: boolean } | null = null
@@ -238,10 +243,12 @@ function toggleSound() {
 watch(
   () => state.value?.version,
   () => {
-    const type = state.value?.lastEvent?.type
-    if (!type) return
+    const ev = state.value?.lastEvent
+    if (!ev?.type) return
+    const type = ev.type
     if (type === 'win') playUnoSound('win')
     else if (type === 'uno' || type === 'catch') playUnoSound('uno')
+    else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
     else if (['draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
     else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4'].includes(type)) playUnoSound('play')
   },
@@ -293,7 +300,23 @@ const canCatchUno = computed(() => {
   return !current.uno.mine && unoWindowCountdown.value === 0
 })
 
+/** 手牌动态重叠：牌少全展开，牌多逐张叠（每张至少露出 48rpx 数字角），再多交给横向滚动。 */
+const cardOverlap = computed(() => {
+  const n = myHandCount.value
+  if (n <= 1) return 0
+  const total = 140 * n
+  const avail = 750 - 32 * 2 // 页面左右留白后可用宽度
+  if (total <= avail) return 0
+  return Math.min(Math.ceil((total - avail) / (n - 1)), 92)
+})
+
 const unoSeat = computed(() => state.value?.uno?.seat ?? -1)
+
+const colorPickPlayerName = computed(() => {
+  const current = state.value
+  if (!current?.colorPick) return ''
+  return current.players.find((p) => p.seat === current.colorPick?.seat)?.nickname ?? ''
+})
 
 // 牌面图片按需渲染：手牌/顶牌/牌背变化时补齐
 watch(
@@ -332,6 +355,7 @@ function onPlay(declaredUno: boolean) {
   if (isWild(card)) {
     pendingWild = { card, declaredUno }
     pendingWildCard.value = card
+    colorPickMode.value = 'wild'
     colorPickerVisible.value = true
     return
   }
@@ -340,6 +364,11 @@ function onPlay(declaredUno: boolean) {
 }
 
 function onPickColor(color: UnoColor) {
+  if (colorPickMode.value === 'start') {
+    colorPickerVisible.value = false
+    void chooseStartColor(color)
+    return
+  }
   colorPickerVisible.value = false
   pendingWildCard.value = ''
   const pending = pendingWild
@@ -349,11 +378,29 @@ function onPickColor(color: UnoColor) {
   void play(pending.card, color, pending.declaredUno)
 }
 
+/** 开局选色必须选一个（官方规则），只有出牌选色可取消 */
+function onMaskTap() {
+  if (colorPickMode.value === 'wild') cancelColorPick()
+}
+
 function cancelColorPick() {
   colorPickerVisible.value = false
   pendingWildCard.value = ''
   pendingWild = null
 }
+
+// 首张翻出变色牌：我是首位玩家时自动弹出选色
+watch(
+  () => state.value?.colorPick,
+  (colorPick) => {
+    if (colorPick?.mine) {
+      colorPickMode.value = 'start'
+      colorPickerVisible.value = true
+    } else if (colorPickMode.value === 'start' && !colorPick) {
+      colorPickerVisible.value = false
+    }
+  },
+)
 
 function onDeckTap() {
   if (!isMyTurn.value || state.value?.drawnCard) return
@@ -420,6 +467,10 @@ $maple-light: #FBE4D5;
   box-sizing: border-box;
   background: linear-gradient(180deg, $cream 0%, #FDF1E0 100%);
   color: $ink;
+
+  // 去掉小程序 button 默认的 ::after 描边；disabled 时微信会套默认灰色，需显式覆盖
+  button::after { border: none; }
+  button[disabled] { opacity: 1; }
 }
 
 // ---------- 大厅 ----------
@@ -439,6 +490,8 @@ $maple-light: #FBE4D5;
     color: #fff;
     font-weight: 700;
     border-radius: 48rpx;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
   &__join { display: flex; gap: 20rpx; margin-top: 40rpx; }
   &__input {
@@ -458,6 +511,8 @@ $maple-light: #FBE4D5;
     font-weight: 700;
     border-radius: 16rpx;
     font-size: 30rpx;
+
+    &[disabled] { background: rgba($felt, 0.45); color: rgba(255, 248, 237, 0.9); }
   }
 }
 
@@ -526,6 +581,8 @@ $maple-light: #FBE4D5;
     color: #fff;
     font-weight: 700;
     border-radius: 48rpx;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
   &__hint { margin-top: 70rpx; font-size: 28rpx; color: rgba(73, 62, 55, 0.6); }
 }
@@ -694,14 +751,13 @@ $maple-light: #FBE4D5;
     &--mine { color: $red; font-weight: 600; }
   }
   &__scroll { margin-top: 8rpx; white-space: nowrap; }
-  &__cards { display: inline-flex; align-items: flex-end; padding: 20rpx 24rpx 8rpx; min-height: 240rpx; }
+  &__cards { display: inline-flex; align-items: flex-end; padding: 20rpx 48rpx 8rpx 24rpx; min-height: 240rpx; box-sizing: content-box; }
   &__card {
     width: 140rpx;
     height: 210rpx;
-    margin-left: -44rpx;
+    flex-shrink: 0;
     border-radius: 16rpx;
     transition: transform 0.15s ease;
-    &:first-child { margin-left: 0; }
     &--selected { transform: translateY(-28rpx); }
     &--dim { opacity: 0.78; filter: grayscale(0.3); }
   }
@@ -765,8 +821,10 @@ $maple-light: #FBE4D5;
   inset: 0;
   background: rgba(73, 62, 55, 0.18);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: 12vh;
+  box-sizing: border-box;
   z-index: 30;
 }
 
@@ -793,5 +851,13 @@ $maple-light: #FBE4D5;
   }
   &__season { font-size: 40rpx; font-weight: 700; text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3); }
   &__cname { font-size: 20rpx; opacity: 0.9; }
+  &__cancel {
+    margin-top: 16rpx;
+    width: 100%;
+    background: rgba(73, 62, 55, 0.08);
+    color: $ink;
+    font-size: 28rpx;
+    border-radius: 40rpx;
+  }
 }
 </style>

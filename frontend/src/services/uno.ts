@@ -39,6 +39,10 @@ export function challengeWild4(code: string): Promise<UnoRoomState> {
   return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/challenge`, 'POST')
 }
 
+export function chooseColor(code: string, color: UnoColor): Promise<UnoRoomState> {
+  return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/choose-color`, 'POST', { color })
+}
+
 export function declareUno(code: string): Promise<UnoRoomState> {
   return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/declare-uno`, 'POST')
 }
