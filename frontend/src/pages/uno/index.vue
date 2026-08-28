@@ -522,11 +522,18 @@ const myDealerDrawn = computed(() => {
   return Boolean(current && current.mySeat !== null && current.dealerDraws && current.dealerDraws[String(current.mySeat)] !== undefined)
 })
 
-/** 我的回合提示：摸牌后出牌自由（任意能出的牌），也可放弃本轮 */
+/** 我的回合提示：按实际局面给出张数准确的指引 */
 const myTurnHint = computed(() => {
   const current = state.value
   if (!current) return ''
   if (current.drawnCard) return '已摸牌：出任意能出的牌，或选择不出'
+  const stack = current.drawStack
+  if (stack) {
+    return stack.only4
+      ? `被叠了 +4，累计 ${stack.count} 张：只能出 +4 反击，或点牌堆全摸`
+      : `被加牌累计 ${stack.count} 张：出 +2/+4 叠加，或点牌堆全摸`
+  }
+  if (current.challenge?.mine) return '被 +4 了：质疑、叠 +4 反击，或不质疑摸 4 张'
   return '轮到你了：出牌或摸一张'
 })
 
