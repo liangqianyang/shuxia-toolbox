@@ -166,11 +166,6 @@ final class UnoRoomService
             if (! in_array($card, $hand, true)) {
                 throw new BizException(422, '这张牌不在你手上');
             }
-            // 摸牌后的回合只能出「摸的那张」（官方）
-            $drawn = $state['drawnCard'] ?? null;
-            if ($drawn !== null && $drawn['card'] !== $card) {
-                throw new BizException(422, '摸牌后只能出刚摸的那张，或选择不出');
-            }
             $top = end($state['discard']);
             if (! UnoRule::canPlay($card, (string) $top, (string) $state['currentColor'])) {
                 throw new BizException(422, '这张牌出不了：颜色或数字要匹配');
@@ -218,7 +213,8 @@ final class UnoRoomService
     }
 
     /**
-     * 摸牌：摸 1 张后可立即出「摸的那张」，或调用 pass 放弃。
+     * 摸牌：玩家自主决定何时摸（手上有能出的牌也可以摸）；摸完后本轮可出任意能出的牌
+     * （不限于摸到的），也可直接选择不出（pass）。drawnCard 仅作前端「新摸的牌」标记。
      *
      * @return array<string, mixed>
      */
@@ -234,10 +230,10 @@ final class UnoRoomService
 
             $result = UnoRule::applyDraw($state, $room->seats, $seat);
             $state = $result['state'];
-            $state['lastEvent'] = $result['event'];
             $state['idleStrikes'][(string) $userId] = 0;
             $state['unoDeclared'] = $this->pruneUnoDeclared($state, $room->seats);
-            // 摸牌不推进回合、不重置计时，给「出或不出」的决策留原有余量
+            // 摸牌不推进回合、不重置计时，由玩家自己决定出哪张或不出
+            $state['lastEvent'] = $result['event'];
 
             $room->state = $state;
             $this->touchSeenAt($room, $userId);

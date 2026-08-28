@@ -66,20 +66,23 @@
           </view>
         </view>
 
-        <!-- 桌面中央 -->
-        <view class="table">
-          <view class="table__pile" @tap="onDeckTap">
-            <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
-            <text class="table__pile-count">{{ state.deckCount }}</text>
-            <text v-if="isMyTurn && !state.drawnCard" class="table__pile-hint">点我摸牌</text>
+        <!-- 桌面中央（+ 动作播报条） -->
+        <view class="table-zone">
+          <view class="table">
+            <view class="table__pile" @tap="onDeckTap">
+              <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
+              <text class="table__pile-count">{{ state.deckCount }}</text>
+              <text v-if="isMyTurn && !state.drawnCard" class="table__pile-hint">点我摸牌</text>
+            </view>
+            <view class="table__info">
+              <view class="table__color" :style="{ background: colorMeta.color }">{{ colorMeta.season }}</view>
+              <view class="table__direction">{{ state.direction === 1 ? '↻ 顺时针' : '↺ 逆时针' }}</view>
+            </view>
+            <view class="table__top">
+              <image v-if="state.topCard && images[state.topCard]" :src="images[state.topCard]" class="table__card" />
+            </view>
           </view>
-          <view class="table__info">
-            <view class="table__color" :style="{ background: colorMeta.color }">{{ colorMeta.season }}</view>
-            <view class="table__direction">{{ state.direction === 1 ? '↻ 顺时针' : '↺ 逆时针' }}</view>
-          </view>
-          <view class="table__top">
-            <image v-if="state.topCard && images[state.topCard]" :src="images[state.topCard]" class="table__card" />
-          </view>
+          <view class="event-banner" :class="{ 'event-banner--show': bannerVisible }">{{ bannerText }}</view>
         </view>
 
         <!-- +4 质疑条 -->
@@ -103,7 +106,7 @@
             <template v-if="state.status === 'playing'">
               <text v-if="state.colorPick && !state.colorPick.mine">等待 {{ colorPickPlayerName }} 选择开局颜色…</text>
               <text v-else-if="isMyTurn" class="hand__status--mine">
-                {{ state.drawnCard ? '可以出刚摸的牌，或选择不出' : '轮到你了' }}（{{ turnCountdown }}s）
+                {{ myTurnHint }}（{{ turnCountdown }}s）
               </text>
               <text v-else>等待 {{ currentPlayerName }} 出牌…</text>
             </template>
@@ -122,6 +125,7 @@
                 @tap="onCardTap(i)"
               >
                 <image v-if="images[card]" :src="images[card]" class="hand__img" mode="aspectFit" />
+                <text v-if="card === state.drawnCard" class="hand__new">新</text>
               </view>
             </view>
           </scroll-view>
@@ -135,7 +139,7 @@
               </button>
             </template>
             <button v-if="state.drawnCard && !selectedCard" class="hand__btn hand__btn--plain" :disabled="acting" @tap="pass">
-              这张不出
+              不出，跳过本轮
             </button>
           </view>
         </view>
@@ -191,7 +195,7 @@ import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/u
 import { useUnoRoom } from '@/composables/useUnoRoom'
 import { useUnoCards } from '@/composables/useUnoCards'
 import { BACK_KEY } from '@/utils/unoCards'
-import { COLOR_META, UNO_COLORS, isWild } from '@/utils/uno'
+import { COLOR_META, UNO_COLORS, cardLabel, isWild } from '@/utils/uno'
 import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
 import type { UnoColor } from '@/types/uno'
 
@@ -239,7 +243,78 @@ function toggleSound() {
   uni.showToast({ title: soundOn.value ? '音效已开启' : '音效已关闭', icon: 'none' })
 }
 
-// 桌面事件 → 提示音：出牌/摸牌/喊 UNO/获胜（所有在线玩家都会听到，WS 推送驱动）
+// ---------- 动作播报条（对手出了什么牌、变了什么色，全员可见） ----------
+
+const bannerText = ref('')
+const bannerVisible = ref(false)
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+
+function seatName(seat: unknown): string {
+  if (typeof seat !== 'number' || !state.value) return ''
+  return state.value.players.find((p) => p.seat === seat)?.nickname ?? ''
+}
+
+function seasonName(color: unknown): string {
+  const c = String(color ?? '')
+  return c === 'r' || c === 'g' || c === 'b' || c === 'y' ? `「${COLOR_META[c].season}」` : ''
+}
+
+function eventText(ev: { type: string; card?: string; [key: string]: unknown }): string {
+  const name = seatName(ev.seat)
+  const label = ev.card ? cardLabel(String(ev.card)) : ''
+  switch (ev.type) {
+    case 'play':
+      return `${name} 出了 ${label}${ev.unoDeclared ? '，并喊了 UNO！' : ''}`
+    case 'skip':
+      return `${name} 出了跳过牌，${seatName(ev.skippedSeat)} 被跳过`
+    case 'reverse':
+      return `${name} 出了反转牌，方向掉转`
+    case 'draw2':
+      return `${name} 出了 +2，${seatName(ev.toSeat)} 摸 2 张`
+    case 'wild':
+      return `${name} 出了变色牌，指定${seasonName(ev.color)}季`
+    case 'wild4':
+      return `${name} 出了王牌 +4 并指定${seasonName(ev.color)}季，${seatName(ev.toSeat)} 可质疑`
+    case 'wild4_draw':
+      return `${seatName(ev.toSeat)} 摸 4 张并跳过`
+    case 'challenge_guilty':
+      return `质疑成功！${seatName(ev.fromSeat)} 的 +4 违规，改摸 4 张`
+    case 'challenge_innocent':
+      return `质疑失败，${name} 摸 6 张`
+    case 'draw':
+      return `${name} 摸了 1 张牌`
+    case 'draw_pass':
+      return `${name} 摸牌后仍无牌可出，跳过`
+    case 'timeout':
+      return `${name} 超时，自动摸牌跳过`
+    case 'pass':
+      return `${name} 选择不出`
+    case 'uno':
+      return `${name} 喊了 UNO！`
+    case 'catch':
+      return `${seatName(ev.bySeat)} 举报 ${name} 没喊 UNO，罚摸 2 张`
+    case 'color_pick':
+      return ev.auto ? `${name} 超时，随机${seasonName(ev.color)}季开局` : `${name} 选择${seasonName(ev.color)}季开局`
+    case 'win':
+      return `${name} 出完所有手牌！`
+    case 'leave':
+      return `${name} 离开了牌局`
+    default:
+      return ''
+  }
+}
+
+function showBanner(text: string) {
+  if (!text) return
+  bannerText.value = text
+  bannerVisible.value = true
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => {
+    bannerVisible.value = false
+  }, 2600)
+}
+
+// 桌面事件 → 提示音 + 播报条（所有在线玩家都会收到，WS 推送驱动）
 watch(
   () => state.value?.version,
   () => {
@@ -249,8 +324,9 @@ watch(
     if (type === 'win') playUnoSound('win')
     else if (type === 'uno' || type === 'catch') playUnoSound('uno')
     else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
-    else if (['draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
-    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4'].includes(type)) playUnoSound('play')
+    else if (['draw', 'draw_pass', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
+    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4', 'color_pick'].includes(type)) playUnoSound('play')
+    showBanner(eventText(ev))
   },
 )
 
@@ -312,6 +388,14 @@ const cardOverlap = computed(() => {
 
 const unoSeat = computed(() => state.value?.uno?.seat ?? -1)
 
+/** 我的回合提示：摸牌后出牌自由（任意能出的牌），也可放弃本轮 */
+const myTurnHint = computed(() => {
+  const current = state.value
+  if (!current) return ''
+  if (current.drawnCard) return '已摸牌：出任意能出的牌，或选择不出'
+  return '轮到你了：出牌或摸一张'
+})
+
 const colorPickPlayerName = computed(() => {
   const current = state.value
   if (!current?.colorPick) return ''
@@ -342,11 +426,16 @@ function onCardTap(index: number) {
   }
   const card = state.value?.myHand?.[index]
   if (!card) return
-  if (!canIPlay(card)) {
-    uni.showToast({ title: '这张牌出不了', icon: 'none' })
+  // 已选中的牌任何时候都可以点按取消选中（哪怕摸牌后已不可出）
+  if (selectedIndex.value === index) {
+    selectedIndex.value = -1
     return
   }
-  selectedIndex.value = selectedIndex.value === index ? -1 : index
+  if (!canIPlay(card)) {
+    uni.showToast({ title: state.value?.drawnCard ? '摸牌后只能出刚摸的那张' : '这张牌出不了', icon: 'none' })
+    return
+  }
+  selectedIndex.value = index
 }
 
 function onPlay(declaredUno: boolean) {
@@ -404,6 +493,7 @@ watch(
 
 function onDeckTap() {
   if (!isMyTurn.value || state.value?.drawnCard) return
+  selectedIndex.value = -1 // 摸牌后只能出摸的那张，先清掉选中态防卡死
   void draw()
 }
 
@@ -661,6 +751,34 @@ $maple-light: #FBE4D5;
 }
 
 // ---------- 桌面中央（墨绿桌布） ----------
+.table-zone {
+  position: relative;
+}
+
+.event-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  max-width: 84%;
+  padding: 16rpx 36rpx;
+  border-radius: 44rpx;
+  background: rgba(33, 72, 61, 0.94);
+  color: #FFF8ED;
+  font-size: 28rpx;
+  font-weight: 600;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 6;
+
+  &--show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 .table {
   display: flex;
   align-items: center;
@@ -757,9 +875,22 @@ $maple-light: #FBE4D5;
     height: 210rpx;
     flex-shrink: 0;
     border-radius: 16rpx;
+    position: relative;
     transition: transform 0.15s ease;
     &--selected { transform: translateY(-28rpx); }
     &--dim { opacity: 0.78; filter: grayscale(0.3); }
+  }
+  &__new {
+    position: absolute;
+    top: -10rpx;
+    right: -6rpx;
+    background: $gold;
+    color: $ink;
+    font-size: 18rpx;
+    font-weight: 700;
+    padding: 2rpx 10rpx;
+    border-radius: 16rpx;
+    box-shadow: 0 2rpx 6rpx rgba(73, 62, 55, 0.25);
   }
   &__img { width: 140rpx; height: 210rpx; border-radius: 16rpx; box-shadow: 0 4rpx 10rpx rgba(73, 62, 55, 0.15); }
   &__actions { display: flex; justify-content: center; gap: 20rpx; margin-top: 16rpx; min-height: 80rpx; }

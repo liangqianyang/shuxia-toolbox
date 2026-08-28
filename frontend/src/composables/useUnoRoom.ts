@@ -56,11 +56,10 @@ export function useUnoRoom() {
   })
   /** 手牌数（含未开局时的 0）。 */
   const myHandCount = computed(() => state.value?.myHand?.length ?? 0)
-  /** 某张牌我能否出（即时置灰；权威以后端为准）。 */
+  /** 某张牌我能否出（即时置灰；权威以后端为准）。摸牌后也可出手里任意能出的牌（村规：玩家自主）。 */
   function canIPlay(card: string): boolean {
     const current = state.value
     if (!current || !isMyTurn.value || !current.topCard) return false
-    if (current.drawnCard !== null && current.drawnCard !== card) return false
     return canPlay(card, current.topCard, current.currentColor)
   }
 
