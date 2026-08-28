@@ -25,15 +25,27 @@ final class AdminFeatureController extends AbstractController
     public function index(RequestInterface $request): array
     {
         $this->requireAdmin($request);
-        return $this->ok(['aiEnabled' => $this->flags->aiEnabled()]);
+        return $this->ok([
+            'aiEnabled' => $this->flags->aiEnabled(),
+            'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+        ]);
     }
 
     #[RateLimit(create: 5, capacity: 12, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function save(RequestInterface $request): array
     {
         $this->requireAdmin($request);
-        $enabled = filter_var($request->input('aiEnabled', false), FILTER_VALIDATE_BOOL);
-        return $this->ok(['aiEnabled' => $this->flags->setAiEnabled($enabled)]);
+        $result = [];
+        if ($request->input('aiEnabled') !== null) {
+            $result['aiEnabled'] = $this->flags->setAiEnabled(filter_var($request->input('aiEnabled'), FILTER_VALIDATE_BOOL));
+        }
+        if ($request->input('unoChatTextEnabled') !== null) {
+            $result['unoChatTextEnabled'] = $this->flags->setUnoChatTextEnabled(filter_var($request->input('unoChatTextEnabled'), FILTER_VALIDATE_BOOL));
+        }
+        return $this->ok($result === [] ? [
+            'aiEnabled' => $this->flags->aiEnabled(),
+            'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+        ] : $result);
     }
 
     private function requireAdmin(RequestInterface $request): void

@@ -17,6 +17,9 @@ final class FeatureController extends AbstractController
     #[RateLimit(create: 20, capacity: 40, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function index(RequestInterface $request): array
     {
-        return $this->ok(['aiEnabled' => $this->flags->aiEnabled()]);
+        return $this->ok([
+            'aiEnabled' => $this->flags->aiEnabled(),
+            'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+        ]);
     }
 }

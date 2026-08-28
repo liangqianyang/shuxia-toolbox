@@ -96,6 +96,8 @@ export async function saveAdminToolOrder(toolKeys: string[]): Promise<AdminTool[
 
 export interface FeatureFlags {
   aiEnabled: boolean
+  /** UNO 房间自由文字聊天（快捷句/表情不受影响）；旧后端未返回时按 true 处理 */
+  unoChatTextEnabled?: boolean
 }
 
 /** 公开的全局功能开关（无需登录）：决定 AI 入口是否展示，服务端另有硬拦截兜底。 */
@@ -109,6 +111,10 @@ export async function fetchAdminFeatures(): Promise<FeatureFlags> {
 
 export async function setAdminAiEnabled(aiEnabled: boolean): Promise<FeatureFlags> {
   return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'POST', { aiEnabled }, true))
+}
+
+export async function setAdminUnoChatTextEnabled(unoChatTextEnabled: boolean): Promise<FeatureFlags> {
+  return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'POST', { unoChatTextEnabled }, true))
 }
 
 export async function requestUserApi<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, timeout?: number): Promise<T> {

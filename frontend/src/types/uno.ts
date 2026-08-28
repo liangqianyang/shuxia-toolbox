@@ -47,6 +47,16 @@ export interface UnoEvent {
   [key: string]: unknown
 }
 
+/** 房间聊天消息（公开信息，不做视角裁剪）；seq 单调递增，客户端按 seq 增量出气泡。 */
+export interface UnoChatMessage {
+  seq: number
+  userId: number
+  seat: number
+  kind: 'phrase' | 'emoji' | 'text'
+  text: string
+  ts: number
+}
+
 /** 房间完整状态（HTTP 接口与 WS 推送同一 shape）；手牌仅本人可见。 */
 export interface UnoRoomState {
   code: string
@@ -82,6 +92,8 @@ export interface UnoRoomState {
   drawStack: { count: number; only4?: boolean } | null
   uno: UnoVulnerable | null
   lastEvent: UnoEvent | null
+  /** 房间聊天（环形数组，最近 50 条，服务端透传） */
+  chat: UnoChatMessage[]
   winnerUserId: number | null
   winReason: UnoWinReason | null
   /** 房间累计分 {userId: score} */

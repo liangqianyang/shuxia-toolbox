@@ -32,7 +32,7 @@ import {
   isLegalMove,
   pointToIntersection,
 } from '@/utils/gomoku'
-import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand } from '@/utils/uno'
+import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/utils/uno'
 
 function testUno() {
   // 牌编码解析
@@ -62,6 +62,13 @@ function testUno() {
   assert(cardLabel('r5') === '夏·5', '数字牌展示名（r=夏）')
   assert(cardLabel('gD') === '春·+2', '功能牌展示名')
   assert(cardLabel('wF') === '王牌+4' && cardLabel('wW') === '变色牌', '百搭展示名')
+
+  // 理牌：同色归堆（春绿→夏红→秋黄→冬蓝→百搭），色内 0-9→S/R/D，百搭 变色牌→+4
+  assert(JSON.stringify(sortHand(['wF', 'b7', 'r5', 'g0', 'yS', 'wW', 'gD', 'r9', 'rS', 'bD'])) === JSON.stringify(['g0', 'gD', 'r5', 'r9', 'rS', 'yS', 'b7', 'bD', 'wW', 'wF']), '乱序手牌按颜色归堆排序')
+  assert(JSON.stringify(sortHand([])) === '[]', '空手牌')
+  const source = ['wF', 'r5', 'b3']
+  sortHand(source)
+  assert(JSON.stringify(source) === JSON.stringify(['wF', 'r5', 'b3']), '理牌不改入参数组')
 }
 
 

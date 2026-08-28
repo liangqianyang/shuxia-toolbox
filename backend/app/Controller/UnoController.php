@@ -107,6 +107,21 @@ final class UnoController extends AbstractController
         return $this->ok($this->rooms->catchUno($code, $this->requireUserId($request), $seat));
     }
 
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function chat(string $code, RequestInterface $request): array
+    {
+        $kind = (string) $request->input('kind', '');
+        $id = $request->input('id');
+        $text = $request->input('text');
+        return $this->ok($this->rooms->chat(
+            $code,
+            $this->requireUserId($request),
+            $kind,
+            is_string($id) && $id !== '' ? $id : null,
+            is_string($text) && $text !== '' ? $text : null,
+        ));
+    }
+
     #[RateLimit(create: 2, capacity: 6, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function rematch(string $code, RequestInterface $request): array
     {

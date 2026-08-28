@@ -6,8 +6,11 @@ namespace App\Service\Uno;
 
 use App\Exception\BizException;
 use App\Model\UnoRoom;
+use App\Service\FeatureFlagService;
+use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
 use Hyperf\DbConnection\Db;
+use RuntimeException;
 
 /**
  * UNO 联机房间：服务端权威，完整对局快照存 MySQL（重启不丢局）。
@@ -43,9 +46,17 @@ final class UnoRoomService
     /** 挂机回合时限（秒）。 */
     public const int IDLE_TURN_SECONDS = 5;
 
+    /** 聊天：同一玩家两条消息最小间隔（秒）。 */
+    public const int CHAT_COOLDOWN_SECONDS = 3;
+
+    /** 聊天：state.chat 环形数组保留条数。 */
+    public const int CHAT_KEEP = 50;
+
     public function __construct(
         private readonly WechatUserService $users,
         private readonly UnoWsPusher $pusher,
+        private readonly WechatContentSecurityService $security,
+        private readonly FeatureFlagService $flags,
     ) {}
 
     /**
@@ -127,7 +138,7 @@ final class UnoRoomService
             foreach ($room->seats as $uid) {
                 $scores[(string) $uid] = (int) ($room->state['scores'][(string) $uid] ?? 0);
             }
-            $room->state = [
+            $room->state = $this->carryChat($room->state, [
                 'phase' => 'dealerDraw',
                 'dealerDraws' => [],
                 'dealerSeat' => null,
@@ -135,7 +146,7 @@ final class UnoRoomService
                 'idleStrikes' => [],
                 'leftSeats' => [],
                 'lastEvent' => ['type' => 'start'],
-            ];
+            ]);
             $room->status = 'playing';
             $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::TURN_SECONDS);
             $room->version++;
@@ -205,7 +216,7 @@ final class UnoRoomService
         }
         $fresh['dealerDraws'] = $draws;
         $fresh['lastEvent'] = ['type' => 'dealer', 'seat' => $dealer, 'draws' => $draws];
-        return $fresh;
+        return $this->carryChat($state, $fresh);
     }
 
     /**
@@ -529,6 +540,82 @@ final class UnoRoomService
     }
 
     /**
+     * 房间聊天：快捷句（kind=phrase 传 id）/ 表情（kind=emoji 传表情字符）按服务端白名单校验；
+     * 自由文字（kind=text）受 feature.uno_chat_text 开关控制并全量过 msg_sec_check。
+     * 预设校验与内容审核都在事务外完成（secCheck 最长 8s，不能拿着行锁等微信接口），
+     * 事务内只做入座/冷却校验和环形数组追加；不触碰任何对局字段（lastEvent/deadline 均不动）。
+     *
+     * @return array<string, mixed>
+     */
+    public function chat(string $code, int $userId, string $kind, ?string $id, ?string $text): array
+    {
+        if ($kind === 'phrase') {
+            $content = UnoChat::phraseText((string) $id);
+            if ($content === null) {
+                throw new BizException(422, '快捷句不存在');
+            }
+        } elseif ($kind === 'emoji') {
+            $content = (string) $id;
+            if (! UnoChat::isEmoji($content)) {
+                throw new BizException(422, '表情不存在');
+            }
+        } elseif ($kind === 'text') {
+            $this->flags->requireUnoChatTextEnabled();
+            $content = trim((string) $text);
+            $content = (string) preg_replace('/\s+/u', ' ', $content);
+            if ($content === '') {
+                throw new BizException(422, '消息不能为空');
+            }
+            if (mb_strlen($content) > UnoChat::TEXT_MAX_LENGTH) {
+                throw new BizException(422, '最多 ' . UnoChat::TEXT_MAX_LENGTH . ' 个字');
+            }
+            $user = $this->users->findUser($userId);
+            $openid = (string) ($user['openid'] ?? '');
+            if ($openid === '') {
+                throw new BizException(422, '账号信息缺失，发不出文字消息');
+            }
+            try {
+                if (! $this->security->checkText($content, $openid)) {
+                    throw new BizException(422, '消息未通过内容审核，换个说法试试');
+                }
+            } catch (RuntimeException) {
+                // fail-closed：审核接口异常时宁可拒发，不能让未审文字广播出去
+                throw new BizException(422, '内容审核暂时不可用，稍后再试');
+            }
+        } else {
+            throw new BizException(422, '消息类型不正确');
+        }
+
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+            $room = $this->lockByCode($code);
+            $seat = $this->requireSeated($room, $userId);
+            $state = $room->state;
+            $now = time();
+            if ($now - (int) ($state['chatLastAt'][(string) $userId] ?? 0) < self::CHAT_COOLDOWN_SECONDS) {
+                throw new BizException(422, '发太快啦，歇一下');
+            }
+            $chat = isset($state['chat']) && is_array($state['chat']) ? $state['chat'] : [];
+            $seq = (int) ($state['chatSeq'] ?? 0) + 1;
+            $chat[] = ['seq' => $seq, 'uid' => $userId, 'seat' => $seat, 'kind' => $kind, 'text' => $content, 'ts' => $now];
+            if (count($chat) > self::CHAT_KEEP) {
+                $chat = array_slice($chat, -self::CHAT_KEEP);
+            }
+            $state['chat'] = $chat;
+            $state['chatSeq'] = $seq;
+            $state['chatLastAt'][(string) $userId] = $now;
+            $room->state = $state;
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
      * 喊 UNO：剩 1 张时补喊，清除可举报窗口。
      *
      * @return array<string, mixed>
@@ -645,6 +732,7 @@ final class UnoRoomService
             foreach ($seats as $uid) {
                 $state['scores'][(string) $uid] = (int) ($oldState['scores'][(string) $uid] ?? 0);
             }
+            $state = $this->carryChat($oldState, $state);
             $state['lastEvent'] = ['type' => 'dealer', 'seat' => $dealer, 'byWinner' => $winnerSeat !== null];
             $room->seats = array_values($seats);
             $room->state = $state;
@@ -941,6 +1029,7 @@ final class UnoRoomService
             'drawStack' => isset($state['drawStack']['count']) ? ['count' => (int) $state['drawStack']['count'], 'only4' => ! empty($state['drawStack']['only4'])] : null,
             'uno' => $uno,
             'lastEvent' => $state['lastEvent'] ?? null,
+            'chat' => array_values($state['chat'] ?? []),
             'winnerUserId' => $room->winner_user_id,
             'winReason' => $room->win_reason,
             'scores' => $state['scores'] ?? [],
@@ -955,6 +1044,17 @@ final class UnoRoomService
     private function broadcast(UnoRoom $room): void
     {
         $this->pusher->pushRoom((string) $room->code, fn (int $userId): array => $this->serialize($room, $userId));
+    }
+
+    /** 开局/重开/定庄发牌都会整体替换 state：把聊天三件套（chat/chatSeq/chatLastAt）带到新 state。 */
+    private function carryChat(array $old, array $fresh): array
+    {
+        foreach (['chat', 'chatSeq', 'chatLastAt'] as $key) {
+            if (isset($old[$key])) {
+                $fresh[$key] = $old[$key];
+            }
+        }
+        return $fresh;
     }
 
     /**

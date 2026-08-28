@@ -23,6 +23,7 @@ import {
   passTurn,
   playCard,
   rematch,
+  sendChatMessage,
   startGame,
 } from '@/services/uno'
 import { canPlay } from '@/utils/uno'
@@ -228,6 +229,19 @@ export function useUnoRoom() {
     await act(() => rematch(current.code))
   }
 
+  /** 房间聊天（快捷句/表情/文字）。不用 acting 锁——聊天不应打断出牌操作；返回是否发送成功。 */
+  async function sendChat(kind: 'phrase' | 'emoji' | 'text', value: string): Promise<boolean> {
+    const current = state.value
+    if (!current || !isSeated.value) return false
+    try {
+      applyState(await sendChatMessage(current.code, kind, value))
+      return true
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '发送失败')
+      return false
+    }
+  }
+
   async function exitRoom() {
     const current = state.value
     const seated = isSeated.value
@@ -379,6 +393,7 @@ export function useUnoRoom() {
     sayUno,
     reportUno,
     requestRematch,
+    sendChat,
     exitRoom,
     startSync,
     stopSync,

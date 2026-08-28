@@ -17,6 +17,10 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
+          <view class="room__chat-btn" @tap="openChatPanel">
+            <text>💬</text>
+            <view v-if="unreadChat > 0" class="room__chat-badge">{{ unreadChat > 9 ? '9+' : unreadChat }}</view>
+          </view>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -33,6 +37,7 @@
       <view v-if="state.status === 'waiting'" class="waiting">
         <view class="waiting__players">
           <view v-for="p in state.players" :key="p.userId" class="waiting__player">
+            <view v-if="chatBubbles[p.seat]" class="seat-bubble seat-bubble--waiting" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[p.seat] }">{{ chatBubbles[p.seat] }}</view>
             <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="waiting__avatar" />
             <view v-else class="waiting__avatar waiting__avatar--placeholder">🍁</view>
             <text class="waiting__name">{{ p.nickname }}</text>
@@ -80,6 +85,7 @@
             :class="{ 'opp--current': p.seat === state.currentSeat, 'opp--left': p.left }"
           >
             <view class="opp__avatar-wrap">
+              <view v-if="chatBubbles[p.seat]" class="seat-bubble seat-bubble--opp" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[p.seat] }">{{ chatBubbles[p.seat] }}</view>
               <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="opp__avatar" />
               <view v-else class="opp__avatar opp__avatar--placeholder">🍁</view>
               <view class="opp__dot" :class="{ 'opp__dot--off': !p.online }" />
@@ -140,6 +146,7 @@
 
         <!-- 我的手牌 -->
         <view class="hand">
+          <view v-if="state.mySeat !== null && chatBubbles[state.mySeat]" class="seat-bubble seat-bubble--mine" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[state.mySeat] }">{{ chatBubbles[state.mySeat] }}</view>
           <view class="hand__status">
             <template v-if="state.status === 'playing'">
               <text v-if="state.colorPick && !state.colorPick.mine">等待 {{ colorPickPlayerName }} 选择开局颜色…</text>
@@ -152,7 +159,7 @@
           <scroll-view scroll-x class="hand__scroll" :show-scrollbar="false" enhanced>
             <view class="hand__cards">
               <view
-                v-for="(card, i) in state.myHand ?? []"
+                v-for="(card, i) in sortedHand"
                 :key="i"
                 class="hand__card"
                 :class="{
@@ -203,6 +210,87 @@
       </template>
     </view>
 
+    <!-- 聊天面板：快捷句 / 表情 / 自由文字 + 最近消息 -->
+    <view v-if="chatPanelVisible" class="chat-mask" @tap="closeChatPanel">
+      <view class="chat-panel" @tap.stop>
+        <view class="chat-panel__header">
+          <text class="chat-panel__title">牌桌嘴炮</text>
+          <text class="chat-panel__close" @tap="closeChatPanel">✕</text>
+        </view>
+
+        <!-- 最近消息 -->
+        <scroll-view scroll-y class="chat-panel__log" :show-scrollbar="false">
+          <view v-if="!chatLog.length" class="chat-panel__empty">还没有人说话，来带个节奏~</view>
+          <view v-for="m in chatLog" :key="m.seq" class="chat-panel__log-item" :class="{ 'chat-panel__log-item--mine': m.userId === myUserId }">
+            <text class="chat-panel__log-name">{{ m.userId === myUserId ? '我' : chatSenderName(m) }}</text>
+            <text class="chat-panel__log-text" :class="{ 'chat-panel__log-text--emoji': m.kind === 'emoji' }">{{ m.text }}</text>
+          </view>
+        </scroll-view>
+
+        <!-- tab 切换 -->
+        <view class="chat-panel__tabs">
+          <text
+            v-for="t in chatTabs"
+            :key="t.key"
+            class="chat-panel__tab"
+            :class="{ 'chat-panel__tab--on': chatTab === t.key, 'chat-panel__tab--off': t.key === 'text' && !unoChatTextEnabled }"
+            @tap="switchChatTab(t.key)"
+          >{{ t.label }}</text>
+        </view>
+
+        <!-- 快捷句（按局势前置相关分组） -->
+        <scroll-view v-if="chatTab === 'phrase'" scroll-y class="chat-panel__body" :show-scrollbar="false">
+          <view v-for="g in sortedPhraseGroups" :key="g.key" class="chat-panel__group">
+            <text class="chat-panel__group-title">{{ g.title }}</text>
+            <view class="chat-panel__phrases">
+              <text
+                v-for="p in g.phrases"
+                :key="p.id"
+                class="chat-panel__phrase"
+                :class="{ 'chat-panel__phrase--off': chatCooldown > 0 }"
+                @tap="sendPhraseMsg(p.id)"
+              >{{ p.text }}</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <!-- 表情 -->
+        <view v-else-if="chatTab === 'emoji'" class="chat-panel__body">
+          <view class="chat-panel__emojis">
+            <text
+              v-for="e in UNO_EMOJIS"
+              :key="e"
+              class="chat-panel__emoji"
+              :class="{ 'chat-panel__emoji--off': chatCooldown > 0 }"
+              @tap="sendEmojiMsg(e)"
+            >{{ e }}</text>
+          </view>
+        </view>
+
+        <!-- 自由文字（受运营台开关控制，服务端 msg_sec_check 过审） -->
+        <view v-else class="chat-panel__body chat-panel__body--text">
+          <view v-if="!unoChatTextEnabled" class="chat-panel__text-off">文字聊天维护中，先用快捷句和表情斗图吧</view>
+          <template v-else>
+            <view class="chat-panel__input-row">
+              <input
+                v-model="chatInput"
+                class="chat-panel__input"
+                type="text"
+                maxlength="40"
+                placeholder="说点什么（40 字内，须经审核）"
+                confirm-type="send"
+                :disabled="chatCooldown > 0"
+                @confirm="sendTextMsg"
+              />
+              <button class="chat-panel__send" :disabled="chatCooldown > 0" @tap="sendTextMsg">
+                {{ chatCooldown > 0 ? `${chatCooldown}s` : '发送' }}
+              </button>
+            </view>
+          </template>
+        </view>
+      </view>
+    </view>
+
     <!-- 资料设置弹层（微信头像选择 + 昵称输入） -->
     <view v-if="profileEditorVisible" class="color-mask" @tap="profileEditorVisible = false">
       <view class="color-panel" @tap.stop>
@@ -244,15 +332,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useUnoRoom } from '@/composables/useUnoRoom'
 import { useUnoCards } from '@/composables/useUnoCards'
+import { useFeatures } from '@/composables/useFeatures'
 import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
 import { BACK_KEY } from '@/utils/unoCards'
-import { COLOR_META, UNO_COLORS, cardLabel, isWild } from '@/utils/uno'
+import { COLOR_META, UNO_COLORS, cardLabel, isWild, sortHand } from '@/utils/uno'
+import { UNO_EMOJIS, UNO_PHRASE_GROUPS } from '@/utils/unoChat'
 import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
-import type { UnoColor } from '@/types/uno'
+import type { UnoChatMessage, UnoColor } from '@/types/uno'
 
 const {
   state,
@@ -280,10 +370,13 @@ const {
   sayUno,
   reportUno,
   requestRematch,
+  sendChat,
   exitRoom,
   startSync,
   stopSync,
 } = useUnoRoom()
+
+const { unoChatTextEnabled, refreshFeatures } = useFeatures()
 
 const { images, ensure, preload } = useUnoCards()
 
@@ -456,8 +549,11 @@ watch(
   },
 )
 
+/** 手牌自动理牌：同色归堆（春绿→夏红→秋黄→冬蓝→百搭），摸牌自动插进同色区。 */
+const sortedHand = computed(() => sortHand(state.value?.myHand ?? []))
+
 const selectedCard = computed(() => {
-  const hand = state.value?.myHand
+  const hand = sortedHand.value
   if (!hand || selectedIndex.value < 0 || selectedIndex.value >= hand.length) return null
   return hand[selectedIndex.value]
 })
@@ -568,7 +664,7 @@ function onCardTap(index: number) {
     uni.showToast({ title: '还没轮到你', icon: 'none' })
     return
   }
-  const card = state.value?.myHand?.[index]
+  const card = sortedHand.value[index]
   if (!card) return
   // 已选中的牌任何时候都可以点按取消选中（哪怕摸牌后已不可出）
   if (selectedIndex.value === index) {
@@ -665,6 +761,163 @@ function copyCode() {
   uni.setClipboardData({ data: state.value.code })
 }
 
+// ---------- 聊天：座位气泡 + 未读角标 + 三 tab 面板 ----------
+
+const CHAT_COOLDOWN_S = 3
+const CHAT_BUBBLE_MS = 4000
+
+const chatPanelVisible = ref(false)
+const chatTab = ref<'phrase' | 'emoji' | 'text'>('phrase')
+const chatTabs = [
+  { key: 'phrase' as const, label: '快捷' },
+  { key: 'emoji' as const, label: '表情' },
+  { key: 'text' as const, label: '文字' },
+]
+const chatInput = ref('')
+const chatCooldown = ref(0)
+const unreadChat = ref(0)
+/** 座位 → 气泡文案；emoji 单独记一 map 控制字号 */
+const chatBubbles = reactive<Record<number, string>>({})
+const chatBubbleEmoji = reactive<Record<number, boolean>>({})
+const bubbleTimers = new Map<number, ReturnType<typeof setTimeout>>()
+let cooldownTimer: ReturnType<typeof setTimeout> | null = null
+let lastChatSeq = 0
+let chatSynced = false
+
+const myUserId = computed(() => {
+  const current = state.value
+  return current?.players.find((p) => p.seat === current.mySeat)?.userId ?? null
+})
+
+/** 面板里的最近消息（最新在上，最多 30 条）。 */
+const chatLog = computed<UnoChatMessage[]>(() => {
+  return (state.value?.chat ?? []).slice(-30).reverse()
+})
+
+function chatSenderName(m: UnoChatMessage): string {
+  return state.value?.players.find((p) => p.seat === m.seat)?.nickname ?? '牌友'
+}
+
+/** 快捷句分组按局势前置：被 +4 → 质疑组；自己或对手剩 1 张 → 剩牌博弈组。 */
+const sortedPhraseGroups = computed(() => {
+  const current = state.value
+  let priorityKey: string | null = null
+  if (current?.challenge?.mine) {
+    priorityKey = 'wild4'
+  } else if (current?.status === 'playing') {
+    const someoneLeft = current.players.some((p) => !p.left && p.handCount === 1 && p.seat !== current.mySeat)
+    if (myHandCount.value === 1 || someoneLeft) priorityKey = 'lastCard'
+  }
+  if (!priorityKey) return UNO_PHRASE_GROUPS
+  const hit = UNO_PHRASE_GROUPS.find((g) => g.key === priorityKey)
+  return hit ? [hit, ...UNO_PHRASE_GROUPS.filter((g) => g !== hit)] : UNO_PHRASE_GROUPS
+})
+
+function showBubble(seat: number, kind: string, text: string) {
+  chatBubbles[seat] = text
+  chatBubbleEmoji[seat] = kind === 'emoji'
+  const old = bubbleTimers.get(seat)
+  if (old) clearTimeout(old)
+  bubbleTimers.set(seat, setTimeout(() => {
+    delete chatBubbles[seat]
+    delete chatBubbleEmoji[seat]
+    bubbleTimers.delete(seat)
+  }, CHAT_BUBBLE_MS))
+}
+
+// 新消息按 seq 增量驱动：冒气泡 + 音效 + 未读；进房首帧只对齐 seq 不回放历史
+watch(
+  () => state.value?.chat,
+  (chat) => {
+    if (!chat || !chat.length) return
+    if (!chatSynced) {
+      chatSynced = true
+      lastChatSeq = chat[chat.length - 1].seq
+      return
+    }
+    const fresh = chat.filter((m) => m.seq > lastChatSeq)
+    if (!fresh.length) return
+    lastChatSeq = fresh[fresh.length - 1].seq
+    for (const m of fresh) {
+      showBubble(m.seat, m.kind, m.text)
+      if (m.userId !== myUserId.value) {
+        playUnoSound('chat')
+        if (!chatPanelVisible.value) unreadChat.value++
+      }
+    }
+  },
+)
+
+// 换房间/回大厅时重置聊天增量游标
+watch(
+  () => state.value?.code,
+  () => {
+    chatSynced = false
+    lastChatSeq = 0
+    unreadChat.value = 0
+    for (const seat of Object.keys(chatBubbles)) delete chatBubbles[Number(seat)]
+  },
+)
+
+function openChatPanel() {
+  chatPanelVisible.value = true
+  unreadChat.value = 0
+}
+
+function closeChatPanel() {
+  chatPanelVisible.value = false
+}
+
+function switchChatTab(key: 'phrase' | 'emoji' | 'text') {
+  chatTab.value = key
+}
+
+function startChatCooldown() {
+  chatCooldown.value = CHAT_COOLDOWN_S
+  if (cooldownTimer) clearTimeout(cooldownTimer)
+  const tick = () => {
+    if (chatCooldown.value > 0) {
+      chatCooldown.value--
+      cooldownTimer = setTimeout(tick, 1000)
+    }
+  }
+  cooldownTimer = setTimeout(tick, 1000)
+}
+
+async function sendPhraseMsg(id: string) {
+  if (chatCooldown.value > 0) return
+  if (await sendChat('phrase', id)) {
+    closeChatPanel()
+    startChatCooldown()
+  }
+}
+
+async function sendEmojiMsg(emoji: string) {
+  if (chatCooldown.value > 0) return
+  if (await sendChat('emoji', emoji)) {
+    closeChatPanel()
+    startChatCooldown()
+  }
+}
+
+async function sendTextMsg() {
+  if (chatCooldown.value > 0) return
+  const text = chatInput.value.trim()
+  if (!text) {
+    uni.showToast({ title: '先说点什么吧', icon: 'none' })
+    return
+  }
+  if (!unoChatTextEnabled.value) {
+    uni.showToast({ title: '文字聊天维护中，用快捷句吧', icon: 'none' })
+    return
+  }
+  if (await sendChat('text', text)) {
+    chatInput.value = ''
+    closeChatPanel()
+    startChatCooldown()
+  }
+}
+
 // ---------- 生命周期 ----------
 
 onLoad((query) => {
@@ -677,6 +930,7 @@ onLoad((query) => {
 
 onShow(() => {
   if (state.value) startSync()
+  void refreshFeatures()
 })
 
 onHide(() => {
@@ -1274,6 +1528,166 @@ $maple-light: #FBE4D5;
     color: $ink;
     font-size: 28rpx;
     border-radius: 40rpx;
+  }
+}
+
+// ---------- 聊天 ----------
+// 座位气泡：挂在各锚点（对手头像/等待区玩家/我的手牌区）上方，约 4s 自动消失
+.seat-bubble {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 320rpx;
+  padding: 10rpx 20rpx;
+  background: #fff;
+  border: 2rpx solid rgba(73, 62, 55, 0.12);
+  border-radius: 18rpx;
+  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.15);
+  font-size: 24rpx;
+  color: $ink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 12;
+  animation: bubble-pop 0.18s ease-out;
+
+  &--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
+  &--opp { bottom: calc(100% + 8rpx); }
+  &--waiting { bottom: calc(100% + 8rpx); }
+  &--mine { top: -64rpx; left: 24rpx; transform: none; background: $maple-light; }
+}
+
+@keyframes bubble-pop {
+  from { transform: translateX(-50%) scale(0.6); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.room__chat-btn {
+  position: relative;
+  font-size: 34rpx;
+  padding: 8rpx;
+}
+
+.room__chat-badge {
+  position: absolute;
+  top: 0;
+  right: -6rpx;
+  min-width: 30rpx;
+  height: 30rpx;
+  line-height: 30rpx;
+  padding: 0 6rpx;
+  box-sizing: border-box;
+  border-radius: 15rpx;
+  background: $red;
+  color: #fff;
+  font-size: 20rpx;
+  text-align: center;
+}
+
+.chat-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(73, 62, 55, 0.28);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 40;
+}
+
+.chat-panel {
+  width: 100%;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: $cream;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+
+  &__header { display: flex; justify-content: space-between; align-items: center; }
+  &__title { font-size: 32rpx; font-weight: 700; color: $ink; }
+  &__close { font-size: 32rpx; color: rgba(73, 62, 55, 0.5); padding: 8rpx; }
+
+  &__log {
+    height: 200rpx;
+    margin-top: 16rpx;
+    padding: 12rpx 20rpx;
+    background: rgba(73, 62, 55, 0.05);
+    border-radius: 16rpx;
+    box-sizing: border-box;
+  }
+  &__empty { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); text-align: center; margin-top: 60rpx; }
+  &__log-item { display: flex; align-items: baseline; gap: 12rpx; margin-top: 8rpx; }
+  &__log-name { font-size: 22rpx; color: rgba(73, 62, 55, 0.55); flex-shrink: 0; }
+  &__log-text { font-size: 26rpx; color: $ink; word-break: break-all; }
+  &__log-text--emoji { font-size: 34rpx; }
+
+  &__tabs { display: flex; gap: 12rpx; margin-top: 20rpx; }
+  &__tab {
+    padding: 8rpx 32rpx;
+    border-radius: 28rpx;
+    background: rgba(73, 62, 55, 0.08);
+    font-size: 26rpx;
+    color: $ink;
+
+    &--on { background: $felt; color: $cream; font-weight: 600; }
+    &--off { opacity: 0.45; }
+  }
+
+  &__body { flex: 1; min-height: 320rpx; max-height: 40vh; margin-top: 16rpx; }
+
+  &__group { margin-top: 12rpx; }
+  &__group-title { font-size: 22rpx; color: rgba(73, 62, 55, 0.5); }
+  &__phrases { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 10rpx; }
+  &__phrase {
+    padding: 12rpx 24rpx;
+    background: #fff;
+    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    border-radius: 28rpx;
+    font-size: 26rpx;
+    color: $ink;
+
+    &--off { opacity: 0.45; }
+  }
+
+  &__emojis { display: flex; flex-wrap: wrap; gap: 8rpx; }
+  &__emoji {
+    width: 122rpx;
+    height: 96rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52rpx;
+    border-radius: 16rpx;
+    background: #fff;
+
+    &--off { opacity: 0.45; }
+  }
+
+  &__body--text { display: flex; flex-direction: column; justify-content: center; }
+  &__text-off { font-size: 26rpx; color: rgba(73, 62, 55, 0.55); text-align: center; }
+  &__input-row { display: flex; gap: 16rpx; align-items: center; }
+  &__input {
+    flex: 1;
+    height: 80rpx;
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 0 24rpx;
+    font-size: 28rpx;
+    color: $ink;
+  }
+  &__send {
+    width: 160rpx;
+    height: 80rpx;
+    line-height: 80rpx;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    font-size: 28rpx;
+    border-radius: 16rpx;
+    padding: 0;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
 }
 </style>

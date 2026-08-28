@@ -54,6 +54,21 @@ export function scoreHand(hand: string[]): number {
   return hand.reduce((sum, card) => sum + scoreCard(card), 0)
 }
 
+/** 理牌序：颜色按四季 春绿→夏红→秋黄→冬蓝，百搭压轴；色内数字 0-9，其后 S/R/D，百搭 变色牌→+4。 */
+const HAND_COLOR_ORDER: Record<string, number> = { g: 0, r: 1, y: 2, b: 3, w: 4 }
+const HAND_VALUE_ORDER: Record<string, number> = { S: 11, R: 12, D: 13, W: 14, F: 15 }
+
+/** 手牌自动理牌：同色归堆，摸到的牌直接落进同色区。返回新数组（后端手牌顺序与展示解耦，出牌按牌码提交）。 */
+export function sortHand(cards: string[]): string[] {
+  const rank = (card: string): number => {
+    const color = HAND_COLOR_ORDER[cardColor(card)] ?? 9
+    const value = cardValue(card)
+    const valueRank = value >= '0' && value <= '9' ? Number(value) : (HAND_VALUE_ORDER[value] ?? 99)
+    return color * 100 + valueRank
+  }
+  return [...cards].sort((a, b) => rank(a) - rank(b))
+}
+
 /** 牌的展示名（提示/日志用）。 */
 export function cardLabel(card: string): string {
   const value = cardValue(card)

@@ -19,6 +19,8 @@ final class FeatureFlagService
 {
     private const AI_ENABLED_KEY = 'feature.ai_enabled';
 
+    private const UNO_CHAT_TEXT_KEY = 'feature.uno_chat_text';
+
     public function aiEnabled(): bool
     {
         $value = Db::table('app_configs')->where('config_key', self::AI_ENABLED_KEY)->value('config_value');
@@ -39,6 +41,34 @@ final class FeatureFlagService
     {
         if (! $this->aiEnabled()) {
             throw new BizException(403, 'AI 功能维护中，暂不可用');
+        }
+    }
+
+    /**
+     * UNO 房间自由文字聊天开关：与 AI 开关不同，默认开——
+     * 自由文字全量经 msg_sec_check 过审才广播，合规路径完整；
+     * 行值未配置（迁移未跑）也视为开，审核有异议时运营台秒关，快捷句/表情不受影响。
+     */
+    public function unoChatTextEnabled(): bool
+    {
+        $value = Db::table('app_configs')->where('config_key', self::UNO_CHAT_TEXT_KEY)->value('config_value');
+        return $value !== '0';
+    }
+
+    public function setUnoChatTextEnabled(bool $enabled): bool
+    {
+        Db::table('app_configs')->updateOrInsert(
+            ['config_key' => self::UNO_CHAT_TEXT_KEY],
+            ['config_value' => $enabled ? '1' : '0', 'updated_at' => new Expression('CURRENT_TIMESTAMP')],
+        );
+        return $enabled;
+    }
+
+    /** 自由文字发送入口统一调用：关闭时抛 403（前端隐藏文字输入、保留快捷句/表情）。 */
+    public function requireUnoChatTextEnabled(): void
+    {
+        if (! $this->unoChatTextEnabled()) {
+            throw new BizException(403, '文字聊天维护中，快捷句和表情仍可用');
         }
     }
 }

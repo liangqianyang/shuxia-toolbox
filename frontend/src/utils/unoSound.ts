@@ -4,7 +4,7 @@
 
 const SOUND_KEY = 'shuxia-uno-sound-enabled'
 
-export type UnoSoundName = 'play' | 'draw' | 'uno' | 'win'
+export type UnoSoundName = 'play' | 'draw' | 'uno' | 'win' | 'chat'
 
 const players = new Map<UnoSoundName, UniApp.InnerAudioContext>()
 let enabled = true
