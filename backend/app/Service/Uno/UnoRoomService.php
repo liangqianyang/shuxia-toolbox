@@ -1043,7 +1043,7 @@ final class UnoRoomService
     /** 写操作提交后向房间内 WS 连接广播最新状态（每个连接按自己视角序列化）。 */
     private function broadcast(UnoRoom $room): void
     {
-        $this->pusher->pushRoom((string) $room->code, fn (int $userId): array => $this->serialize($room, $userId));
+        $this->pusher->pushRoom((string) $room->code, fn(int $userId): array => $this->serialize($room, $userId));
     }
 
     /** 开局/重开/定庄发牌都会整体替换 state：把聊天三件套（chat/chatSeq/chatLastAt）带到新 state。 */

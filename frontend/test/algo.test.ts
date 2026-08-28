@@ -33,6 +33,28 @@ import {
   pointToIntersection,
 } from '@/utils/gomoku'
 import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/utils/uno'
+import {
+  CRUSH_CELL,
+  FLY_FROM,
+  FLY_TO,
+  HANGAR,
+  JOURNEY,
+  PLANES,
+  STAR_CELLS,
+  absoluteCell,
+  applyMove,
+  colorStart,
+  computePlaces,
+  initialState,
+  isGameOver,
+  legalMoves,
+  nextSeat,
+  pickAuto,
+  resolveMove,
+  seatFinished,
+  victimsAt,
+  type LudoCoreState,
+} from '@/utils/ludo'
 
 function testUno() {
   // 牌编码解析
@@ -71,6 +93,166 @@ function testUno() {
   assert(JSON.stringify(source) === JSON.stringify(['wF', 'r5', 'b3']), '理牌不改入参数组')
 }
 
+
+function testLudo() {
+  console.log('飞行棋规则镜像（utils/ludo.ts ↔ PHP LudoRule）')
+  const state = (planes: number[][], colors = [0, 1, 2, 3]): LudoCoreState => ({
+    planes, colors, leftSeats: [], finishedOrder: [], leftProgress: {},
+  })
+  const st = (seat: number, mine: number[], enemies: Record<number, number[]> = {}): LudoCoreState => {
+    const all = Array.from({ length: 4 }, () => Array<number>(PLANES).fill(HANGAR))
+    all[seat] = mine
+    for (const [s, p] of Object.entries(enemies)) all[Number(s)] = p
+    return state(all)
+  }
+
+  // 几何：起飞格间隔 13、颜色循环、星标集
+  assert(colorStart(0) === 0 && colorStart(1) === 13 && colorStart(2) === 26 && colorStart(3) === 39, '四色起飞格 0/13/26/39')
+  assert(absoluteCell(1, 13) === 26 && absoluteCell(3, 13) === 0, '相对 13 落在下一色起飞格（星标）')
+  assert(STAR_CELLS.includes(absoluteCell(2, 26)) && STAR_CELLS.includes(absoluteCell(0, 39)), '相对 26/39 也是星标格')
+
+  // 机场：非 6 无走法，掷 6 全员可起飞
+  const hangar = initialState(4, 0)
+  assert(legalMoves(hangar, 0, 1).length === 0 && legalMoves(hangar, 0, 5).length === 0, '全在机场且非 6：无合法走法')
+  const takeoffMoves = legalMoves(hangar, 0, 6)
+  assert(takeoffMoves.length === 4 && takeoffMoves.every((m) => m.to === 0 && m.fx[0].t === 'takeoff'), '掷 6：四架均可起飞到 d=0')
+
+  // 起飞格星标共存：敌机停在我起飞格，起飞不击落
+  const takeoffMove = resolveMove(st(0, [HANGAR], { 1: [0, -1, -1, -1] }), 0, 0, 6)!
+  assert(takeoffMove.fx.every((f) => f.t !== 'capture'), '起飞落自己星标格不击落共存敌机')
+
+  // 反弹参数化：跑道内超出反弹回 [51..55]，恰好到 56 终局
+  for (let pos = 51; pos <= 55; pos++) {
+    for (let roll = 1; roll <= 6; roll++) {
+      const s = st(0, [pos, -1, -1, -1])
+      const mv = resolveMove(s, 0, 0, roll)!
+      const target = pos + roll
+      if (target <= 56) {
+        assert(mv.to === target && mv.finish === (target === 56), `跑道 ${pos}+${roll} 直达`)
+      } else {
+        assert(mv.to === 112 - target && mv.to >= 51 && mv.to <= 55 && !mv.finish, `跑道 ${pos}+${roll} 反弹到 ${mv.to}`)
+      }
+    }
+  }
+  assert(resolveMove(st(0, [50, -1, -1, -1]), 0, 0, 6)!.finish, '主道 50+6 恰好终局')
+  const bounceMove = resolveMove(st(0, [54, -1, -1, -1]), 0, 0, 5)!
+  assert(bounceMove.wp.length === 2 && bounceMove.wp[0].d === 56 && bounceMove.wp[1].d === 53 && bounceMove.fx.length === 0, '反弹航点 [56, 53] 且无效果')
+
+  // 跳跃：4..44 己色格跳 +4；48 死格不跳；跳后不再跳
+  assert(resolveMove(st(0, [28, -1, -1, -1]), 0, 0, 4)!.to === 36, '28 掷 4 落 32 → 跳 36 后停（不再连跳）')
+  const noJump48 = resolveMove(st(0, [44, -1, -1, -1]), 0, 0, 4)!
+  assert(noJump48.to === 48 && noJump48.fx.every((f) => f.t !== 'jump'), '骰落 48 己色但不跳（目标已入跑道）')
+  const jump44to48 = resolveMove(st(0, [40, -1, -1, -1]), 0, 0, 4)!
+  assert(jump44to48.to === 48 && jump44to48.fx.some((f) => f.t === 'jump'), '骰落 44 → 跳 48 终结')
+
+  // 飞行：直接骰落 16 → 飞行取代跳跃（16→28 接跳 32）；碾压恰为 22
+  const flyMove = resolveMove(st(0, [10, -1, -1, -1]), 0, 0, 6)!
+  assert(flyMove.to === 32 && !flyMove.fx.some((f) => f.t === 'jump' && f.from === 16), '骰落 16：飞行取代跳跃')
+  assert(flyMove.wp.map((w) => w.d).join(',') === '16,28,32' && flyMove.wp[1].arc === true, '飞行航点 16→28(弧)→32')
+
+  // 经典大连招：pos 8 掷 4 → 12 跳 16 飞 28 跳 32（+24）
+  const combo = resolveMove(st(0, [8, -1, -1, -1]), 0, 0, 4)!
+  assert(combo.to === 32 && combo.fx.some((f) => f.t === 'jump' && f.from === 12) && combo.fx.some((f) => f.t === 'fly'), '大连招 8→12→16→28→32')
+
+  // 碾压：恰为弧下格（移动者色 0 相对 22 = 绝对 22；敌色 1 相对 9 → 绝对 22，相对 8/10 → 21/23）
+  const crushMove = resolveMove(st(0, [10, -1, -1, -1], { 1: [9, 8, 10, -1] }), 0, 0, 6)!
+  const crushFx = crushMove.fx.find((f) => f.t === 'crush')
+  assert(!!crushFx && crushFx.v?.length === 1 && crushFx.v![0][0] === 1 && crushFx.v![0][1] === 0, '碾压恰为弧下格（绝对 22）上的敌机')
+  assert(!crushMove.fx.some((f) => f.t === 'capture' && f.v?.some((v) => v[1] === 1 || v[1] === 2)), '弧两侧格（绝对 21/23）不受碾压')
+
+  // 击落：非星标格落敌机全回机场；先击落后跳跃（敌色 3 相对 25 → 绝对 12 = 我色 0 相对 12 落点）
+  const capMove = resolveMove(st(0, [8, -1, -1, -1], { 3: [25, -1, -1, -1] }), 0, 0, 4)!
+  const capIdx = capMove.fx.findIndex((f) => f.t === 'capture')
+  const jumpIdx = capMove.fx.findIndex((f) => f.t === 'jump')
+  assert(capIdx >= 0 && capMove.fx[capIdx].v?.length === 1 && capMove.fx[capIdx].v![0][0] === 3, '落敌机格击落敌机')
+  assert(jumpIdx > capIdx, '先结算击落再触发跳跃')
+  const applied = state([[8, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1], [25, -1, -1, -1]])
+  applyMove(applied, 0, 0, 4)
+  assert(applied.planes[3][0] === HANGAR, 'applyMove 把被击落敌机送回机场')
+  assert(applied.planes[0][0] === 32, 'applyMove 落定最终坐标（含跳跃/飞行）')
+
+  // 己机共存：同格己机不被击落
+  const ownStack = st(0, [12, 12, -1, -1])
+  assert(resolveMove(ownStack, 0, 0, 4)!.fx.every((f) => f.t !== 'capture'), '己方飞机同格共存不互撞')
+
+  // 完成与终局：第 4 架到 56 → finishedOrder；终局 = 活跃未完成座位 ≤ 1
+  const finState = st(0, [56, 56, 56, 55])
+  const finMove = resolveMove(finState, 0, 3, 1)!
+  assert(finMove.finish && finMove.to === 56, '跑道 55+1 精确终局')
+  applyMove(finState, 0, 3, 1)
+  assert(seatFinished(finState, 0) && finState.finishedOrder.includes(0), '第 4 架到终点记入 finishedOrder')
+  assert(resolveMove(finState, 0, 0, 6) === null, '已到终点的飞机不能再走（防反弹拉回）')
+  assert(!isGameOver(finState, 4), '其余 3 人未完成：对局继续')
+  finState.leftSeats = [1, 2]
+  assert(isGameOver(finState, 4), '活跃未完成 ≤ 1 即终局')
+
+  // 排名：离开者恒在存活者之后（2 人逃跑判负语义）
+  const rankState: LudoCoreState = {
+    planes: [[56, 56, 56, 56], [-1, -1, -1, -1]],
+    colors: [0, 2], leftSeats: [], finishedOrder: [0], leftProgress: { '1': [50, 48, 20, 10] },
+  }
+  // 座位 1 是存活未完成 → 第 2 名
+  const places2 = computePlaces({ ...rankState, leftSeats: [], leftProgress: {} }, 2)
+  assert(places2[0] === 1 && places2[1] === 2, '完成者第 1、存活者第 2')
+  const forfeitPlaces = computePlaces({ ...rankState, leftSeats: [1] }, 2)
+  assert(forfeitPlaces[0] === 1 && forfeitPlaces[1] === 2, '离开者即使进度更高也排在存活者之后')
+
+  // nextSeat 跳过离开/完成座位
+  const skipState: LudoCoreState = {
+    planes: [[56, 56, 56, 56], [-1, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1]],
+    colors: [0, 1, 2, 3], leftSeats: [2], finishedOrder: [0], leftProgress: { '2': [-1, -1, -1, -1] },
+  }
+  assert(nextSeat(skipState, 4, 0) === 1 && nextSeat(skipState, 4, 1) === 3, '回合推进跳过离开与完成座位')
+
+  // 启发式确定性：能终局 > 击落 > 前进量；平局取最小机号
+  assert(pickAuto(legalMoves(st(0, [55, 40, 44, -1]), 0, 1)) === 0, '能终局的机优先（55+1）')
+  // 敌色 1 相对 24 → 绝对 37 = 我色 0 从 32 掷 5 的落点
+  assert(pickAuto(legalMoves(st(0, [32, 20, -1, -1], { 1: [24, -1, -1, -1] }), 0, 5)) === 0, '能击落的走法优先')
+  assert(pickAuto(legalMoves(st(0, [10, 10, 10, 10]), 0, 3)) === 0, '平局取最小机号')
+  // 反弹走法得分为负（55 掷 5 → 52，-3 分）：唯一走法是反弹时也必须选得出飞机，不能返回 null
+  const bounceMoves = legalMoves(st(0, [55, -1, -1, -1]), 0, 5)
+  assert(bounceMoves.length === 1 && pickAuto(bounceMoves) === 0, '唯一反弹走法（负分）仍能选出飞机（PHP 同修）')
+
+  // 模糊测试：随机走满整局，不变量校验（确定性 PRNG）
+  const rand = rng(20260828)
+  for (let game = 0; game < 200; game++) {
+    const players = 2 + Math.floor(rand() * 3) // 2-4 人
+    const gs = initialState(players, Math.floor(rand() * players))
+    let current = Math.floor(rand() * players)
+    let turns = 0
+    while (!isGameOver(gs, players)) {
+      turns++
+      if (turns > 5000) throw new Error('模糊测试未终局（死循环）')
+      if (gs.leftSeats.includes(current) || gs.finishedOrder.includes(current)) {
+        current = nextSeat(gs, players, current)
+        continue
+      }
+      const roll = 1 + Math.floor(rand() * 6)
+      const moves = legalMoves(gs, current, roll)
+      if (moves.length === 0) {
+        // 不变量：掷 6 必有走法（未完成座位）
+        if (roll === 6) throw new Error(`掷 6 却无走法（${players} 人局 seat=${current} planes=${gs.planes[current]}）`)
+        current = nextSeat(gs, players, current)
+        continue
+      }
+      const pick = moves[Math.floor(rand() * moves.length)]
+      applyMove(gs, current, pick.p, roll)
+      for (let s = 0; s < players; s++) {
+        for (const pos of gs.planes[s]) {
+          if (pos !== HANGAR && (pos < 0 || pos > JOURNEY)) throw new Error(`非法坐标 ${pos}`)
+        }
+      }
+      if (roll !== 6 || gs.finishedOrder.includes(current)) current = nextSeat(gs, players, current)
+    }
+    const places = computePlaces(gs, players)
+    assert(Object.keys(places).length === players, `模糊局 ${game} 排名覆盖全部座位`)
+    const sortedPlaces = Object.values(places).sort((a, b) => a - b)
+    if (JSON.stringify(sortedPlaces) !== JSON.stringify(Array.from({ length: players }, (_, i) => i + 1))) {
+      throw new Error(`排名不连续：${JSON.stringify(places)}`)
+    }
+  }
+  assert(true, '200 局随机模糊：全部终局、坐标合法、排名连续、掷 6 必有走法')
+}
 
 function testGomoku() {
   // 胜负判定：横/竖/双斜/贴边/长连/阻断/不中
@@ -971,6 +1153,7 @@ async function main() {
   testLotteryAlgorithms()
   testGomoku()
   testUno()
+  testLudo()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)

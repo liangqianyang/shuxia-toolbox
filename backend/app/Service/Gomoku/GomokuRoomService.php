@@ -370,7 +370,7 @@ final class GomokuRoomService
     /** 写操作提交后向房间内 WS 连接广播最新状态（每个连接按自己视角序列化）。 */
     private function broadcast(GomokuRoom $room): void
     {
-        $this->pusher->pushRoom((string) $room->code, fn (int $userId): array => $this->serialize($room, $userId));
+        $this->pusher->pushRoom((string) $room->code, fn(int $userId): array => $this->serialize($room, $userId));
     }
 
     /** 房间内某用户的座位色；旁观/空位返回 null。 */

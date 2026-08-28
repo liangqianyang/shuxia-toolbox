@@ -13,6 +13,8 @@ use App\Controller\FortuneController;
 use App\Controller\GomokuController;
 use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
+use App\Controller\LudoController;
+use App\Controller\LudoWsController;
 use App\Controller\TravelController;
 use App\Controller\ToolController;
 use App\Controller\UnoController;
@@ -97,6 +99,18 @@ Router::addGroup('/api', function (): void {
     Router::post('/uno/room/{code}/rematch', [UnoController::class, 'rematch']);
     Router::post('/uno/room/{code}/leave', [UnoController::class, 'leave']);
 
+    // 飞行棋联机：房间创建/加入/开局、轮询同步（WS 降级通道）、掷骰/走子两阶段回合、
+    // 托管开关、再来一局与离开。阶段超时由 Timer 清扫器 + 写操作懒检查推进。
+    Router::post('/ludo/room', [LudoController::class, 'create']);
+    Router::post('/ludo/room/{code}/join', [LudoController::class, 'join']);
+    Router::get('/ludo/room/{code}', [LudoController::class, 'state']);
+    Router::post('/ludo/room/{code}/start', [LudoController::class, 'start']);
+    Router::post('/ludo/room/{code}/roll', [LudoController::class, 'roll']);
+    Router::post('/ludo/room/{code}/move', [LudoController::class, 'move']);
+    Router::post('/ludo/room/{code}/auto', [LudoController::class, 'auto']);
+    Router::post('/ludo/room/{code}/rematch', [LudoController::class, 'rematch']);
+    Router::post('/ludo/room/{code}/leave', [LudoController::class, 'leave']);
+
     // 每日灵签：配额、抽签（服务端权威随机）、AI 解签（缓存）、分享加次、历史。
     Router::get('/fortune/quota', [FortuneController::class, 'quota']);
     Router::post('/fortune/draw', [FortuneController::class, 'draw']);
@@ -117,4 +131,5 @@ Router::addGroup('/api', function (): void {
 Router::addServer('ws', function (): void {
     Router::get('/gomoku/ws', GomokuWsController::class);
     Router::get('/uno/ws', UnoWsController::class);
+    Router::get('/ludo/ws', LudoWsController::class);
 });

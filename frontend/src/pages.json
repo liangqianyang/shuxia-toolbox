@@ -91,6 +91,19 @@
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pages-ludo",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "飞行棋"
+          }
+        }
+      ]
+    }
+  ],
   "globalStyle": {
     "navigationBarBackgroundColor": "#FFF8F0",
     "navigationBarTextStyle": "black",
