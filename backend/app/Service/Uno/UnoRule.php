@@ -198,18 +198,19 @@ final class UnoRule
 
     /**
      * 开局：发牌 + 翻首张并结算首张效果，返回初始 state。
+     * $dealerSeat 为庄家（先手）座位：首局由抽牌比大小产生，次局起为上局赢家。
      *
      * @param array<int, int> $seats
      * @return array<string, mixed>
      */
-    public static function setupGame(array $seats): array
+    public static function setupGame(array $seats, int $dealerSeat = 0): array
     {
         $deck = self::buildDeck(count($seats));
         $hands = [];
         foreach ($seats as $uid) {
             $hands[(string) $uid] = array_splice($deck, 0, self::HAND_SIZE);
         }
-        // 翻首张：仅 +4 洗回重翻（官方）；变色牌保留，由首位玩家选色开局
+        // 翻首张：仅 +4 洗回重翻（官方）；变色牌保留，由庄家选色开局
         $first = array_pop($deck);
         while (self::cardValue($first) === 'F') {
             $deck[] = $first;
@@ -217,14 +218,17 @@ final class UnoRule
             $first = array_pop($deck);
         }
         $state = [
+            'phase' => 'playing',
+            'dealerSeat' => $dealerSeat,
+            'dealerDraws' => null,
             'deck' => $deck,
             'hands' => $hands,
             'discard' => [$first],
             'currentColor' => self::isWild($first) ? '' : self::cardColor($first),
             'direction' => 1,
-            'currentSeat' => 0,
+            'currentSeat' => $dealerSeat,
             'drawStack' => null,
-            'pendingColorPick' => self::isWild($first) ? ['seat' => 0] : null,
+            'pendingColorPick' => self::isWild($first) ? ['seat' => $dealerSeat] : null,
             'pendingWild4' => null,
             'unoVulnerable' => null,
             'unoDeclared' => [],
@@ -233,22 +237,47 @@ final class UnoRule
             'drawnCard' => null,
             'scores' => array_fill_keys(array_map('strval', $seats), 0),
             'roundScores' => null,
-            'lastEvent' => ['type' => 'start', 'seat' => 0],
+            'lastEvent' => ['type' => 'start', 'seat' => $dealerSeat],
         ];
-        // 首张功能牌效果（官方）：S 跳首位 / R 反转方向 / D 首位摸 2 并跳过
+        // 首张功能牌效果（官方）：S 跳庄家 / R 反转方向 / D 庄家摸 2 并跳过
         $value = self::cardValue($first);
         if ($value === 'S') {
             $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
         } elseif ($value === 'R') {
             $state['direction'] = -1;
         } elseif ($value === 'D') {
-            $uid = (string) $seats[0];
+            $uid = (string) $seats[$dealerSeat];
             foreach (self::drawCards($state, 2) as $c) {
                 $state['hands'][$uid][] = $c;
             }
             $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
         }
         return $state;
+    }
+
+    /** 抽牌比大小定庄家：随机抽一张数字牌（0-9）。 */
+    public static function drawDealerCard(): string
+    {
+        return self::COLORS[random_int(0, 3)] . random_int(0, 9);
+    }
+
+    /**
+     * 比大小：数字最大者为庄家；同点按座位顺序就近（座位号小者胜）。
+     *
+     * @param array<int|string, string> $draws seat => card
+     */
+    public static function pickDealer(array $draws): int
+    {
+        $dealer = 0;
+        $best = -1;
+        foreach ($draws as $seat => $card) {
+            $value = (int) self::cardValue($card);
+            if ($value > $best) {
+                $best = $value;
+                $dealer = (int) $seat;
+            }
+        }
+        return $dealer;
     }
 
     /**
@@ -315,7 +344,11 @@ final class UnoRule
                 break;
             case 'D':
                 // 叠加村规：+2 不立即罚摸，累计进 drawStack，下家可出任意 +2/+4 继续叠或选择全摸
-                $state['drawStack'] = ['count' => (int) ($state['drawStack']['count'] ?? 0) + 2];
+                // （一旦叠过 +4 则只能再叠 +4，由 Service 校验 only4）
+                $state['drawStack'] = [
+                    'count' => (int) ($state['drawStack']['count'] ?? 0) + 2,
+                    'only4' => (bool) ($state['drawStack']['only4'] ?? false),
+                ];
                 $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
                 $event['type'] = 'draw2';
                 $event['stackCount'] = (int) $state['drawStack']['count'];
@@ -323,8 +356,8 @@ final class UnoRule
                 break;
             case 'F':
                 if (($state['drawStack'] ?? null) !== null) {
-                    // 叠在加牌上的 +4：不可质疑，继续累计
-                    $state['drawStack'] = ['count' => (int) $state['drawStack']['count'] + 4];
+                    // 叠在加牌上的 +4：不可质疑，继续累计，且之后只能再叠 +4
+                    $state['drawStack'] = ['count' => (int) $state['drawStack']['count'] + 4, 'only4' => true];
                     $state['currentSeat'] = self::advanceSeat($state, $seats, 1);
                     $event['type'] = 'wild4';
                     $event['stackCount'] = (int) $state['drawStack']['count'];

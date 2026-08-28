@@ -140,6 +140,9 @@ const instance = getCurrentInstance()
 const joinCode = ref('')
 const createColor = ref<GomokuColor>('black')
 const busy = ref(false)
+/** 两次点击确认落子：第一次点出幽灵子预览，第二次点同一位置才提交 */
+const pendingMove = ref<{ x: number; y: number } | null>(null)
+let previewHintShown = false
 
 // ---------- 棋盘渲染 ----------
 
@@ -210,6 +213,22 @@ function drawBoard() {
       ctx.arc(px, py, cell * 0.3, 0, Math.PI * 2)
       ctx.stroke()
     }
+    // 待确认的落子预览（半透明幽灵子，再点一次同一位置确认）
+    if (pendingMove.value && current.status === 'playing') {
+      const { px, py } = intersectionToPoint(pendingMove.value.x, pendingMove.value.y, metrics)
+      ctx.save()
+      ctx.globalAlpha = 0.45
+      drawStone(ctx, px, py, cell * 0.44, myColor.value !== 'white')
+      ctx.restore()
+      // 确认提示圈
+      ctx.strokeStyle = '#e06a5a'
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 4])
+      ctx.beginPath()
+      ctx.arc(px, py, cell * 0.42, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
     // 胜利连线
     if (current.winLine && current.winLine.length >= 2) {
       const first = current.winLine[0]
@@ -252,7 +271,24 @@ async function onBoardTap(event: unknown) {
   if (detail?.x === undefined || detail?.y === undefined) return
   if (!boardRect) boardRect = await getElementRect('#gomoku-board', instance)
   const move = pointToIntersection(detail.x - boardRect.left, detail.y - boardRect.top, metrics)
-  if (move) await tapIntersection(move.x, move.y)
+  if (!move) {
+    pendingMove.value = null
+    drawBoard()
+    return
+  }
+  const pending = pendingMove.value
+  if (pending && pending.x === move.x && pending.y === move.y) {
+    // 第二次点同一位置：确认落子
+    pendingMove.value = null
+    await tapIntersection(move.x, move.y)
+    return
+  }
+  pendingMove.value = move
+  if (!previewHintShown) {
+    previewHintShown = true
+    uni.showToast({ title: '再点一次同一位置确认落子', icon: 'none' })
+  }
+  drawBoard()
 }
 
 // 状态变化即重画（含乐观落子与服务端推送）；手数变多播落子音，自己五连获胜播胜利音
@@ -261,6 +297,7 @@ let prevStatus = ''
 watch(
   state,
   (next) => {
+    pendingMove.value = null // 服务端状态推进后清掉未确认的预览
     drawBoard()
     if (!next) {
       prevMovesCount = 0
@@ -268,6 +305,12 @@ watch(
       return
     }
     const firstLoad = prevStatus === ''
+    // 对手加入：等待→开局的瞬间提示 + 提示音
+    if (!firstLoad && prevStatus === 'waiting' && next.status === 'playing') {
+      const name = opponent.value?.nickname || '对手'
+      uni.showToast({ title: `${name} 加入了房间，开始对弈！`, icon: 'none' })
+      playGomokuPlace()
+    }
     if (!firstLoad && next.movesCount > prevMovesCount) playGomokuPlace()
     if (
       !firstLoad

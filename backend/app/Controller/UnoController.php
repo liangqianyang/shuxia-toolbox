@@ -44,6 +44,12 @@ final class UnoController extends AbstractController
         return $this->ok($this->rooms->start($code, $this->requireUserId($request)));
     }
 
+    #[RateLimit(create: 4, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function dealerDraw(string $code, RequestInterface $request): array
+    {
+        return $this->ok($this->rooms->dealerDraw($code, $this->requireUserId($request)));
+    }
+
     #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function play(string $code, RequestInterface $request): array
     {

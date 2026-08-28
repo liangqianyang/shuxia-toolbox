@@ -13,6 +13,7 @@ import {
   challengeWild4,
   chooseColor,
   createRoom,
+  dealerDraw,
   declineChallenge,
   declareUno,
   drawCard,
@@ -57,14 +58,14 @@ export function useUnoRoom() {
   })
   /** 手牌数（含未开局时的 0）。 */
   const myHandCount = computed(() => state.value?.myHand?.length ?? 0)
-  /** 某张牌我能否出（即时置灰；权威以后端为准）。叠加态下只能出 +2/+4。 */
+  /** 某张牌我能否出（即时置灰；权威以后端为准）。
+   *  叠加态：+2 起的叠可出 +2/+4，叠过 +4 后只能再叠 +4；被 +4 的质疑窗口内只能叠 +4。 */
   function canIPlay(card: string): boolean {
     const current = state.value
     if (!current || !isMyTurn.value || !current.topCard) return false
-    if (current.drawStack) {
-      const v = card[1]
-      return v === 'D' || v === 'F'
-    }
+    const v = card[1]
+    if (current.challenge?.mine) return v === 'F'
+    if (current.drawStack) return current.drawStack.only4 ? v === 'F' : v === 'D' || v === 'F'
     return canPlay(card, current.topCard, current.currentColor)
   }
 
@@ -161,6 +162,12 @@ export function useUnoRoom() {
     const current = state.value
     if (!current) return
     await act(() => startGame(current.code))
+  }
+
+  async function drawDealer() {
+    const current = state.value
+    if (!current) return
+    await act(() => dealerDraw(current.code))
   }
 
   async function play(card: string, chosenColor: UnoColor | null, declaredUno: boolean) {
@@ -362,6 +369,7 @@ export function useUnoRoom() {
     createAndEnter,
     joinByCode,
     start,
+    drawDealer,
     play,
     draw,
     pass,

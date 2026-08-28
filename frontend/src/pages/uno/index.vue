@@ -48,6 +48,29 @@
 
       <!-- 牌桌 -->
       <template v-else>
+        <!-- 抽牌比大小定庄家（首局） -->
+        <view v-if="state.phase === 'dealerDraw'" class="dealer">
+          <view class="dealer__title">🎲 抽牌比大小定庄家</view>
+          <view class="dealer__sub">数字最大的玩家成为庄家先出牌 · {{ turnCountdown }}s 后未抽的将自动代抽</view>
+          <view class="dealer__players">
+            <view v-for="p in state.players" :key="p.userId" class="dealer__player">
+              <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="dealer__avatar" />
+              <view v-else class="dealer__avatar dealer__avatar--placeholder">🍁</view>
+              <text class="dealer__name">{{ p.nickname }}</text>
+              <image
+                v-if="dealerDrawOf(p.seat) && images[dealerDrawOf(p.seat)!]"
+                :src="images[dealerDrawOf(p.seat)!]"
+                class="dealer__card"
+                mode="aspectFit"
+              />
+              <view v-else class="dealer__card dealer__card--pending">?</view>
+            </view>
+          </view>
+          <button v-if="isSeated && !myDealerDrawn" class="dealer__draw" :disabled="acting" @tap="drawDealer">🍁 抽一张</button>
+          <view v-else-if="isSeated" class="dealer__waiting">已抽，等其他玩家…</view>
+        </view>
+
+        <template v-else>
         <!-- 对手排 -->
         <view class="opponents">
           <view
@@ -79,7 +102,7 @@
             <view class="table__pile" @tap="onDeckTap">
               <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
               <text class="table__pile-count">{{ state.deckCount }}</text>
-              <text v-if="isMyTurn && !state.drawnCard" class="table__pile-hint">{{ state.drawStack ? `摸 ${state.drawStack.count} 张` : '点我摸牌' }}</text>
+              <text v-if="isMyTurn && !state.drawnCard && !state.challenge?.mine" class="table__pile-hint">{{ state.drawStack ? `摸 ${state.drawStack.count} 张` : '点我摸牌' }}</text>
             </view>
             <view class="table__info">
               <view class="table__color" :style="{ background: colorMeta.color }">{{ colorMeta.season }}</view>
@@ -94,13 +117,15 @@
 
         <!-- 叠加加牌提示条 -->
         <view v-if="state.drawStack" class="stack-bar">
-          <text class="stack-bar__text">🃏 加牌累计 {{ state.drawStack.count }} 张！{{ isMyTurn ? '出 +2/+4 继续叠，或点牌堆全摸' : '等待应对…' }}</text>
+          <text class="stack-bar__text">
+            🃏 加牌累计 {{ state.drawStack.count }} 张！{{ isMyTurn ? (state.drawStack.only4 ? '只能出 +4 继续叠，或点牌堆全摸' : '出 +2/+4 继续叠，或点牌堆全摸') : '等待应对…' }}
+          </text>
         </view>
 
         <!-- +4 质疑条 -->
         <view v-if="state.challenge" class="challenge">
           <template v-if="state.challenge.mine">
-            <text class="challenge__text">被 +4 了！怀疑对方手上有同色牌？（{{ challengeCountdown }}s）</text>
+            <text class="challenge__text">被 +4 了！质疑对方，或叠 +4 反击（{{ challengeCountdown }}s）</text>
             <button class="challenge__btn" :disabled="acting" @tap="challenge">质疑</button>
             <button class="challenge__btn challenge__btn--plain" :disabled="acting" @tap="decline">不质疑，摸 4 张</button>
           </template>
@@ -174,6 +199,7 @@
             <button class="result__btn result__btn--plain" @tap="onLeave">离开房间</button>
           </view>
         </view>
+        </template>
       </template>
     </view>
 
@@ -244,6 +270,7 @@ const {
   createAndEnter,
   joinByCode,
   start,
+  drawDealer,
   play,
   draw,
   pass,
@@ -390,6 +417,12 @@ function eventText(ev: { type: string; card?: string; [key: string]: unknown }):
       return `${name} 出完所有手牌！`
     case 'leave':
       return `${name} 离开了牌局`
+    case 'dealer_draw':
+      return `${name} 抽到了 ${label}`
+    case 'dealer':
+      return ev.byWinner
+        ? `上局赢家 ${name} 作为庄家先出牌`
+        : `🎲 ${name} 抽的牌最大，成为庄家先出牌！`
     default:
       return ''
   }
@@ -413,10 +446,10 @@ watch(
     if (!ev?.type) return
     const type = ev.type
     if (type === 'win') playUnoSound('win')
-    else if (type === 'uno' || type === 'catch') playUnoSound('uno')
+    else if (type === 'uno' || type === 'catch' || type === 'dealer') playUnoSound('uno')
     else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
     else if (['draw', 'draw_pass', 'stack_draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
-    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4', 'color_pick'].includes(type)) playUnoSound('play')
+    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4', 'color_pick', 'dealer_draw'].includes(type)) playUnoSound('play')
     showBanner(eventText(ev))
   },
 )
@@ -479,6 +512,16 @@ const cardOverlap = computed(() => {
 
 const unoSeat = computed(() => state.value?.uno?.seat ?? -1)
 
+/** 抽牌定庄家：某座位抽到的牌 */
+function dealerDrawOf(seat: number): string | null {
+  return state.value?.dealerDraws?.[String(seat)] ?? null
+}
+
+const myDealerDrawn = computed(() => {
+  const current = state.value
+  return Boolean(current && current.mySeat !== null && current.dealerDraws && current.dealerDraws[String(current.mySeat)] !== undefined)
+})
+
 /** 我的回合提示：摸牌后出牌自由（任意能出的牌），也可放弃本轮 */
 const myTurnHint = computed(() => {
   const current = state.value
@@ -493,13 +536,14 @@ const colorPickPlayerName = computed(() => {
   return current.players.find((p) => p.seat === current.colorPick?.seat)?.nickname ?? ''
 })
 
-// 牌面图片按需渲染：手牌/顶牌/牌背变化时补齐
+// 牌面图片按需渲染：手牌/顶牌/牌背/抽牌定庄家的牌变化时补齐
 watch(
-  () => [state.value?.myHand, state.value?.topCard] as const,
+  () => [state.value?.myHand, state.value?.topCard, state.value?.dealerDraws] as const,
   () => {
     const keys = [BACK_KEY]
     if (state.value?.topCard) keys.push(state.value.topCard)
     if (state.value?.myHand) keys.push(...state.value.myHand)
+    if (state.value?.dealerDraws) keys.push(...Object.values(state.value.dealerDraws))
     ensure(keys)
   },
   { immediate: true, deep: true },
@@ -523,7 +567,13 @@ function onCardTap(index: number) {
     return
   }
   if (!canIPlay(card)) {
-    uni.showToast({ title: state.value?.drawStack ? '只能出 +2/+4 叠加，或点牌堆全摸' : '这张牌出不了', icon: 'none' })
+    const current = state.value
+    const tip = current?.challenge?.mine
+      ? '被 +4 了：只能叠 +4 反击'
+      : current?.drawStack
+        ? (current.drawStack.only4 ? '叠过 +4 后只能再叠 +4，或点牌堆全摸' : '只能出 +2/+4 叠加，或点牌堆全摸')
+        : '这张牌出不了'
+    uni.showToast({ title: tip, icon: 'none' })
     return
   }
   selectedIndex.value = index
@@ -830,6 +880,62 @@ $maple-light: #FBE4D5;
     &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
   &__hint { margin-top: 70rpx; font-size: 28rpx; color: rgba(73, 62, 55, 0.6); }
+}
+
+// ---------- 抽牌定庄家 ----------
+.dealer {
+  margin: 24rpx 12rpx;
+  padding: 40rpx 28rpx;
+  background: $felt;
+  border-radius: 36rpx;
+  box-shadow: 0 12rpx 32rpx rgba(33, 72, 61, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__title { font-size: 38rpx; font-weight: 700; color: $cream; }
+  &__sub { font-size: 24rpx; color: rgba(255, 248, 237, 0.75); margin-top: 12rpx; text-align: center; }
+  &__players {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28rpx;
+    margin-top: 36rpx;
+  }
+  &__player { display: flex; flex-direction: column; align-items: center; min-width: 120rpx; }
+  &__avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: rgba(255, 248, 237, 0.2);
+    &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+  }
+  &__name { font-size: 22rpx; color: $cream; margin-top: 8rpx; max-width: 160rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__card {
+    width: 96rpx;
+    height: 144rpx;
+    border-radius: 12rpx;
+    margin-top: 12rpx;
+
+    &--pending {
+      background: rgba(255, 248, 237, 0.15);
+      border: 2rpx dashed rgba(255, 248, 237, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 248, 237, 0.5);
+      font-size: 40rpx;
+    }
+  }
+  &__draw {
+    margin-top: 40rpx;
+    width: 360rpx;
+    background: $gold;
+    color: $ink;
+    font-weight: 700;
+    border-radius: 44rpx;
+  }
+  &__waiting { margin-top: 40rpx; font-size: 26rpx; color: rgba(255, 248, 237, 0.75); }
 }
 
 // ---------- 对手 ----------

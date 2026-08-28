@@ -105,7 +105,8 @@ final class UnoRoomService
     }
 
     /**
-     * 开局：仅房主（0 号位），2-10 人。发牌、翻首张、写回合计时。
+     * 开局：仅房主（0 号位），2-10 人。进入「抽牌比大小定庄家」阶段：
+     * 每人抽一张数字牌，最大者为庄家先手（同点按座位就近）；超时未抽由系统代抽。
      *
      * @return array<string, mixed>
      */
@@ -122,14 +123,21 @@ final class UnoRoomService
             if (count($room->seats) < 2) {
                 throw new BizException(422, '至少 2 人才能开局');
             }
-            $state = UnoRule::setupGame($room->seats);
-            // 保留等待期间累计的分数
-            foreach (($room->state['scores'] ?? []) as $uid => $score) {
-                $state['scores'][(string) $uid] = (int) $score;
+            $scores = [];
+            foreach ($room->seats as $uid) {
+                $scores[(string) $uid] = (int) ($room->state['scores'][(string) $uid] ?? 0);
             }
-            $room->state = $state;
+            $room->state = [
+                'phase' => 'dealerDraw',
+                'dealerDraws' => [],
+                'dealerSeat' => null,
+                'scores' => $scores,
+                'idleStrikes' => [],
+                'leftSeats' => [],
+                'lastEvent' => ['type' => 'start'],
+            ];
             $room->status = 'playing';
-            $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+            $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::TURN_SECONDS);
             $room->version++;
             $room->save();
             return $room;
@@ -138,6 +146,66 @@ final class UnoRoomService
         $state = $this->serialize($room, $userId);
         $this->broadcast($room);
         return $state;
+    }
+
+    /**
+     * 抽牌比大小定庄家：每人抽一张数字牌；全员抽完后数字最大者成为庄家，正式发牌开局。
+     *
+     * @return array<string, mixed>
+     */
+    public function dealerDraw(string $code, int $userId): array
+    {
+        $room = Db::transaction(function () use ($code, $userId) {
+            $room = $this->lockByCode($code);
+            $this->applyDueTimeoutIfNeeded($room, $userId);
+            $seat = $this->requireSeated($room, $userId);
+            if ($room->status !== 'playing') {
+                throw new BizException(422, '对局不在进行中');
+            }
+            $state = $room->state;
+            if (($state['phase'] ?? 'playing') !== 'dealerDraw') {
+                throw new BizException(422, '不在抽牌定庄家阶段');
+            }
+            if (isset($state['dealerDraws'][$seat])) {
+                throw new BizException(422, '你已抽过了，等大家抽完');
+            }
+
+            $card = UnoRule::drawDealerCard();
+            $state['dealerDraws'][$seat] = $card;
+            $state['idleStrikes'][(string) $userId] = 0;
+            $state['lastEvent'] = ['type' => 'dealer_draw', 'seat' => $seat, 'card' => $card];
+
+            $activeSeats = count($room->seats) - count($state['leftSeats'] ?? []);
+            if (count($state['dealerDraws']) === $activeSeats) {
+                $state = $this->dealWithDealer($room->seats, $state);
+            }
+
+            $room->state = $state;
+            $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /** 抽牌比大小结束：定庄家并正式发牌开局。 */
+    private function dealWithDealer(array $seats, array $state): array
+    {
+        $dealer = UnoRule::pickDealer($state['dealerDraws']);
+        $draws = $state['dealerDraws'];
+        $scores = $state['scores'] ?? [];
+        $fresh = UnoRule::setupGame($seats, $dealer);
+        foreach ($scores as $uid => $score) {
+            $fresh['scores'][(string) $uid] = (int) $score;
+        }
+        $fresh['dealerDraws'] = $draws;
+        $fresh['lastEvent'] = ['type' => 'dealer', 'seat' => $dealer, 'draws' => $draws];
+        return $fresh;
     }
 
     /**
@@ -158,20 +226,48 @@ final class UnoRoomService
         $room = Db::transaction(function () use ($code, $userId, $card, $chosenColor, $declaredUno) {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
-            [$seat, $state] = $this->requireMyTurn($room, $userId);
+            $seat = $this->requireSeated($room, $userId);
+            if ($room->status !== 'playing') {
+                throw new BizException(422, '对局不在进行中');
+            }
+            $state = $room->state;
             $seats = $room->seats;
             $uid = (string) $userId;
+            if (in_array($seat, $state['leftSeats'] ?? [], true)) {
+                throw new BizException(403, '你已离开本局');
+            }
+            if (($state['pendingColorPick'] ?? null) !== null) {
+                throw new BizException(422, '等待首位玩家选择开局颜色');
+            }
+            // +4 质疑窗口内，被 +4 者除了质疑/不质疑，还可以出 +4 反击叠加（叠加后不可再质疑；+4 起的叠加只能追 +4）
+            $pending = $state['pendingWild4'] ?? null;
+            if ($pending !== null) {
+                if ((int) $pending['toSeat'] !== $seat) {
+                    throw new BizException(422, '等待 +4 质疑结果');
+                }
+                if (UnoRule::cardValue($card) !== 'F') {
+                    throw new BizException(422, '被 +4 了：可质疑、可叠 +4 反击，或点「不质疑」摸 4 张');
+                }
+                $state['pendingWild4'] = null;
+                $state['drawStack'] = ['count' => 4, 'only4' => true];
+                $room->state = $state;
+            }
+            if ((int) $state['currentSeat'] !== $seat) {
+                throw new BizException(422, '还没轮到你');
+            }
 
             $hand = $state['hands'][$uid] ?? [];
             if (! in_array($card, $hand, true)) {
                 throw new BizException(422, '这张牌不在你手上');
             }
             $top = end($state['discard']);
-            if (($state['drawStack'] ?? null) !== null) {
-                // 加牌叠加：只能出 +2/+4 继续叠（任意颜色），否则去摸累计牌
+            $stack = $state['drawStack'] ?? null;
+            if ($stack !== null) {
+                // 加牌叠加：+2 起的叠可出任意 +2/+4；一旦叠过 +4（only4）就只能再叠 +4
                 $v = UnoRule::cardValue($card);
-                if ($v !== 'D' && $v !== 'F') {
-                    throw new BizException(422, '对方出了加牌，你只能出 +2/+4 叠加，或点牌堆全摸');
+                $only4 = ! empty($stack['only4']);
+                if ($only4 ? $v !== 'F' : ($v !== 'D' && $v !== 'F')) {
+                    throw new BizException(422, $only4 ? '对方叠了 +4，你只能出 +4 继续叠，或点牌堆全摸' : '对方出了加牌，你只能出 +2/+4 叠加，或点牌堆全摸');
                 }
             } elseif (! UnoRule::canPlay($card, (string) $top, (string) $state['currentColor'])) {
                 throw new BizException(422, '这张牌出不了：颜色或数字要匹配');
@@ -542,10 +638,14 @@ final class UnoRoomService
             if (count($seats) < 2) {
                 throw new BizException(422, '至少 2 人才能再来一局');
             }
-            $state = UnoRule::setupGame($seats);
+            // 次局起：上局赢家做庄家先手；赢家已离开则顺延 0 号位
+            $winnerSeat = $room->winner_user_id !== null ? $this->seatOf($seats, (int) $room->winner_user_id) : null;
+            $dealer = $winnerSeat ?? 0;
+            $state = UnoRule::setupGame($seats, $dealer);
             foreach ($seats as $uid) {
                 $state['scores'][(string) $uid] = (int) ($oldState['scores'][(string) $uid] ?? 0);
             }
+            $state['lastEvent'] = ['type' => 'dealer', 'seat' => $dealer, 'byWinner' => $winnerSeat !== null];
             $room->seats = array_values($seats);
             $room->state = $state;
             $room->status = 'playing';
@@ -700,7 +800,7 @@ final class UnoRoomService
             $players[] = [
                 'seat' => $i,
                 'userId' => (int) $uid,
-                'nickname' => (string) ($profile['nickname'] ?? '牌友'),
+                'nickname' => (string) (($profile['nickname'] ?? '') ?: '牌友'),
                 'avatarUrl' => (string) ($profile['avatarUrl'] ?? ''),
                 'online' => in_array((int) $uid, $onlineIds, true)
                     || (isset($seenAt[(string) $uid]) && strtotime((string) $seenAt[(string) $uid]) >= time() - self::ONLINE_SECONDS),
@@ -743,15 +843,19 @@ final class UnoRoomService
 
         $drawn = $state['drawnCard'] ?? null;
         $discard = $state['discard'] ?? [];
+        $phase = $playing ? (string) ($state['phase'] ?? 'playing') : null;
 
         return [
             'code' => (string) $room->code,
             'status' => (string) $room->status,
             'version' => (int) $room->version,
+            'phase' => $phase,
+            'dealerSeat' => isset($state['dealerSeat']) ? (int) $state['dealerSeat'] : null,
+            'dealerDraws' => $state['dealerDraws'] ?? null,
             'mySeat' => $mySeat,
             'ownerSeat' => 0,
             'players' => $players,
-            'currentSeat' => $playing ? (int) ($state['currentSeat'] ?? 0) : null,
+            'currentSeat' => $playing && $phase === 'playing' ? (int) ($state['currentSeat'] ?? 0) : null,
             'direction' => (int) ($state['direction'] ?? 1),
             'turnTtl' => $room->turn_deadline_at !== null ? max(0, strtotime((string) $room->turn_deadline_at) - time()) : 0,
             'topCard' => $discard === [] ? null : (string) end($discard),
@@ -762,7 +866,7 @@ final class UnoRoomService
             'drawnCard' => $drawn !== null && $mySeat !== null && (int) $drawn['seat'] === $mySeat ? (string) $drawn['card'] : null,
             'challenge' => $challenge,
             'colorPick' => $colorPick,
-            'drawStack' => isset($state['drawStack']['count']) ? ['count' => (int) $state['drawStack']['count']] : null,
+            'drawStack' => isset($state['drawStack']['count']) ? ['count' => (int) $state['drawStack']['count'], 'only4' => ! empty($state['drawStack']['only4'])] : null,
             'uno' => $uno,
             'lastEvent' => $state['lastEvent'] ?? null,
             'winnerUserId' => $room->winner_user_id,
@@ -796,6 +900,21 @@ final class UnoRoomService
         }
         $state = $room->state;
         $seats = $room->seats;
+        if (($state['phase'] ?? 'playing') === 'dealerDraw') {
+            // 抽牌定庄家超时：代所有未抽的玩家抽，然后定庄家发牌
+            foreach ($seats as $i => $uid) {
+                if (in_array($i, $state['leftSeats'] ?? [], true) || isset($state['dealerDraws'][$i])) {
+                    continue;
+                }
+                $state['dealerDraws'][$i] = UnoRule::drawDealerCard();
+                $state['idleStrikes'][(string) $uid] = (int) ($state['idleStrikes'][(string) $uid] ?? 0) + 1;
+            }
+            $state = $this->dealWithDealer($seats, $state);
+            $state['lastEvent']['auto'] = true;
+            $room->state = $state;
+            $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+            return true;
+        }
         if ($exceptUserId !== null) {
             $pending = $state['pendingWild4'] ?? $state['pendingColorPick'] ?? null;
             $affectedSeat = $pending !== null
@@ -861,6 +980,9 @@ final class UnoRoomService
         $state = $room->state;
         if (in_array($seat, $state['leftSeats'] ?? [], true)) {
             throw new BizException(403, '你已离开本局');
+        }
+        if (($state['phase'] ?? 'playing') === 'dealerDraw') {
+            throw new BizException(422, '正在抽牌定庄家…');
         }
         if (($state['pendingColorPick'] ?? null) !== null) {
             throw new BizException(422, '等待首位玩家选择开局颜色');

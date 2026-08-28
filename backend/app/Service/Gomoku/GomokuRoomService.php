@@ -398,7 +398,7 @@ final class GomokuRoomService
         $online = in_array($userId, $onlineIds, true)
             || ($seenAt !== null && strtotime($seenAt) >= time() - self::ONLINE_SECONDS);
         return [
-            'nickname' => (string) ($profile['nickname'] ?? '棋友'),
+            'nickname' => (string) (($profile['nickname'] ?? '') ?: '棋友'),
             'avatarUrl' => (string) ($profile['avatarUrl'] ?? ''),
             'online' => $online,
         ];

@@ -52,6 +52,12 @@ export interface UnoRoomState {
   code: string
   status: UnoStatus
   version: number
+  /** 'dealerDraw' = 抽牌比大小定庄家阶段（首局）；其余对局时间为 'playing' */
+  phase: 'dealerDraw' | 'playing' | null
+  /** 庄家（先手）座位 */
+  dealerSeat: number | null
+  /** 抽牌定庄家的各人抽到的牌（公开信息，seat 为键） */
+  dealerDraws: Record<string, string> | null
   /** 我的座位号；旁观为 null */
   mySeat: number | null
   ownerSeat: number
@@ -72,8 +78,8 @@ export interface UnoRoomState {
   challenge: UnoChallenge | null
   /** 首张翻出变色牌：等待首位玩家选择开局颜色 */
   colorPick: { seat: number; mine: boolean } | null
-  /** 加牌叠加（村规）：当前累计要摸的牌数；出牌方之后由下家选择叠加或全摸 */
-  drawStack: { count: number } | null
+  /** 加牌叠加（村规）：count 为累计要摸的牌数；only4=true 表示叠过 +4，之后只能再叠 +4 */
+  drawStack: { count: number; only4?: boolean } | null
   uno: UnoVulnerable | null
   lastEvent: UnoEvent | null
   winnerUserId: number | null

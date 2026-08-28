@@ -19,6 +19,10 @@ export function startGame(code: string): Promise<UnoRoomState> {
   return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/start`, 'POST')
 }
 
+export function dealerDraw(code: string): Promise<UnoRoomState> {
+  return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/dealer-draw`, 'POST')
+}
+
 export function playCard(code: string, card: string, chosenColor: UnoColor | null, declaredUno: boolean): Promise<UnoRoomState> {
   return requestUserApi<UnoRoomState>(`/api/uno/room/${code}/play`, 'POST', {
     card,
