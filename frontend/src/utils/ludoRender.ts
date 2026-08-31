@@ -34,7 +34,8 @@ const BOARD_BG = '#FFF8ED'
 const BOARD_INK = '#21483D'
 const BOARD_BORDER = '#E8D9BE'
 
-const TILE_PATHS = ['/pages-ludo/static/ludo/tiles/red_path.png', '/pages-ludo/static/ludo/tiles/yellow_path.png', '/pages-ludo/static/ludo/tiles/blue_path.png', '/pages-ludo/static/ludo/tiles/green_path.png']
+import { cdnUrl } from './cdn'
+const TILE_PATHS = ['red', 'yellow', 'blue', 'green'].map((c) => cdnUrl(`/pages-ludo/static/ludo/tiles/${c}_path.png`))
 
 const boardImageCache = new Map<number, Promise<string>>()
 

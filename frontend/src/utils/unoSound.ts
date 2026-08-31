@@ -2,6 +2,7 @@
  *  开关持久化到 storage（默认开），页面可切换。
  */
 
+import { cdnUrl } from './cdn'
 const SOUND_KEY = 'shuxia-uno-sound-enabled'
 
 export type UnoSoundName = 'play' | 'draw' | 'uno' | 'win' | 'chat'
@@ -33,7 +34,7 @@ export function playUnoSound(name: UnoSoundName): void {
   let player = players.get(name)
   if (!player) {
     player = uni.createInnerAudioContext()
-    player.src = `/static/sounds/${name}.wav`
+    player.src = cdnUrl(`/static/sounds/${name}.wav`)
     player.onError(() => {}) // 资源缺失时静默
     players.set(name, player)
   }

@@ -1,5 +1,5 @@
 <template>
-  <!-- 工具图标：icon 以 / 开头视为本地图片路径（如 /static/icons/uno-1.png），否则当 emoji 文字渲染 -->
+  <!-- 工具图标：以 / 或 http(s):// 开头视为图片路径（本地包内 / 七牛 CDN），否则当 emoji 文字渲染 -->
   <image v-if="isImage" class="tool-icon tool-icon--image" :src="icon" mode="aspectFit" />
   <text v-else class="tool-icon tool-icon--emoji">{{ icon }}</text>
 </template>
@@ -9,7 +9,7 @@ import { computed } from 'vue'
 
 const props = defineProps<{ icon: string }>()
 
-const isImage = computed(() => props.icon.startsWith('/'))
+const isImage = computed(() => props.icon.startsWith('/') || props.icon.startsWith('http'))
 </script>
 
 <style scoped>

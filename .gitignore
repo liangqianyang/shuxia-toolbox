@@ -9,3 +9,4 @@ frontend/unpackage/
 .env
 .idea/
 frontend/test/.algo.test.cjs
+.qiniu.env

@@ -2,6 +2,7 @@
  *  开关持久化到 storage（默认开），页面可切换。
  */
 
+import { cdnUrl } from './cdn'
 const SOUND_KEY = 'shuxia-ludo-sound-enabled'
 
 export type LudoSoundName = 'roll' | 'takeoff' | 'capture' | 'fly' | 'finish' | 'win'
@@ -33,7 +34,7 @@ export function playLudoSound(name: LudoSoundName): void {
   let player = players.get(name)
   if (!player) {
     player = uni.createInnerAudioContext()
-    player.src = `/pages-ludo/static/sounds-ludo/${name}.wav`
+    player.src = cdnUrl(`/pages-ludo/static/sounds-ludo/${name}.wav`)
     player.onError(() => {}) // 资源缺失时静默
     players.set(name, player)
   }

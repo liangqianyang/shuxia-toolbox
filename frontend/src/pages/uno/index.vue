@@ -2,7 +2,7 @@
   <view class="uno">
     <!-- 大厅 -->
     <view v-if="!state" class="lobby">
-      <image class="lobby__logo" src="/static/icons/uno-1.png" mode="aspectFit" />
+      <image class="lobby__logo" :src="cdnUrl('/static/icons/uno-1.png')" mode="aspectFit" />
       <view class="lobby__title">枫趣牌局</view>
       <view class="lobby__subtitle">2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩</view>
       <button class="lobby__create" :disabled="acting" @tap="onCreate">创建房间</button>
@@ -344,6 +344,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { cdnUrl } from '@/utils/cdn'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useUnoRoom } from '@/composables/useUnoRoom'
 import { useUnoCards } from '@/composables/useUnoCards'

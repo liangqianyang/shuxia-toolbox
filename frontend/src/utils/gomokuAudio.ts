@@ -3,6 +3,7 @@
  * 首次播放前懒创建实例；播放失败静默吞掉（无声不影响对局）。
  */
 
+import { cdnUrl } from './cdn'
 let placeCtx: UniApp.InnerAudioContext | null = null
 let winCtx: UniApp.InnerAudioContext | null = null
 
@@ -30,12 +31,12 @@ function replay(ctx: UniApp.InnerAudioContext | null) {
 
 /** 落子「嗒」。 */
 export function playGomokuPlace() {
-  placeCtx = player('/static/audio/place.wav', placeCtx)
+  placeCtx = player(cdnUrl('/static/audio/place.wav'), placeCtx)
   replay(placeCtx)
 }
 
 /** 胜利琶音。 */
 export function playGomokuWin() {
-  winCtx = player('/static/audio/win.wav', winCtx)
+  winCtx = player(cdnUrl('/static/audio/win.wav'), winCtx)
   replay(winCtx)
 }

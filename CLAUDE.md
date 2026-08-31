@@ -80,4 +80,6 @@ No test framework is configured.
 
 ### Cross-cutting concern
 
+**静态资源走七牛云 CDN**：小程序包内不打包任何图片/音频（主包 1002→713KB、ludo 分包 785→28KB）。资源唯一本地副本在 `frontend/cdn-assets/`（git 跟踪，目录结构 = CDN key 结构），上传/更新跑 `python3 frontend/scripts/upload_qiniu.py`（凭证在 `frontend/.qiniu.env`，已 gitignore；HEAD 大小一致自动跳过，`--force` 强制覆盖）。代码引用一律走 `src/utils/cdn.ts` 的 `cdnUrl('/static/icons/uno-1.png')` → `https://oss.lqy-comic.com/fengye/static/icons/uno-1.png`（bucket=fengye，前缀 fengye，华东-浙江 z0，公开空间）。`tool_catalog.icon` 迁移 `2026_08_31_000025` 已把 uno/ludo 图标改成完整 CDN URL（icon 列扩到 varchar(255)），`ToolIcon.vue` 支持 http(s) 图标。**微信公众平台 downloadFile 合法域名必须包含 `https://oss.lqy-comic.com`**。canvas 贴图用 `canvasAdapter.loadDrawableImage`（远程图自动 wx.downloadFile 缓存）；音效 InnerAudioContext 直接播 https。飞行棋素材重切脚本输出目录也改为 `cdn-assets/`。
+
 Palette definitions are **duplicated** between PHP (`BeadPaletteService`, source of truth) and TypeScript (`src/utils/beadPaletteData.ts`, generated copy with identical RGB values). Changes to palettes must be kept in sync across both.

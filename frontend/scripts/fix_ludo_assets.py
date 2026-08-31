@@ -21,7 +21,7 @@ import sys
 from PIL import Image
 
 SRC = os.path.expanduser("~/Downloads/微信小程序飞行棋_开发可直接用素材包")
-OUT = os.path.join(os.path.dirname(__file__), "..", "src", "pages-ludo", "static", "ludo")
+OUT = os.path.join(os.path.dirname(__file__), "..", "cdn-assets", "pages-ludo", "static", "ludo")
 
 # 图形带（已实测的参考图像素行区间）
 TILE_BAND = (26, 83)   # tiles_reference.png 中 9 个格子的图形带
