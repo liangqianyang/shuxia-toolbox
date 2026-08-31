@@ -21,6 +21,8 @@ final class FeatureFlagService
 
     private const UNO_CHAT_TEXT_KEY = 'feature.uno_chat_text';
 
+    private const ADVENTURE_CHAT_TEXT_KEY = 'feature.adventure_chat_text';
+
     public function aiEnabled(): bool
     {
         $value = Db::table('app_configs')->where('config_key', self::AI_ENABLED_KEY)->value('config_value');
@@ -69,6 +71,29 @@ final class FeatureFlagService
     {
         if (! $this->unoChatTextEnabled()) {
             throw new BizException(403, '文字聊天维护中，快捷句和表情仍可用');
+        }
+    }
+
+    /** 冒险棋房间自由文字聊天开关：语义与 UNO 同（默认开、审核有异议秒关、快捷句/表情/贴纸不受影响）。 */
+    public function adventureChatTextEnabled(): bool
+    {
+        $value = Db::table('app_configs')->where('config_key', self::ADVENTURE_CHAT_TEXT_KEY)->value('config_value');
+        return $value !== '0';
+    }
+
+    public function setAdventureChatTextEnabled(bool $enabled): bool
+    {
+        Db::table('app_configs')->updateOrInsert(
+            ['config_key' => self::ADVENTURE_CHAT_TEXT_KEY],
+            ['config_value' => $enabled ? '1' : '0', 'updated_at' => new Expression('CURRENT_TIMESTAMP')],
+        );
+        return $enabled;
+    }
+
+    public function requireAdventureChatTextEnabled(): void
+    {
+        if (! $this->adventureChatTextEnabled()) {
+            throw new BizException(403, '文字聊天维护中，快捷句、表情和贴纸仍可用');
         }
     }
 }

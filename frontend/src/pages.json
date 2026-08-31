@@ -93,6 +93,17 @@
   ],
   "subPackages": [
     {
+      "root": "pages-adventure",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "枫趣冒险"
+          }
+        }
+      ]
+    },
+    {
       "root": "pages-ludo",
       "pages": [
         {

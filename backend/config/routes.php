@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Controller\AdminFeatureController;
 use App\Controller\BeadController;
 use App\Controller\AdminToolController;
+use App\Controller\AdventureController;
+use App\Controller\AdventureWsController;
 use App\Controller\AnniversaryController;
 use App\Controller\AuthController;
 use App\Controller\FeatureController;
@@ -111,6 +113,27 @@ Router::addGroup('/api', function (): void {
     Router::post('/ludo/room/{code}/rematch', [LudoController::class, 'rematch']);
     Router::post('/ludo/room/{code}/leave', [LudoController::class, 'leave']);
 
+    // 枫趣冒险联机：房间创建/加入/开局、轮询同步（WS 降级通道）、掷骰/道具/走子、
+    // 选择窗（岔路/埋伏/商店/山神/擂台）、决斗与押注、托管、房主存档/续局、聊天、
+    // 我的对局（重连入口）、再来一局与离开。窗口超时由 Timer 清扫器 + 写操作懒检查推进。
+    Router::post('/adventure/room', [AdventureController::class, 'create']);
+    Router::post('/adventure/room/{code}/join', [AdventureController::class, 'join']);
+    Router::get('/adventure/room/{code}', [AdventureController::class, 'state']);
+    Router::get('/adventure/my-rooms', [AdventureController::class, 'myRooms']);
+    Router::post('/adventure/room/{code}/start', [AdventureController::class, 'start']);
+    Router::post('/adventure/room/{code}/roll', [AdventureController::class, 'roll']);
+    Router::post('/adventure/room/{code}/item', [AdventureController::class, 'item']);
+    Router::post('/adventure/room/{code}/move', [AdventureController::class, 'move']);
+    Router::post('/adventure/room/{code}/choose', [AdventureController::class, 'choose']);
+    Router::post('/adventure/room/{code}/duel', [AdventureController::class, 'duel']);
+    Router::post('/adventure/room/{code}/bet', [AdventureController::class, 'bet']);
+    Router::post('/adventure/room/{code}/auto', [AdventureController::class, 'auto']);
+    Router::post('/adventure/room/{code}/save', [AdventureController::class, 'save']);
+    Router::post('/adventure/room/{code}/resume', [AdventureController::class, 'resume']);
+    Router::post('/adventure/room/{code}/chat', [AdventureController::class, 'chat']);
+    Router::post('/adventure/room/{code}/rematch', [AdventureController::class, 'rematch']);
+    Router::post('/adventure/room/{code}/leave', [AdventureController::class, 'leave']);
+
     // 每日灵签：配额、抽签（服务端权威随机）、AI 解签（缓存）、分享加次、历史。
     Router::get('/fortune/quota', [FortuneController::class, 'quota']);
     Router::post('/fortune/draw', [FortuneController::class, 'draw']);
@@ -132,4 +155,5 @@ Router::addServer('ws', function (): void {
     Router::get('/gomoku/ws', GomokuWsController::class);
     Router::get('/uno/ws', UnoWsController::class);
     Router::get('/ludo/ws', LudoWsController::class);
+    Router::get('/adventure/ws', AdventureWsController::class);
 });

@@ -28,6 +28,7 @@ final class AdminFeatureController extends AbstractController
         return $this->ok([
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+            'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
         ]);
     }
 
@@ -42,9 +43,13 @@ final class AdminFeatureController extends AbstractController
         if ($request->input('unoChatTextEnabled') !== null) {
             $result['unoChatTextEnabled'] = $this->flags->setUnoChatTextEnabled(filter_var($request->input('unoChatTextEnabled'), FILTER_VALIDATE_BOOL));
         }
+        if ($request->input('adventureChatTextEnabled') !== null) {
+            $result['adventureChatTextEnabled'] = $this->flags->setAdventureChatTextEnabled(filter_var($request->input('adventureChatTextEnabled'), FILTER_VALIDATE_BOOL));
+        }
         return $this->ok($result === [] ? [
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+            'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
         ] : $result);
     }
 

@@ -20,6 +20,7 @@ final class FeatureController extends AbstractController
         return $this->ok([
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
+            'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
         ]);
     }
 }

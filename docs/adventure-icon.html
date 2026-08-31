@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>枫趣冒险图标生成器</title>
+<!-- 生成方式：headless Chrome 截图 → 512 PNG → sips 缩到 256 存 cdn-assets/static/icons/adventure-1.png
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+       --screenshot=/tmp/adventure-icon.png --window-size=512,512 "file://$PWD/docs/adventure-icon.html" -->
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="512" height="512"></canvas>
+<script>
+// 品牌色板（奶油白/墨绿/枫叶红/金黄，同枫趣牌局）
+const CREAM = '#FFF8ED', INK = '#21483D', MAPLE = '#E85D4A', GOLD = '#F4B942';
+// 五段色（草原→枫叶林→清溪谷→岩壁→雪线）
+const SEGS = ['#9CC178', '#E8A468', '#7FC4BC', '#B0A48C', '#E8EEF6'];
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 底板：奶油白圆角方 + 墨绿描边
+ctx.fillStyle = CREAM;
+rr(16, 16, 480, 480, 108);
+ctx.fill();
+ctx.strokeStyle = INK;
+ctx.lineWidth = 14;
+rr(23, 23, 466, 466, 102);
+ctx.stroke();
+
+// 山体：五层色带堆叠成峰（底宽顶尖）
+for (let i = 0; i < 5; i++) {
+  const t = i / 5;
+  const baseY = 400 - i * 62;
+  const halfW = 200 - i * 34;
+  ctx.fillStyle = SEGS[i];
+  ctx.beginPath();
+  ctx.moveTo(256 - halfW, baseY);
+  ctx.lineTo(256 - halfW * 0.25, baseY - 52);
+  ctx.lineTo(256, baseY - 78);
+  ctx.lineTo(256 + halfW * 0.3, baseY - 46);
+  ctx.lineTo(256 + halfW, baseY);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// 雪顶
+ctx.fillStyle = '#FFFFFF';
+ctx.beginPath();
+ctx.moveTo(226, 152);
+ctx.lineTo(256, 96);
+ctx.lineTo(288, 156);
+ctx.lineTo(272, 148);
+ctx.lineTo(256, 162);
+ctx.lineTo(242, 150);
+ctx.closePath();
+ctx.fill();
+
+// 蜿蜒山道（虚线）
+ctx.strokeStyle = CREAM;
+ctx.lineWidth = 13;
+ctx.lineCap = 'round';
+ctx.setLineDash([4, 20]);
+ctx.beginPath();
+ctx.moveTo(120, 392);
+ctx.quadraticCurveTo(210, 330, 170, 280);
+ctx.quadraticCurveTo(140, 240, 220, 216);
+ctx.quadraticCurveTo(300, 196, 256, 150);
+ctx.stroke();
+ctx.setLineDash([]);
+
+// 峰顶枫叶旗
+ctx.strokeStyle = INK;
+ctx.lineWidth = 8;
+ctx.beginPath();
+ctx.moveTo(256, 100);
+ctx.lineTo(256, 46);
+ctx.stroke();
+ctx.fillStyle = MAPLE;
+ctx.beginPath();
+ctx.moveTo(256, 46);
+ctx.quadraticCurveTo(300, 38, 344, 56);
+ctx.quadraticCurveTo(306, 70, 256, 72);
+ctx.closePath();
+ctx.fill();
+// 旗上一枚墨绿小枫叶（三瓣）
+ctx.fillStyle = INK;
+for (const a of [-2.5, -Math.PI / 2, -0.64]) {
+  ctx.beginPath();
+  ctx.moveTo(296, 60);
+  ctx.quadraticCurveTo(296 + Math.cos(a) * 26, 60 + Math.sin(a) * 26, 296 + Math.cos(a) * 17, 60 + Math.sin(a) * 17);
+  ctx.quadraticCurveTo(296 + Math.cos(a + 0.6) * 11, 60 + Math.sin(a + 0.6) * 11, 296, 60);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// 两枚登山棋子（前后错落，枫叶红/金黄，白色小枫叶标记——纯图形避免字体渲染差异）
+function token(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.fillStyle = '#FFFFFF';
+  for (const a of [-2.5, -Math.PI / 2, -0.64]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 4);
+    ctx.quadraticCurveTo(x + Math.cos(a) * 22, y + Math.sin(a) * 22, x + Math.cos(a) * 14, y + Math.sin(a) * 14);
+    ctx.quadraticCurveTo(x + Math.cos(a + 0.6) * 9, y + Math.sin(a + 0.6) * 9, x, y + 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+token(150, 356, MAPLE);
+token(214, 300, GOLD);
+</script>
+</body>
+</html>

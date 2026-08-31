@@ -98,6 +98,8 @@ export interface FeatureFlags {
   aiEnabled: boolean
   /** UNO 房间自由文字聊天（快捷句/表情不受影响）；旧后端未返回时按 true 处理 */
   unoChatTextEnabled?: boolean
+  /** 冒险棋房间自由文字聊天（快捷句/表情/贴纸不受影响）；旧后端未返回时按 true 处理 */
+  adventureChatTextEnabled?: boolean
 }
 
 /** 公开的全局功能开关（无需登录）：决定 AI 入口是否展示，服务端另有硬拦截兜底。 */

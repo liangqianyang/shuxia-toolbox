@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>枫趣冒险贴纸生成器</title>
+<!-- 生成方式（i=0..9 循环）：
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+       --screenshot=/tmp/sticker-N.png --window-size=256,256 --hide-scrollbars \
+       "file://$PWD/docs/adventure-stickers.html?i=N"
+     再 sips 缩到 256 存 frontend/cdn-assets/pages-adventure/static/stickers/ -->
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="256" height="256"></canvas>
+<script>
+const CREAM = '#FFF8ED', INK = '#21483D', MAPLE = '#E85D4A', GOLD = '#F4B942', BLUSH = '#F5B8A9';
+
+const params = new URLSearchParams(location.search);
+const i = parseInt(params.get('i') || '0', 10);
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 256;
+
+function circle(x, y, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+function rrect(x, y, w, h, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+}
+function mapleLeaf(x, y, s, color) {
+  ctx.fillStyle = color;
+  for (const a of [-2.5, -Math.PI / 2, -0.64]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.18);
+    ctx.quadraticCurveTo(x + Math.cos(a) * s, y + Math.sin(a) * s, x + Math.cos(a) * s * 0.62, y + Math.sin(a) * s * 0.62);
+    ctx.quadraticCurveTo(x + Math.cos(a + 0.6) * s * 0.4, y + Math.sin(a + 0.6) * s * 0.4, x, y + s * 0.18);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+function eyes(x, y, style) {
+  // style: 'open' | 'happy' | 'angry' | 'sad' | 'closed'
+  ctx.strokeStyle = INK;
+  ctx.fillStyle = INK;
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  for (const dx of [-24, 24]) {
+    const ex = x + dx;
+    if (style === 'open') { circle(ex, y, 9, INK); circle(ex + 3, y - 3, 3, '#fff'); }
+    else if (style === 'happy') { ctx.beginPath(); ctx.arc(ex, y + 4, 10, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else if (style === 'closed') { ctx.beginPath(); ctx.moveTo(ex - 9, y); ctx.quadraticCurveTo(ex, y + 8, ex + 9, y); ctx.stroke(); }
+    else if (style === 'angry') { ctx.beginPath(); ctx.moveTo(ex - 10, y - 8); ctx.lineTo(ex + 10, y - 2); ctx.stroke(); circle(ex, y + 7, 6, INK); }
+    else if (style === 'sad') { circle(ex, y + 6, 8, INK); ctx.beginPath(); ctx.moveTo(ex - 10, y - 6); ctx.lineTo(ex + 10, y - 2); ctx.stroke(); }
+  }
+}
+function mouth(x, y, style) {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (style === 'smile') { ctx.arc(x, y - 4, 16, 0.25, Math.PI - 0.25); }
+  else if (style === 'grin') { ctx.arc(x, y - 6, 20, 0.15, Math.PI - 0.15); ctx.fillStyle = INK; ctx.fill(); }
+  else if (style === 'wavy') { ctx.moveTo(x - 14, y); ctx.quadraticCurveTo(x - 7, y + 8, x, y); ctx.quadraticCurveTo(x + 7, y - 8, x + 14, y); }
+  else if (style === 'o') { ctx.arc(x, y, 10, 0, Math.PI * 2); }
+  ctx.stroke();
+}
+
+// ── 山神：米白圆脸 + 墨绿鸟居冠 + 浅灰胡子（带描边保证可见） ──
+function god(expr, extra) {
+  circle(W / 2, 150, 78, CREAM);
+  ctx.strokeStyle = INK; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(W / 2, 150, 78, 0, Math.PI * 2); ctx.stroke();
+  // 鸟居冠
+  ctx.fillStyle = MAPLE;
+  rrect(78, 52, 100, 14, 7, MAPLE);
+  rrect(94, 76, 68, 10, 5, MAPLE);
+  rrect(98, 66, 11, 32, 4, MAPLE);
+  rrect(147, 66, 11, 32, 4, MAPLE);
+  // 眉与眼
+  expr();
+  // 浅灰胡子（墨绿细描边，奶油脸上可见）
+  ctx.fillStyle = '#E3E8E6';
+  ctx.strokeStyle = INK; ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 46, 168);
+  ctx.quadraticCurveTo(W / 2 - 30, 236, W / 2, 240);
+  ctx.quadraticCurveTo(W / 2 + 30, 236, W / 2 + 46, 168);
+  ctx.quadraticCurveTo(W / 2, 190, W / 2 - 46, 168);
+  ctx.fill();
+  ctx.stroke();
+  // 腮红
+  circle(W / 2 - 52, 158, 9, BLUSH);
+  circle(W / 2 + 52, 158, 9, BLUSH);
+  if (extra) extra();
+}
+
+/** 山神的手（奶白 + 墨绿粗描边，与脸拉开层次）。 */
+function godHand(x1, y1, x2, y2) {
+  ctx.strokeStyle = CREAM; ctx.lineWidth = 22; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo((x1 + x2) / 2 + 12, (y1 + y2) / 2, x2, y2); ctx.stroke();
+  ctx.strokeStyle = INK; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo((x1 + x2) / 2 + 12, (y1 + y2) / 2, x2, y2); ctx.stroke();
+  circle(x2, y2, 15, CREAM);
+  ctx.beginPath(); ctx.arc(x2, y2, 15, 0, Math.PI * 2); ctx.stroke();
+}
+
+// ── 枫趣小精灵：金黄圆脸 + 枫叶帽 ──
+function elf(expr, extra) {
+  circle(W / 2, 156, 66, GOLD);
+  ctx.strokeStyle = INK; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(W / 2, 156, 66, 0, Math.PI * 2); ctx.stroke();
+  // 枫叶帽
+  mapleLeaf(W / 2, 92, 52, MAPLE);
+  ctx.strokeStyle = '#B0631A'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(W / 2, 104); ctx.quadraticCurveTo(W / 2, 116, W / 2, 122); ctx.stroke();
+  expr();
+  circle(W / 2 - 42, 170, 9, BLUSH);
+  circle(W / 2 + 42, 170, 9, BLUSH);
+  if (extra) extra();
+}
+
+const stickers = [
+  // 0 god-hi：挥手问好
+  () => god(() => eyes(W / 2, 140, 'happy'), () => {
+    mouth(W / 2, 170, 'smile');
+    godHand(198, 132, 228, 60);
+  }),
+  // 1 god-smug：得意眯眼
+  () => god(() => eyes(W / 2, 140, 'closed'), () => {
+    mouth(W / 2, 190, 'smug' in mouthStyles ? 'smile' : 'smile');
+    // 一枚枫叶在旁
+    mapleLeaf(206, 72, 34, MAPLE);
+  }),
+  // 2 god-bless：赐福光芒
+  () => god(() => eyes(W / 2, 140, 'closed'), () => {
+    mouth(W / 2, 170, 'smile');
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 7; ctx.lineCap = 'round';
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, Math.PI * 0.75, -Math.PI * 0.75]) {
+      ctx.beginPath();
+      ctx.moveTo(W / 2 + Math.cos(a) * 96, 150 + Math.sin(a) * 96);
+      ctx.lineTo(W / 2 + Math.cos(a) * 116, 150 + Math.sin(a) * 116);
+      ctx.stroke();
+    }
+  }),
+  // 3 god-snow：雪球在手
+  () => god(() => eyes(W / 2, 140, 'happy'), () => {
+    mouth(W / 2, 168, 'grin');
+    circle(212, 190, 26, '#EAF2F8');
+    ctx.strokeStyle = '#B9CFE0'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(212, 190, 26, 0, Math.PI * 2); ctx.stroke();
+  }),
+  // 4 god-angry：怒
+  () => god(() => eyes(W / 2, 140, 'angry'), () => {
+    mouth(W / 2, 170, 'wavy');
+    // 怒气符号
+    ctx.strokeStyle = MAPLE; ctx.lineWidth = 7; ctx.lineCap = 'round';
+    for (const [x, y] of [[62, 66], [92, 46]]) {
+      ctx.beginPath(); ctx.moveTo(x - 10, y - 10); ctx.lineTo(x + 10, y + 10);
+      ctx.moveTo(x + 10, y - 10); ctx.lineTo(x - 10, y + 10); ctx.stroke();
+    }
+  }),
+  // 5 elf-cheer：欢呼
+  () => elf(() => eyes(W / 2, 146, 'happy'), () => {
+    mouth(W / 2, 168, 'grin');
+    ctx.strokeStyle = '#F4B942'; ctx.lineWidth = 20; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(180, 130); ctx.lineTo(212, 100); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(76, 130); ctx.lineTo(46, 100); ctx.stroke();
+    // 彩带
+    for (const [x, y, c] of [[36, 40, MAPLE], [216, 46, '#7FC4BC'], [128, 20, GOLD]]) mapleLeaf(x, y, 26, c);
+  }),
+  // 6 elf-sad：哭
+  () => elf(() => eyes(W / 2, 146, 'sad'), () => {
+    mouth(W / 2, 194, 'wavy');
+    // 泪滴
+    ctx.fillStyle = '#7FB5E8';
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 24, 168);
+    ctx.quadraticCurveTo(W / 2 - 12, 190, W / 2 - 24, 198);
+    ctx.quadraticCurveTo(W / 2 - 36, 190, W / 2 - 24, 168);
+    ctx.fill();
+  }),
+  // 7 elf-peek：探头偷看
+  () => elf(() => eyes(W / 2, 146, 'open'), () => {
+    mouth(W / 2, 186, 'o');
+    // 从草丛探头：底部草丛
+    ctx.fillStyle = '#9CC178';
+    for (const dx of [-70, -35, 0, 35, 70]) {
+      ctx.beginPath();
+      ctx.arc(W / 2 + dx, 236, 30, Math.PI, 0);
+      ctx.fill();
+    }
+  }),
+  // 8 elf-trap：埋雷
+  () => elf(() => eyes(W / 2, 146, 'happy'), () => {
+    mouth(W / 2, 170, 'smile');
+    // 铲子 + 雷格
+    ctx.strokeStyle = '#8A6314'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(200, 200); ctx.lineTo(226, 148); ctx.stroke();
+    ctx.fillStyle = '#B0A48C';
+    rrect(216, 128, 26, 26, 6, '#B0A48C');
+    ctx.fillStyle = '#EBD9E2';
+    rrect(34, 204, 64, 28, 10, '#EBD9E2');
+    ctx.fillStyle = MAPLE;
+    ctx.font = 'bold 20px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('!', 66, 219);
+  }),
+  // 9 elf-run：快跑
+  () => elf(() => eyes(W / 2 - 8, 146, 'open'), () => {
+    mouth(W / 2 - 6, 186, 'smile');
+    // 速度线
+    ctx.strokeStyle = '#B9CFE0'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+    for (const y of [140, 164, 188]) {
+      ctx.beginPath(); ctx.moveTo(24, y); ctx.lineTo(64 + (y % 20), y); ctx.stroke();
+    }
+    // 尘土
+    circle(46, 214, 10, '#E8E3DA');
+    circle(70, 224, 7, '#E8E3DA');
+  }),
+];
+const mouthStyles = {};
+
+stickers[i]();
+</script>
+</body>
+</html>

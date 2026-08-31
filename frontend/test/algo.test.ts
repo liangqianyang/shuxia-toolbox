@@ -20,6 +20,9 @@ import {
   validateSpecialGifts,
 } from '@/utils/lottery'
 import { __setPixels, type PixelBuffer } from './stubCanvasAdapter'
+import * as adventureBoard from '@/pages-adventure/utils/adventureBoard'
+import * as advConstants from '@/pages-adventure/utils/adventure'
+import * as adventureChat from '@/pages-adventure/utils/adventureChat'
 import {
   BOARD_SIZE,
   CELL_BLACK,
@@ -1154,6 +1157,7 @@ async function main() {
   testGomoku()
   testUno()
   testLudo()
+  testAdventure()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)
@@ -1162,3 +1166,69 @@ async function main() {
 }
 
 main()
+
+// ══════════════════════════════ 枫趣冒险 ══════════════════════════════
+
+/** 冒险棋：棋盘静态校验（与后端 AdventureBoard 双份同步的锁定断言）+ 几何 + 展示侧公式。 */
+function testAdventure() {
+  console.log('\n── 枫趣冒险棋盘 ──')
+
+  const { CAMPS, CABLE_STATIONS, CELLS, SEGMENTS, cellToPoint, cellType, isCamp, previewTarget, segmentOf } = adventureBoard
+
+  // 营地 / 缆车站 / 段位（与 docs/adventure-rules.md 一字不差）
+  assert(JSON.stringify(CAMPS) === JSON.stringify([21, 41, 61, 81]), '营地 21/41/61/81')
+  assert(JSON.stringify(CABLE_STATIONS) === JSON.stringify([14, 38, 62]), '缆车站 14/38/62')
+  assert(SEGMENTS.length === 5 && SEGMENTS[4].duelDouble === true, '五段 + 雪线决斗翻倍')
+  assert(segmentOf(1).duel === 'rps' && segmentOf(25).duel === 'bid' && segmentOf(50).duel === 'dice' && segmentOf(70).duel === 'rps', '段位决斗形式轮换')
+
+  // 机关图无环：云梯/缆车/岔路捷径只前进，滑坡/落石只后退
+  for (const [cellStr, def] of Object.entries(CELLS)) {
+    const n = Number(cellStr)
+    assert(n >= 1 && n <= 100, `格号范围 ${n}`)
+    if (def.type === 'ladder' || def.type === 'cable') assert((def.to ?? 0) > n, `前进机关 ${n}→${def.to}`)
+    if (def.type === 'slide') assert((def.to ?? 0) < n, `滑坡只后退 ${n}→${def.to}`)
+    if (def.type === 'rock') assert(n - (def.back ?? 0) >= 1, `落石不越界 ${n}`)
+    if (def.type === 'fork') {
+      for (const opt of def.options ?? []) {
+        if (opt.to !== null) assert(opt.to > n, `岔路捷径只前进 ${n}→${opt.to}`)
+      }
+    }
+  }
+  // 滑坡/落石落点全部是普通格或营地（唯一例外：落石 16 落 13 枫叶格——温和正面格不级联移动）
+  for (const [cellStr, def] of Object.entries(CELLS)) {
+    if (def.type === 'slide') {
+      const to = def.type === 'slide' ? def.to! : 0
+      const tt = cellType(to)
+      assert(tt === 'plain' || tt === 'camp' || to === 13, `滑坡 ${cellStr}→${to} 落点 ${tt}`)
+    }
+  }
+  // 大连锁：58 云梯 → 62 缆车 → 79
+  assert(CELLS[58]?.to === 62 && CELLS[62]?.to === 79 && cellType(79) === 'plain', '大连锁 58→62→79')
+
+  // 几何：1 在底行左端、100 在顶行、蛇形换行
+  assert(Math.abs(cellToPoint(1).x - 0.05) < 1e-9 && Math.abs(cellToPoint(1).y - 0.95) < 1e-9, '格 1 位于底行左端')
+  assert(Math.abs(cellToPoint(10).x - 0.95) < 1e-9, '格 10 在底行右端')
+  assert(Math.abs(cellToPoint(11).x - 0.95) < 1e-9, '格 11 蛇形折返右端')
+  assert(Math.abs(cellToPoint(100).y - 0.05) < 1e-9, '枫顶 100 在顶行')
+  const all = Array.from({ length: 100 }, (_, k) => k + 1).map((n) => cellToPoint(n))
+  assert(new Set(all.map((p) => `${p.x.toFixed(6)},${p.y.toFixed(6)}`)).size === 100, '100 格坐标互不重叠')
+  assert(cellToPoint(0).y > 1, '山脚起点在棋盘外（底边下方）')
+  for (const camp of CAMPS) assert(isCamp(camp) && CELLS[camp]?.type === 'camp', `营地 ${camp} 格类型`)
+
+  // 展示侧公式：exact 登顶 / 补票 / 反弹
+  assert(previewTarget(98, 2, true, 0) === 100, 'exact 登顶')
+  assert(previewTarget(98, 12, true, 3) === 100, '枫叶够则补票登顶')
+  assert(previewTarget(98, 12, true, 1) === 90, '枫叶不够反弹 98+12=90')
+  assert(previewTarget(50, 7, true, 9) === 57, '普通前进落点')
+
+  // 道具/天气常量（与后端双份同步：8 道具 / 12 天气牌）
+  assert(Object.keys(advConstants.ITEMS).length === 8, '8 种道具')
+  assert(Object.keys(advConstants.WEATHER_CARDS).length === 12, '12 张天气牌')
+  assert(advConstants.WEATHER_CARDS.summitblizzard.kind === 'rule' && advConstants.WEATHER_CARDS.tornado.kind === 'instant', '稀有牌类型')
+
+  // 聊天白名单（与后端 AdventureChat 双份同步：20 快捷句 / 27 表情 / 10 贴纸）
+  assert(adventureChat.ADVENTURE_PHRASE_GROUPS.reduce((s, g) => s + g.phrases.length, 0) === 20, '20 条快捷句')
+  assert(adventureChat.ADVENTURE_EMOJIS.length === 27, '27 个表情')
+  assert(Object.keys(adventureChat.ADVENTURE_STICKERS).length === 10, '10 张贴纸')
+  assert(adventureChat.adventurePhraseText('duel_me') === '就决定是你了', '快捷句 id 反查')
+}

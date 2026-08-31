@@ -209,7 +209,7 @@
           :disabled="interpretLoading"
           @tap="requestInterpret"
         >
-          {{ interpretLoading ? '大师解签中…' : '请大师详解（AI）' }}
+          {{ interpretLoading ? '大师解签中…' : '请大师详解' }}
         </button>
         <text v-if="interpretError" class="fortune__reading-error" @tap="requestInterpret">{{ interpretError }}，点我重试</text>
       </view>
