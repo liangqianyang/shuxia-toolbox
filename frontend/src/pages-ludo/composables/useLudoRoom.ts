@@ -19,7 +19,7 @@ import {
   rollDice,
   startLudoGame,
   toggleAuto,
-} from '@/services/ludo'
+} from '../services/ludo'
 import type { LudoMoveItem, LudoRoomState, LudoWsFrame } from '@/types/ludo'
 
 const WS_MAX_FAILURES = 3

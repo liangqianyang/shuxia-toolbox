@@ -5,7 +5,7 @@
  * 贴图素材来自 static/ludo/tiles/（素材包重切版）；贴图加载失败自动回退为纯色圆。
  * 几何全部来自 ludoBoard.ts（唯一真相）。
  */
-import { canvasToFile, createDrawingCanvas, loadDrawableImage } from './canvasAdapter'
+import { canvasToFile, createDrawingCanvas, loadDrawableImage } from '../../utils/canvasAdapter'
 import {
   GRID,
   RING,
@@ -34,7 +34,7 @@ const BOARD_BG = '#FFF8ED'
 const BOARD_INK = '#21483D'
 const BOARD_BORDER = '#E8D9BE'
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '../../utils/cdn'
 const TILE_PATHS = ['red', 'yellow', 'blue', 'green'].map((c) => cdnUrl(`/pages-ludo/static/ludo/tiles/${c}_path.png`))
 
 const boardImageCache = new Map<number, Promise<string>>()

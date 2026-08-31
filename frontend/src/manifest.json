@@ -13,6 +13,9 @@
       "minified": true
     },
     "usingComponents": true,
+    "optimization": {
+      "subPackages": true
+    },
     "permission": {
       "scope.userLocation": {
         "desc": "用于根据当前位置搜索附近美食"

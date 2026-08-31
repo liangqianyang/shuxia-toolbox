@@ -54,7 +54,7 @@ import {
   seatFinished,
   victimsAt,
   type LudoCoreState,
-} from '@/utils/ludo'
+} from '@/pages-ludo/utils/ludo'
 
 function testUno() {
   // 牌编码解析
