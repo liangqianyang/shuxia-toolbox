@@ -168,7 +168,7 @@
               </view>
             </view>
             <view class="opening__countdown">{{ turnCountdown }}s 后未掷自动代掷</view>
-            <button v-if="state.opening.mine" class="opening__btn" :disabled="acting" @tap="roll">🎲 掷骰定先手</button>
+            <button v-if="state.opening.mine" class="opening__btn" :disabled="acting || diceRolling" @tap="onRoll">{{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰定先手' }}</button>
             <view v-else class="opening__wait">等其他人掷骰…</view>
           </view>
         </view>

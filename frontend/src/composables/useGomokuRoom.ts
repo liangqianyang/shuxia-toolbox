@@ -60,6 +60,8 @@ export function useGomokuRoom() {
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let wsFailures = 0
+  let wsAttempt = 0
+  let connectWatchdog: ReturnType<typeof setTimeout> | null = null
   let pollFailures = 0
   let running = false
   let manuallyClosed = false
@@ -211,11 +213,14 @@ export function useGomokuRoom() {
       return
     }
     manuallyClosed = false
+    const attempt = ++wsAttempt
     socket = uni.connectSocket({
       url: gomokuWsUrl('/gomoku/ws', { token, code: myCode.value }),
       complete: () => {},
     })
     socket.onOpen(() => {
+      if (attempt !== wsAttempt) return
+      if (connectWatchdog) { clearTimeout(connectWatchdog); connectWatchdog = null }
       wsFailures = 0
       heartbeatTimer = setInterval(() => {
         socket?.send({ data: '{"type":"ping"}' })
@@ -231,24 +236,41 @@ export function useGomokuRoom() {
       if (frame.type === 'state') applyState(frame.state)
       if (frame.type === 'error') toast(frame.message)
     })
-    socket.onClose(() => {
-      clearHeartbeat()
-      if (!running || manuallyClosed || transport.value !== 'ws') return
-      wsFailures++
-      if (wsFailures >= WS_MAX_FAILURES) {
-        degradeToPolling()
-        return
-      }
-      reconnectTimer = setTimeout(connectWs, RECONNECT_DELAYS[Math.min(wsFailures - 1, RECONNECT_DELAYS.length - 1)])
-    })
+    // 连接看门狗：部分平台连不上时既不回调 onError 也不回调 onClose，超时按失败处理
+    connectWatchdog = setTimeout(() => handleWsFailure(attempt), 6000)
+    socket.onClose(() => handleWsFailure(attempt))
+    // onError 后 onClose 不保证触发（连接从未建立时部分平台不回调）——失败处理不能只挂在 onClose 上
     socket.onError(() => {
       socket?.close({})
+      handleWsFailure(attempt)
     })
+  }
+
+  function clearConnectWatchdog() {
+    if (connectWatchdog) {
+      clearTimeout(connectWatchdog)
+      connectWatchdog = null
+    }
+  }
+
+  /** 统一 WS 失败处理：计数 → 重试或降级轮询；attempt 防陈旧回调/重复计数。 */
+  function handleWsFailure(attempt: number) {
+    if (attempt !== wsAttempt || !running || manuallyClosed || transport.value !== 'ws') return
+    clearHeartbeat()
+    clearConnectWatchdog()
+    wsFailures++
+    if (wsFailures >= WS_MAX_FAILURES) {
+      degradeToPolling()
+      return
+    }
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    reconnectTimer = setTimeout(connectWs, RECONNECT_DELAYS[Math.min(wsFailures - 1, RECONNECT_DELAYS.length - 1)])
   }
 
   function closeWs() {
     manuallyClosed = true
     clearHeartbeat()
+    clearConnectWatchdog()
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null

@@ -142,8 +142,14 @@
 
         <!-- 棋盘 -->
         <view class="board-wrap" :style="{ height: boardWrapHeight }">
-          <image v-if="boardSrc" class="board-img" :src="boardSrc" mode="aspectFit" />
-          <view v-else class="board-fallback" />
+          <image
+            v-if="boardSrc"
+            class="board-img"
+            :src="boardSrc"
+            mode="aspectFit"
+            :style="{ width: boardCssSize + 'px', height: boardCssSize + 'px' }"
+          />
+          <view v-else class="board-fallback" :style="{ width: boardCssSize + 'px', height: boardCssSize + 'px' }" />
           <!-- 棋子（全 DOM + CSS transition） -->
           <view
             v-for="tok in tokens"
@@ -184,7 +190,7 @@
 
           <!-- 骰子 -->
           <view class="dice-zone">
-            <view class="dice-pair" :class="{ 'dice-shaking': diceShaking }">
+            <view class="dice-pair" :class="{ 'dice-shaking': diceRolling || diceShaking }">
               <view v-for="(d, i) in displayDice" :key="i" class="dice">{{ d }}</view>
             </view>
             <view v-if="resolveBonus > 0" class="dice-bonus">+{{ resolveBonus }} ⛏️</view>
@@ -218,9 +224,9 @@
               v-if="current.status === 'playing' && current.currentSeat === mySeat && current.phase === 'act' && !current.pendingDuel && !current.pendingChoice"
               class="btn btn-primary btn-lg"
               :loading="acting"
-              @tap="roll"
+              @tap="onRoll"
             >
-              🎲 掷骰
+              {{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰' }}
             </button>
             <button
               v-if="isMyResolve && !current.pendingDuel && !current.pendingChoice"
@@ -250,7 +256,8 @@
                 <view v-if="p.seat === openingResult.winner" class="open-crown">👑 先手</view>
                 <image class="duel-avatar open-avatar" :src="resolveAvatar(p.avatarUrl)" mode="aspectFill" />
                 <view class="duel-name">{{ p.nickname }}</view>
-                <view v-if="openingResult.rolls[String(p.seat)]" class="open-dice">
+                <view v-if="diceRolling && p.seat === current.mySeat" class="open-dice">🎲 掷骰中…</view>
+                <view v-else-if="openingResult.rolls[String(p.seat)]" class="open-dice">
                   🎲 {{ openingResult.rolls[String(p.seat)]![0] }}+{{ openingResult.rolls[String(p.seat)]![1] }} = <text class="open-sum">{{ openingResult.rolls[String(p.seat)]![0] + openingResult.rolls[String(p.seat)]![1] }}</text>
                 </view>
               </view>
@@ -268,7 +275,8 @@
               >
                 <image class="duel-avatar open-avatar" :src="resolveAvatar(p.avatarUrl)" mode="aspectFill" />
                 <view class="duel-name">{{ p.nickname }}</view>
-                <view v-if="openingRollOf(p.seat)" class="open-dice">
+                <view v-if="diceRolling && p.seat === current.mySeat" class="open-dice">🎲 掷骰中…</view>
+                <view v-else-if="openingRollOf(p.seat)" class="open-dice">
                   🎲 {{ openingRollOf(p.seat)![0] }}+{{ openingRollOf(p.seat)![1] }} = <text class="open-sum">{{ openingRollOf(p.seat)![0] + openingRollOf(p.seat)![1] }}</text>
                 </view>
                 <view v-else-if="current.opening.pending.includes(p.seat)" class="open-wait">待掷…</view>
@@ -276,7 +284,7 @@
               </view>
             </view>
             <view class="duel-countdown">{{ turnCountdown }}s 后未掷自动代掷</view>
-            <button v-if="current.opening.mine" class="btn btn-primary btn-lg" :loading="acting" @tap="roll">🎲 掷骰定先手</button>
+            <button v-if="current.opening.mine" class="btn btn-primary btn-lg" :loading="acting" @tap="onRoll">{{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰定先手' }}</button>
             <view v-else class="duel-hint muted">等其他人掷骰…</view>
           </view>
         </view>
@@ -527,6 +535,7 @@ import {
 } from './utils/adventureSound'
 import type { AdventureChatMessage, AdventureEvent, AdventurePlayer } from '@/types/adventure'
 import GameRulesModal from '@/components/GameRulesModal.vue'
+import { adventureBoardImage } from './utils/adventureRender'
 
 const rulesOpen = ref(false)
 
@@ -685,20 +694,37 @@ function medal(place: number | null): string {
 const boardSrc = ref('')
 const boardWrapHeight = ref('0px')
 
+const boardCssSize = ref(0)
+
 async function ensureBoard() {
-  try {
-    const win = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
-    const css = Math.min(win.windowWidth - 24, 560)
-    boardWrapHeight.value = `${Math.round(css * 1.14)}px`
-    const dpr = Math.min(Math.max(win.pixelRatio || 2, 2), 3)
-    const px = Math.min(Math.round(css * dpr), 1600)
-    const goal = current.value?.goal ?? 100
-    const { adventureBoardImage } = await import('./utils/adventureRender')
-    boardSrc.value = await adventureBoardImage(px, goal)
-  } catch {
-    boardSrc.value = '' // CSS 底色兜底，仍可玩
+  const win = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
+  const css = Math.min(win.windowWidth - 24, 560)
+  boardCssSize.value = Math.round(css)
+  boardWrapHeight.value = `${Math.round(css * 1.14)}px`
+  const dpr = Math.min(Math.max(win.pixelRatio || 2, 2), 3)
+  const px = Math.min(Math.round(css * dpr), 1600)
+  const goal = current.value?.goal ?? 100
+  // 渲染失败重试一次（canvas 偶发失败/资源迟到），再失败保留底色但记日志便于排查
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      boardSrc.value = await adventureBoardImage(px, goal)
+      return
+    } catch (error) {
+      console.error(`[adventure] 棋盘渲染失败（第 ${attempt + 1} 次）`, error)
+    }
   }
+  boardSrc.value = ''
 }
+
+/** 进牌桌时若棋盘还没渲染出来则再试（首渲染失败/进入时房间态未知的自愈）。 */
+watch(
+  () => current.value?.status,
+  (status) => {
+    if ((status === 'playing' || status === 'saved' || status === 'finished') && !boardSrc.value) {
+      void ensureBoard()
+    }
+  },
+)
 
 /** 路线长度变化（开局锁定/等待室切换）时重渲染棋盘（云雾封锁区）。 */
 watch(
@@ -741,8 +767,62 @@ const tokens = computed(() => {
 
 // ---------------------------------------------------------------- 骰子与决策窗口
 
+/** 远端掷骰的短促抖动（别人掷骰时的反馈）。 */
 const diceShaking = ref(false)
-const displayDice = computed<[number, number]>(() => current.value?.roll ?? [0, 0])
+/** 我点击掷骰后的滚动动画：点击瞬间即开始随机翻面，权威点数到达（或超时）定格。 */
+const diceRolling = ref(false)
+const rollingFaces = ref<[number, number]>([1, 1])
+let diceRollTimer: ReturnType<typeof setInterval> | null = null
+let diceRollTimeout: ReturnType<typeof setTimeout> | null = null
+
+const displayDice = computed<[number, number]>(() => {
+  if (diceRolling.value) return rollingFaces.value
+  return current.value?.roll ?? [0, 0]
+})
+
+function randomFace(): number {
+  return 1 + Math.floor(Math.random() * 6)
+}
+
+function startDiceRolling() {
+  if (diceRolling.value) return
+  diceRolling.value = true
+  rollingFaces.value = [randomFace(), randomFace()]
+  if (diceRollTimer) clearInterval(diceRollTimer)
+  diceRollTimer = setInterval(() => {
+    rollingFaces.value = [randomFace(), randomFace()]
+  }, 110)
+  // 兜底：回包丢失/请求失败也不至于永远转
+  if (diceRollTimeout) clearTimeout(diceRollTimeout)
+  diceRollTimeout = setTimeout(stopDiceRolling, 3500)
+}
+
+function stopDiceRolling() {
+  if (!diceRolling.value) return
+  diceRolling.value = false
+  if (diceRollTimer) { clearInterval(diceRollTimer); diceRollTimer = null }
+  if (diceRollTimeout) { clearTimeout(diceRollTimeout); diceRollTimeout = null }
+}
+
+/** 权威点数到达即定格（含回包与 WS 推送两条路径）。 */
+watch(
+  () => current.value?.roll,
+  (dice) => {
+    if (dice) stopDiceRolling()
+  },
+)
+
+/** 掷骰按钮统一入口：可掷才播动画（点了立刻有反馈），再发请求。 */
+async function onRoll() {
+  const st = current.value
+  if (!st) return
+  const openingMine = st.opening?.mine === true
+  const myAct = st.status === 'playing' && st.phase === 'act' && isMyTurn.value
+    && !st.pendingDuel && !st.pendingChoice
+  if (!openingMine && !myAct) return
+  startDiceRolling()
+  await roll()
+}
 const myLeaves = computed(() => current.value?.players.find((p) => p.seat === current.value?.mySeat)?.leaves ?? 0)
 /** 登山镐加成（本地跟踪事件；权威计算在服务端）。 */
 const resolveBonus = ref(0)
@@ -921,6 +1001,7 @@ function handleEvent(ev: AdventureEvent) {
   // 定先手/决斗的展示层追踪（结果定格用）
   if (ev.t === 'openRoll' && Array.isArray(ev.v)) {
     openingDice.value[String(ev.seat)] = ev.v as [number, number]
+    if (ev.seat === st?.mySeat) stopDiceRolling() // 定先手的点数不进 state.roll，动画由事件定格
   } else if (ev.t === 'openTie') {
     openingDice.value = {}
   } else if (ev.t === 'firstPlayer' && ev.seat !== null && ev.seat !== undefined) {
