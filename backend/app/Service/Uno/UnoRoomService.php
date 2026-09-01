@@ -37,6 +37,9 @@ final class UnoRoomService
     /** wild4 质疑窗口（秒）：超时视为放弃质疑。 */
     public const int CHALLENGE_SECONDS = 15;
 
+    /** 全员抽完后的亮牌展示窗口（秒）：看清每张牌与最大点，之后定庄发牌。 */
+    public const int DEALER_REVEAL_SECONDS = 4;
+
     /** 剩 1 张未喊 UNO 的自喊宽限（秒）：宽限内只接受本人补喊，之后任何人可举报。 */
     public const int UNO_SELF_SECONDS = 5;
 
@@ -188,7 +191,10 @@ final class UnoRoomService
 
             $activeSeats = count($room->seats) - count($state['leftSeats'] ?? []);
             if (count($state['dealerDraws']) === $activeSeats) {
-                $state = $this->dealWithDealer($room->seats, $state);
+                // 全员抽完 → 亮牌展示窗口：让大家看清每张牌和谁点数最大，
+                // DEALER_REVEAL_SECONDS 后由懒检查/清扫器定庄发牌（不再最后一人抽完立即开局）
+                $state['dealerReveal'] = true;
+                $state['lastEvent'] = ['type' => 'dealer_reveal'];
             }
 
             $room->state = $state;
@@ -1012,6 +1018,7 @@ final class UnoRoomService
             'phase' => $phase,
             'dealerSeat' => isset($state['dealerSeat']) ? (int) $state['dealerSeat'] : null,
             'dealerDraws' => $state['dealerDraws'] ?? null,
+            'dealerReveal' => ! empty($state['dealerReveal']),
             'mySeat' => $mySeat,
             'ownerSeat' => 0,
             'players' => $players,
@@ -1073,16 +1080,21 @@ final class UnoRoomService
         $state = $room->state;
         $seats = $room->seats;
         if (($state['phase'] ?? 'playing') === 'dealerDraw') {
-            // 抽牌定庄家超时：代所有未抽的玩家抽，然后定庄家发牌
-            foreach ($seats as $i => $uid) {
-                if (in_array($i, $state['leftSeats'] ?? [], true) || isset($state['dealerDraws'][$i])) {
-                    continue;
+            if (empty($state['dealerReveal'])) {
+                // 抽牌超时：代所有未抽的玩家抽（挂机计数），随后同样进入亮牌展示窗口
+                foreach ($seats as $i => $uid) {
+                    if (in_array($i, $state['leftSeats'] ?? [], true) || isset($state['dealerDraws'][$i])) {
+                        continue;
+                    }
+                    $state['dealerDraws'][$i] = UnoRule::drawDealerCard();
+                    $state['idleStrikes'][(string) $uid] = (int) ($state['idleStrikes'][(string) $uid] ?? 0) + 1;
                 }
-                $state['dealerDraws'][$i] = UnoRule::drawDealerCard();
-                $state['idleStrikes'][(string) $uid] = (int) ($state['idleStrikes'][(string) $uid] ?? 0) + 1;
+                $state['dealerReveal'] = true;
+                $state['lastEvent'] = ['type' => 'dealer_reveal', 'auto' => true];
+            } else {
+                // 亮牌展示结束 → 定庄发牌
+                $state = $this->dealWithDealer($seats, $state);
             }
-            $state = $this->dealWithDealer($seats, $state);
-            $state['lastEvent']['auto'] = true;
             $room->state = $state;
             $room->turn_deadline_at = $this->nextDeadline($state, $seats);
             return true;
@@ -1127,7 +1139,10 @@ final class UnoRoomService
     private function nextDeadline(array $state, array $seats): string
     {
         $seconds = self::TURN_SECONDS;
-        if (($state['pendingWild4'] ?? null) !== null) {
+        if (($state['phase'] ?? 'playing') === 'dealerDraw') {
+            // 亮牌展示窗口短于抽牌等待（人人看得清即可）
+            $seconds = ! empty($state['dealerReveal']) ? self::DEALER_REVEAL_SECONDS : self::TURN_SECONDS;
+        } elseif (($state['pendingWild4'] ?? null) !== null) {
             $seconds = self::CHALLENGE_SECONDS;
         } else {
             $uid = (string) ($seats[(int) $state['currentSeat']] ?? 0);

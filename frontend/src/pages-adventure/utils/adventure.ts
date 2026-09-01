@@ -89,7 +89,8 @@ export function duelFormatAt(pos: number): string {
   return segmentOf(pos).duel
 }
 
-export const RPS_LABELS: string[] = ['石头', '剪刀', '布']
+/** 下标对齐服务端编码：0=石头 1=布 2=剪刀（r/p/s 键序同此）。 */
+export const RPS_LABELS: string[] = ['石头', '布', '剪刀']
 export const RPS_KEYS: string[] = ['r', 'p', 's']
 
 // ---------------------------------------------------------------- 数值常量（双端同步）

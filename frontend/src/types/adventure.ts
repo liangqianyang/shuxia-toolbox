@@ -3,7 +3,7 @@
 
 export type AdventureStatus = 'waiting' | 'playing' | 'saved' | 'finished' | 'closed'
 
-export type AdventurePhase = 'act' | 'resolve'
+export type AdventurePhase = 'opening' | 'act' | 'resolve'
 
 export type ChoiceKind = 'fork' | 'ambush' | 'shop' | 'shrine' | 'arena'
 
@@ -38,6 +38,15 @@ export interface AdventureForkOption {
   key: string
   label: string
   to: number | null
+}
+
+/** 定先手掷骰仪式（点数公开，无隐藏信息）。 */
+export interface AdventureOpening {
+  round: number
+  tieSeats: number[]
+  rolls: Record<string, [number, number]>
+  pending: number[]
+  mine: boolean
 }
 
 export interface AdventurePendingChoice {
@@ -82,6 +91,8 @@ export interface AdventureEvent {
   owner?: number | null
   winner?: number
   loser?: number
+  win?: number
+  lose?: number
   a?: number
   b?: number | null
   format?: string
@@ -113,12 +124,16 @@ export interface AdventureRoomState {
   ownerSeat: number
   players: AdventurePlayer[]
   currentSeat: number | null
+  /** 定先手阶段（全员掷双骰点大者先手；null=已定/未开局）。 */
+  opening: AdventureOpening | null
   roll: [number, number] | null
   myItems: string[]
   trapCount: number
   pendingChoice: AdventurePendingChoice | null
   pendingDuel: AdventurePendingDuel | null
   weather: { current: string | null; next: string }
+  /** 登顶格（房主设定，40/60/80/100，默认 100；短局时之后的区域云雾封锁）。 */
+  goal: number
   finishedOrder: number[]
   places: Record<string, number> | null
   turnTtl: number

@@ -36,6 +36,9 @@ final class LudoRoomService
     /** 掷骰/走子各阶段时限（秒）。 */
     public const int TURN_SECONDS = 20;
 
+    /** 定先手阶段时限（秒）：全员掷单骰点大者先手，超时自动代掷。 */
+    public const int OPENING_SECONDS = 10;
+
     /** 连续超时多少次进入挂机（挂机阶段 5s 自动，任何真实操作解除）。 */
     public const int IDLE_LIMIT = 3;
 
@@ -149,8 +152,7 @@ final class LudoRoomService
     }
 
     /**
-     * 掷骰：roll 阶段专属。掷完计算合法走法——无合法走法（全在机场且非 6）自动跳过，
-     * 有则进入 move 阶段等待选机。
+     * 掷骰：opening 阶段全员各掷一次单骰定先手；roll 阶段轮到本人掷。
      *
      * @return array<string, mixed>
      */
@@ -159,6 +161,32 @@ final class LudoRoomService
         $room = Db::transaction(function () use ($code, $userId) {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
+
+            if (($room->state['phase'] ?? 'roll') === 'opening') {
+                // ── 定先手：该轮到且没掷过的人 ──
+                $seat = $this->requireSeated($room, $userId);
+                if ($room->status !== 'playing') {
+                    throw new BizException(422, '对局不在进行中');
+                }
+                if (in_array($seat, $room->state['leftSeats'] ?? [], true)) {
+                    throw new BizException(403, '你已离开本局');
+                }
+                if (! in_array($seat, LudoRule::openingPendingSeats($room->state, $room->seats), true)) {
+                    throw new BizException(422, '现在不用你掷骰');
+                }
+                $state = $room->state;
+                $state['idleStrikes'][(string) $userId] = 0;
+                foreach (LudoRule::rollOpening($state, $room->seats, $seat) as $event) {
+                    $state = $this->pushEvent($state, $event);
+                }
+                $room->state = $state;
+                $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+                $this->touchSeenAt($room, $userId);
+                $room->version++;
+                $room->save();
+                return $room;
+            }
+
             [$seat, $state] = $this->requireMyPhase($room, $userId, 'roll');
 
             $value = random_int(1, 6);
@@ -262,7 +290,8 @@ final class LudoRoomService
             }
             $state = $this->pushEvent($state, ['t' => $on ? 'autoOn' : 'autoOff', 'seat' => $seat]);
             $room->state = $state;
-            if ($on && $room->status === 'playing' && (int) $state['currentSeat'] === $seat) {
+            if ($on && $room->status === 'playing') {
+                // 定先手阶段或轮到本人时立即由服务端代走（drainAuto 自己判断场景）
                 $this->drainAuto($room, $state);
             }
             $this->touchSeenAt($room, $userId);
@@ -359,7 +388,12 @@ final class LudoRoomService
                 $state['leftProgress'][(string) $seat] = $state['planes'][$seat];
                 $state['planes'][$seat] = array_fill(0, LudoRule::PLANES, LudoRule::HANGAR);
                 unset($state['auto'][(string) $userId]);
-                if ((int) $state['currentSeat'] === $seat) {
+                if (($state['phase'] ?? 'roll') === 'opening') {
+                    // 定先手阶段离开：其余人都掷完则立即结算先手，否则继续等
+                    foreach (LudoRule::resolveOpeningIfNeeded($state, $seats) as $event) {
+                        $state = $this->pushEvent($state, $event);
+                    }
+                } elseif ((int) $state['currentSeat'] === $seat) {
                     // 自己回合离开（含掷 6 的额外回合）：不再补掷，直接推进
                     $state['phase'] = 'roll';
                     $state['roll'] = null;
@@ -530,6 +564,18 @@ final class LudoRoomService
 
         $phase = $playing ? (string) ($state['phase'] ?? 'roll') : null;
 
+        $opening = null;
+        if ($playing && $phase === 'opening') {
+            $pending = LudoRule::openingPendingSeats($state, $seats);
+            $opening = [
+                'round' => (int) ($state['opening']['round'] ?? 1),
+                'tieSeats' => array_values($state['opening']['tieSeats'] ?? []),
+                'rolls' => (object) ($state['opening']['rolls'] ?? []),
+                'pending' => $pending,
+                'mine' => $mySeat !== null && in_array($mySeat, $pending, true),
+            ];
+        }
+
         return [
             'code' => (string) $room->code,
             'status' => (string) $room->status,
@@ -538,7 +584,8 @@ final class LudoRoomService
             'mySeat' => $mySeat,
             'ownerSeat' => 0,
             'players' => $players,
-            'currentSeat' => $playing ? (int) ($state['currentSeat'] ?? 0) : null,
+            'currentSeat' => $playing && $state['currentSeat'] !== null ? (int) $state['currentSeat'] : null,
+            'opening' => $opening,
             'roll' => $playing ? ($state['roll'] ?? null) : null,
             'planes' => $state['planes'] ?? [],
             'colors' => $state['colors'] ?? [],
@@ -590,6 +637,11 @@ final class LudoRoomService
             $this->finishGame($room, $state, 'finish');
             return;
         }
+        if (($state['phase'] ?? 'roll') === 'opening') {
+            // 定先手：托管自动掷，真人未掷只刷新 deadline
+            $this->drainAuto($room, $state);
+            return;
+        }
         if ($this->seatIsAuto($state, $seats, (int) $state['currentSeat'])) {
             $this->drainAuto($room, $state);
         } else {
@@ -606,7 +658,24 @@ final class LudoRoomService
     {
         $seats = $room->seats;
         $iterations = 0;
-        while ($room->status === 'playing' && $this->seatIsAuto($state, $seats, (int) $state['currentSeat'])) {
+        while ($room->status === 'playing') {
+            // 0) 定先手：托管座位自动掷，剩下真人等输入
+            if (($state['phase'] ?? 'roll') === 'opening') {
+                foreach (LudoRule::openingPendingSeats($state, $seats) as $s) {
+                    if ($this->seatIsAuto($state, $seats, $s)) {
+                        foreach (LudoRule::rollOpening($state, $seats, $s) as $event) {
+                            $state = $this->pushEvent($state, $event);
+                        }
+                    }
+                }
+                if (($state['phase'] ?? 'roll') === 'opening') {
+                    break;
+                }
+                continue; // 定先手完成 → 顶部按当前座位继续
+            }
+            if (! $this->seatIsAuto($state, $seats, (int) $state['currentSeat'])) {
+                break;
+            }
             if (++$iterations > self::AUTO_ROLL_CAP) {
                 // 诚实 RNG 下不可达的兜底：强推到下一个非托管座位，避免死循环
                 $n = count($seats);
@@ -674,6 +743,25 @@ final class LudoRoomService
         }
         $state = $room->state;
         $seats = $room->seats;
+
+        // 定先手阶段：受影响的是还没掷骰的人；超时自动代掷（不加挂机计数，仪式不罚）
+        if (($state['phase'] ?? 'roll') === 'opening') {
+            $pending = LudoRule::openingPendingSeats($state, $seats);
+            $exceptSeat = $exceptUserId !== null ? $this->seatOf($seats, $exceptUserId) : null;
+            if ($exceptSeat !== null && in_array($exceptSeat, $pending, true)) {
+                $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+                return false;
+            }
+            foreach ($pending as $s) {
+                foreach (LudoRule::rollOpening($state, $seats, $s) as $event) {
+                    $state = $this->pushEvent($state, $event);
+                }
+            }
+            $room->state = $state;
+            $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+            return true;
+        }
+
         if ($exceptUserId !== null && (int) ($seats[(int) $state['currentSeat']] ?? 0) === $exceptUserId) {
             $room->turn_deadline_at = $this->nextDeadline($state, $seats);
             return false;
@@ -782,9 +870,12 @@ final class LudoRoomService
         return count($seats) - count($state['leftSeats'] ?? []);
     }
 
-    /** 下一阶段 deadline：挂机玩家 5s，其余 20s。 */
+    /** 下一阶段 deadline：定先手 10s；挂机玩家 5s，其余 20s。 */
     private function nextDeadline(array $state, array $seats): string
     {
+        if (($state['phase'] ?? 'roll') === 'opening') {
+            return date('Y-m-d H:i:s', time() + self::OPENING_SECONDS);
+        }
         $seconds = self::TURN_SECONDS;
         $uid = (string) ($seats[(int) $state['currentSeat']] ?? 0);
         if ((int) ($state['idleStrikes'][$uid] ?? 0) >= self::IDLE_LIMIT) {

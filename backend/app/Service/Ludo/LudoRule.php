@@ -52,6 +52,92 @@ final class LudoRule
 
     public const int HANGAR = -1;
 
+    /** 定先手掷骰（单骰点大者先手）的并列重掷上限；超过后随机定（诚实 RNG 下几乎不可达）。 */
+    public const int OPENING_MAX_ROUNDS = 3;
+
+    // ---------------------------------------------------------------- 定先手（开局掷骰仪式）
+
+    /** 定先手阶段还没掷骰的座位（未离开；并列重掷轮只算并列者）。 */
+    public static function openingPendingSeats(array $state, array $seats): array
+    {
+        $out = [];
+        $opening = $state['opening'] ?? null;
+        if ($opening === null) {
+            return $out;
+        }
+        $tie = $opening['tieSeats'] ?? [];
+        $rolls = $opening['rolls'] ?? [];
+        foreach ($seats as $i => $uid) {
+            if (in_array($i, $state['leftSeats'] ?? [], true)) {
+                continue;
+            }
+            if ($tie !== [] && ! in_array($i, $tie, true)) {
+                continue;
+            }
+            if (! array_key_exists((string) $i, $rolls)) {
+                $out[] = (int) $i;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * 定先手掷骰（调用方已校验该轮到该座位）：单骰 1-6，全员掷完即结算。
+     *
+     * @param array<string, mixed> $state
+     * @param array<int, int> $seats
+     * @return array<int, array<string, mixed>>
+     */
+    public static function rollOpening(array &$state, array $seats, int $seat): array
+    {
+        $dice = random_int(1, 6);
+        $state['opening']['rolls'][(string) $seat] = $dice;
+        $events = [['t' => 'openRoll', 'seat' => $seat, 'v' => $dice]];
+        return array_merge($events, self::resolveOpeningIfNeeded($state, $seats));
+    }
+
+    /**
+     * 全员掷完后结算：单骰点大者先手；最大点并列只由并列者重掷；
+     * 并列超过 OPENING_MAX_ROUNDS 轮改随机定（兜底）。
+     *
+     * @param array<string, mixed> $state
+     * @param array<int, int> $seats
+     * @return array<int, array<string, mixed>>
+     */
+    public static function resolveOpeningIfNeeded(array &$state, array $seats): array
+    {
+        if (($state['phase'] ?? '') !== 'opening' || self::openingPendingSeats($state, $seats) !== []) {
+            return [];
+        }
+        $opening = $state['opening'];
+        $best = 0;
+        foreach ($opening['rolls'] as $value) {
+            $best = max($best, (int) $value);
+        }
+        $winners = array_keys(array_filter($opening['rolls'], static fn($v) => (int) $v === $best));
+
+        if (count($winners) === 1) {
+            $winner = (int) $winners[0];
+            $state['phase'] = 'roll';
+            $state['currentSeat'] = $winner;
+            $state['opening'] = null;
+            return [['t' => 'firstPlayer', 'seat' => $winner, 'v' => $opening['rolls']]];
+        }
+        if ((int) $opening['round'] >= self::OPENING_MAX_ROUNDS) {
+            $winner = (int) $winners[random_int(0, count($winners) - 1)];
+            $state['phase'] = 'roll';
+            $state['currentSeat'] = $winner;
+            $state['opening'] = null;
+            return [['t' => 'firstPlayer', 'seat' => $winner, 'v' => $opening['rolls'], 'cap' => true]];
+        }
+        $state['opening'] = [
+            'round' => (int) $opening['round'] + 1,
+            'tieSeats' => array_map('intval', $winners),
+            'rolls' => [],
+        ];
+        return [['t' => 'openTie', 'v' => array_map('intval', $winners), 'round' => (int) $opening['round'] + 1]];
+    }
+
     /** 某色起飞格的绝对格（红 0 / 黄 13 / 蓝 26 / 绿 39）。 */
     public static function colorStart(int $color): int
     {
@@ -364,7 +450,8 @@ final class LudoRule
     }
 
     /**
-     * 开局状态：座位配色按人数映射、全部入机场、先手随机。
+     * 开局状态：座位配色按人数映射、全部入机场；先手由「定先手」掷骰仪式决定
+     * （phase=opening，全员掷单骰点大者先手，并列重掷）。
      *
      * @param array<int, int> $seats
      * @return array<string, mixed>
@@ -376,10 +463,10 @@ final class LudoRule
         for ($s = 0; $s < $n; ++$s) {
             $planes[] = array_fill(0, self::PLANES, self::HANGAR);
         }
-        $first = random_int(0, $n - 1);
         return [
-            'phase' => 'roll',
-            'currentSeat' => $first,
+            'phase' => 'opening',
+            'currentSeat' => null,
+            'opening' => ['round' => 1, 'tieSeats' => [], 'rolls' => []],
             'roll' => null,
             'planes' => $planes,
             'colors' => self::SEAT_COLORS[$n],
@@ -390,7 +477,7 @@ final class LudoRule
             'auto' => [],
             'idleStrikes' => [],
             'places' => null,
-            'events' => [['seq' => 1, 'ts' => time(), 't' => 'start', 'seat' => $first]],
+            'events' => [['seq' => 1, 'ts' => time(), 't' => 'start', 'seat' => null, 'v' => 'opening']],
             'scores' => array_fill_keys(array_map('strval', $seats), 0),
         ];
     }

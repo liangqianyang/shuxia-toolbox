@@ -23,6 +23,11 @@ export function startAdventureGame(code: string): Promise<AdventureRoomState> {
   return requestUserApi<AdventureRoomState>(`/api/adventure/room/${code}/start`, 'POST')
 }
 
+/** 房主在等待室设定路线长度（登顶格 40/60/80/100）。 */
+export function configAdventureRoom(code: string, goal: number): Promise<AdventureRoomState> {
+  return requestUserApi<AdventureRoomState>(`/api/adventure/room/${code}/config`, 'POST', { goal })
+}
+
 export function rollAdventureDice(code: string): Promise<AdventureRoomState> {
   return requestUserApi<AdventureRoomState>(`/api/adventure/room/${code}/roll`, 'POST')
 }

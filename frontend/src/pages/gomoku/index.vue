@@ -37,6 +37,7 @@
         />
         <button class="gomoku__join-btn" :disabled="busy" @tap="onJoin">加入</button>
       </view>
+      <text class="gomoku__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -47,6 +48,7 @@
           <text class="gomoku__code-value">{{ state.code }}</text>
           <text class="gomoku__code-hint">点击复制</text>
         </view>
+        <text class="gomoku__rules-btn" @tap="rulesOpen = true">❓ 玩法</text>
         <button v-if="state.status === 'waiting'" class="gomoku__invite" open-type="share">邀请好友</button>
       </view>
 
@@ -96,6 +98,9 @@
 
       <button class="gomoku__leave" @tap="onLeave">离开房间</button>
     </view>
+
+    <!-- 玩法说明 -->
+    <GameRulesModal :visible="rulesOpen" title="五子棋 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
   </view>
 </template>
 
@@ -114,6 +119,34 @@ import {
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { GomokuColor } from '@/types/gomoku'
 import { playGomokuPlace, playGomokuWin } from '@/utils/gomokuAudio'
+import GameRulesModal from '@/components/GameRulesModal.vue'
+
+const rulesOpen = ref(false)
+
+/** 玩法说明（玩家视角精简版）。 */
+const GAME_RULES: { heading?: string; lines: string[] }[] = [
+  {
+    heading: '🎯 规则',
+    lines: [
+      '黑白双方轮流落子，任意方向（横、竖、斜）先连成五子者获胜',
+      '创建房间时可选执黑（先手）或执白（后手）',
+    ],
+  },
+  {
+    heading: '↩️ 悔棋',
+    lines: [
+      '对局中可以发起悔棋请求，对方 10 秒内同意才生效（会一起退回一回合）',
+      '等待对方决定时可以撤销请求',
+    ],
+  },
+  {
+    heading: '💬 其他',
+    lines: [
+      '中途离开视为认输；对局结束后可「再来一局」继续同房间',
+      '房间码可分享给好友直接进入对局',
+    ],
+  },
+]
 
 const {
   state,
@@ -510,6 +543,21 @@ onShareAppMessage(() => ({
     margin: 48rpx 0 24rpx;
     font-size: $font-caption;
     color: $color-text-secondary;
+  }
+
+  &__rules {
+    margin-top: 28rpx;
+    font-size: $font-body;
+    color: $color-primary;
+    text-decoration: underline;
+  }
+
+  &__rules-btn {
+    height: 64rpx;
+    line-height: 64rpx;
+    padding: 0 20rpx;
+    font-size: $font-caption;
+    color: $color-primary;
   }
 
   &__join {

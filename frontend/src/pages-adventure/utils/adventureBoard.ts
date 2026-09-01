@@ -8,6 +8,16 @@
 
 export const SUMMIT = 100
 
+/** 房主可选的路线长度（登顶格），与后端 AdventureBoard::GOALS 双份同步。 */
+export const GOALS = [40, 60, 80, 100] as const
+
+export const GOAL_LABELS: Record<number, string> = {
+  40: '枫林线 · 闪电局',
+  60: '溪谷线 · 标准局',
+  80: '岩壁线 · 长线局',
+  100: '枫顶线 · 完整局',
+}
+
 export const CAMPS = [21, 41, 61, 81] as const
 
 export const CABLE_STATIONS = [14, 38, 62] as const
@@ -177,15 +187,15 @@ export function cellToPoint(n: number): { x: number; y: number } {
 
 /**
  * 位移统一语义（与后端 AdventureRule 一致的展示侧公式）：
- * 掷骰 exact=登顶；超出反弹（200-pos-steps）；雪线外前进被封顶暴雪截断为 81。
+ * 掷骰 exact=登顶；超出反弹（2×goal-pos-steps）；补票只在枫叶够差额时生效。
  * 这里只做 UI 提示用（如掷骰后的落点预览），权威以后端为准。
  */
-export function previewTarget(pos: number, steps: number, canTicket: boolean, leaves: number): number {
+export function previewTarget(pos: number, steps: number, canTicket: boolean, leaves: number, goal: number = SUMMIT): number {
   let target = pos + steps
-  if (target > SUMMIT) {
-    const gap = SUMMIT - pos
-    if (canTicket && steps >= gap && leaves >= gap) return SUMMIT
-    target = 2 * SUMMIT - target
+  if (target > goal) {
+    const gap = goal - pos
+    if (canTicket && steps >= gap && leaves >= gap) return goal
+    target = 2 * goal - target
   }
   return target
 }

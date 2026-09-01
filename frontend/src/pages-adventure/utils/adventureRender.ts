@@ -31,14 +31,15 @@ const CELL_TINT: Partial<Record<CellType, string>> = {
   fork: '#E8E3D2',
 }
 
-const boardImageCache = new Map<number, Promise<string>>()
+const boardImageCache = new Map<string, Promise<string>>()
 
-/** 渲染棋盘（边长 px 物理像素），返回临时图片路径；同尺寸只渲染一次。 */
-export function adventureBoardImage(px: number): Promise<string> {
-  const key = Math.round(px)
+/** 渲染棋盘（边长 px 物理像素 + 登顶格 goal），返回临时图片路径；同参数只渲染一次。
+ *  短局（goal<100）时 goal 之后的区域以云雾封锁（不可达），枫顶旗画在 goal 格。 */
+export function adventureBoardImage(px: number, goal: number = 100): Promise<string> {
+  const key = `${Math.round(px)}:${goal}`
   const cached = boardImageCache.get(key)
   if (cached) return cached
-  const task = renderBoard(key).catch((err) => {
+  const task = renderBoard(Math.round(px), goal).catch((err) => {
     boardImageCache.delete(key)
     throw err
   })
@@ -46,7 +47,7 @@ export function adventureBoardImage(px: number): Promise<string> {
   return task
 }
 
-async function renderBoard(px: number): Promise<string> {
+async function renderBoard(px: number, goal: number): Promise<string> {
   const { canvas, ctx } = createDrawingCanvas(px, px)
   const s = px / 10 // 一格的物理像素
   const pt = (n: number): [number, number] => {
@@ -81,6 +82,19 @@ async function renderBoard(px: number): Promise<string> {
     const type = def?.type ?? 'plain'
     const seg = SEGMENTS.findIndex((g) => n >= g.from && n <= g.to)
 
+    // 云雾封锁区：短局时登顶格之后的区域不可达
+    if (n > goal) {
+      ctx.fillStyle = 'rgba(33, 72, 61, 0.10)'
+      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.16)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(33, 72, 61, 0.22)'
+      ctx.font = `${Math.round(s * 0.26)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🌫', cx, cy)
+      continue
+    }
+
     if (type === 'camp') {
       // 营地：实底 + 帐篷 + 双层描边
       ctx.fillStyle = '#DCEBD2'
@@ -90,8 +104,8 @@ async function renderBoard(px: number): Promise<string> {
       ctx.lineWidth = Math.max(1.5, s * 0.05)
       ctx.stroke()
       drawTent(ctx, cx, cy + s * 0.1, s * 0.3, '#4E7A3A')
-    } else if (type === 'summit') {
-      // 枫顶：三角峰 + 旗帜
+    } else if (n === goal) {
+      // 登顶格（枫顶/短局终点）：三角峰 + 旗帜
       ctx.fillStyle = '#DCE7F3'
       roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.2)
       ctx.fill()
@@ -143,13 +157,13 @@ async function renderBoard(px: number): Promise<string> {
     ctx.fill()
   }
 
-  // ── 缆车虚线（长跳转的可视化；云梯短跳转用格内图标表达） ──
+  // ── 缆车虚线（长跳转的可视化；伸入云雾封锁区的缆车线不画） ──
   ctx.strokeStyle = 'rgba(74,127,181,0.55)'
   ctx.lineWidth = Math.max(1.5, s * 0.045)
   ctx.setLineDash([s * 0.12, s * 0.1])
   for (const from of [14, 38, 62]) {
     const to = CELLS[from]?.to
-    if (!to) continue
+    if (!to || to > goal) continue
     const [x1, y1] = pt(from)
     const [x2, y2] = pt(to)
     const lift = Math.min(y1, y2) - s * 0.55 // 弧顶抬到两格上方

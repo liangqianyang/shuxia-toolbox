@@ -2,7 +2,16 @@
 
 export type LudoStatus = 'waiting' | 'playing' | 'finished' | 'closed'
 
-export type LudoPhase = 'roll' | 'move'
+export type LudoPhase = 'opening' | 'roll' | 'move'
+
+/** 定先手掷骰仪式（单骰点大者先手；null=已定/未开局）。 */
+export interface LudoOpening {
+  round: number
+  tieSeats: number[]
+  rolls: Record<string, number>
+  pending: number[]
+  mine: boolean
+}
 
 /** 0红/1黄/2蓝/3绿。 */
 export type LudoColor = 0 | 1 | 2 | 3
@@ -71,6 +80,7 @@ export interface LudoRoomState {
   ownerSeat: number
   players: LudoPlayer[]
   currentSeat: number | null
+  opening: LudoOpening | null
   roll: number | null
   planes: number[][]
   colors: LudoColor[]

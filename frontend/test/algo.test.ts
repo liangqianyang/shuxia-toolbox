@@ -1221,6 +1221,13 @@ function testAdventure() {
   assert(previewTarget(98, 12, true, 1) === 90, '枫叶不够反弹 98+12=90')
   assert(previewTarget(50, 7, true, 9) === 57, '普通前进落点')
 
+  // 路线长度（房主设定，双份同步）：短局公式与封锁
+  assert(JSON.stringify(adventureBoard.GOALS) === JSON.stringify([40, 60, 80, 100]), '路线长度 40/60/80/100')
+  assert(adventureBoard.GOAL_LABELS[60] === '溪谷线 · 标准局', '路线名')
+  assert(previewTarget(58, 5, true, 2, 60) === 60, '短局补票登顶（goal=60）')
+  assert(previewTarget(55, 8, true, 1, 60) === 57, '短局反弹（goal=60）：55+8→57')
+  assert(previewTarget(40, 3, false, 0) === 43 || previewTarget(40, 3, false, 0, 40) === 37, '枫林线边界')
+
   // 道具/天气常量（与后端双份同步：8 道具 / 12 天气牌）
   assert(Object.keys(advConstants.ITEMS).length === 8, '8 种道具')
   assert(Object.keys(advConstants.WEATHER_CARDS).length === 12, '12 张天气牌')

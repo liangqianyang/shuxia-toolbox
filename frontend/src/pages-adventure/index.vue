@@ -13,6 +13,7 @@
           <input v-model="joinCode" class="join-input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
           <button class="btn btn-gold" :disabled="joinCode.length !== 4" @tap="onJoin">加入</button>
         </view>
+        <view class="rules-entry" @tap="rulesOpen = true">❓ 玩法说明</view>
       </view>
       <view v-if="myRooms.length" class="my-rooms">
         <view class="my-rooms-title">我的对局</view>
@@ -31,6 +32,7 @@
       <view class="room-header">
         <view class="room-code" @tap="copyCode">房号 {{ current.code }} ⧉</view>
         <view class="header-btns">
+          <view class="icon-btn" @tap="rulesOpen = true">❓</view>
           <view class="icon-btn" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</view>
           <button class="icon-btn share-btn" open-type="share">📤</button>
           <view class="icon-btn" @tap="onLeave">退出</view>
@@ -39,6 +41,23 @@
 
       <!-- 等待室 -->
       <view v-if="current.status === 'waiting'" class="waiting">
+        <!-- 路线长度（房主设定） -->
+        <view class="route-picker">
+          <view class="route-title">🗺️ 路线长度</view>
+          <view v-if="isOwner" class="route-options">
+            <view
+              v-for="g in GOALS"
+              :key="g"
+              class="route-opt"
+              :class="{ 'route-active': current.goal === g }"
+              @tap="setGoal(g)"
+            >
+              <text class="route-name">{{ GOAL_LABELS[g] ?? g }}</text>
+              <text class="route-cells">{{ g }} 格登顶</text>
+            </view>
+          </view>
+          <view v-else class="route-current">本局路线：{{ GOAL_LABELS[current.goal] ?? current.goal }}（{{ current.goal }} 格登顶）</view>
+        </view>
         <view class="seats-grid">
           <view v-for="i in 6" :key="i" class="seat-card" :class="{ 'seat-empty': !seatPlayer(i - 1) }">
             <template v-if="seatPlayer(i - 1)">
@@ -216,9 +235,75 @@
           </view>
         </view>
 
-        <!-- ══ 决斗浮层 ══ -->
-        <view v-if="duelView" class="duel-overlay">
-          <view class="duel-panel">
+        <!-- ══ 定先手（开局掷骰仪式 + 结果定格） ══ -->
+        <view v-if="current.opening || openingResult" class="duel-overlay">
+          <!-- 结果定格：全员点数 + 先手者高亮，停留片刻再出发 -->
+          <view v-if="!current.opening && openingResult" class="duel-panel">
+            <view class="duel-title">🏆 先手诞生</view>
+            <view class="open-grid">
+              <view
+                v-for="p in current.players.filter((x) => !x.left)"
+                :key="p.seat"
+                class="open-side"
+                :class="{ 'open-win': p.seat === openingResult.winner, 'open-dim': p.seat !== openingResult.winner }"
+              >
+                <view v-if="p.seat === openingResult.winner" class="open-crown">👑 先手</view>
+                <image class="duel-avatar open-avatar" :src="resolveAvatar(p.avatarUrl)" mode="aspectFill" />
+                <view class="duel-name">{{ p.nickname }}</view>
+                <view v-if="openingResult.rolls[String(p.seat)]" class="open-dice">
+                  🎲 {{ openingResult.rolls[String(p.seat)]![0] }}+{{ openingResult.rolls[String(p.seat)]![1] }} = <text class="open-sum">{{ openingResult.rolls[String(p.seat)]![0] + openingResult.rolls[String(p.seat)]![1] }}</text>
+                </view>
+              </view>
+            </view>
+            <view class="duel-hint">{{ nickOf(openingResult.winner) }} 掷得先手，出发！</view>
+          </view>
+          <view v-else-if="current.opening" class="duel-panel">
+            <view class="duel-title">🎯 定先手<text v-if="current.opening.round > 1"> · 并列重掷第 {{ current.opening.round }} 轮</text></view>
+            <view class="open-grid">
+              <view
+                v-for="p in current.players.filter((x) => !x.left)"
+                :key="p.seat"
+                class="open-side"
+                :class="{ 'open-tie': current.opening.tieSeats.includes(p.seat) }"
+              >
+                <image class="duel-avatar open-avatar" :src="resolveAvatar(p.avatarUrl)" mode="aspectFill" />
+                <view class="duel-name">{{ p.nickname }}</view>
+                <view v-if="openingRollOf(p.seat)" class="open-dice">
+                  🎲 {{ openingRollOf(p.seat)![0] }}+{{ openingRollOf(p.seat)![1] }} = <text class="open-sum">{{ openingRollOf(p.seat)![0] + openingRollOf(p.seat)![1] }}</text>
+                </view>
+                <view v-else-if="current.opening.pending.includes(p.seat)" class="open-wait">待掷…</view>
+                <view v-else class="open-wait muted">本轮轮空</view>
+              </view>
+            </view>
+            <view class="duel-countdown">{{ turnCountdown }}s 后未掷自动代掷</view>
+            <button v-if="current.opening.mine" class="btn btn-primary btn-lg" :loading="acting" @tap="roll">🎲 掷骰定先手</button>
+            <view v-else class="duel-hint muted">等其他人掷骰…</view>
+          </view>
+        </view>
+
+        <!-- ══ 决斗浮层（进行中 + 结果定格） ══ -->
+        <view v-if="duelView || duelResultView" class="duel-overlay">
+          <!-- 结果定格：双方亮招 + 胜者高亮（含比点数决斗） -->
+          <view v-if="!duelView && duelResultView" class="duel-panel">
+            <view class="duel-title">⚔️ 决斗结果</view>
+            <view class="duel-vs">
+              <view class="duel-side" :class="{ 'duel-side--win': duelResultView.a === duelResultView.winner, 'duel-side--dim': duelResultView.a !== duelResultView.winner }">
+                <view v-if="duelResultView.a === duelResultView.winner" class="open-crown">👑 胜</view>
+                <image class="duel-avatar" :src="resolveAvatar(playerBySeat(duelResultView.a)?.avatarUrl ?? '')" mode="aspectFill" />
+                <view class="duel-name">{{ playerBySeat(duelResultView.a)?.nickname }}</view>
+                <view class="duel-reveal">{{ pickLabel(duelResultView.picks[String(duelResultView.a)], duelResultView.format) }}</view>
+              </view>
+              <view class="duel-mid">VS</view>
+              <view class="duel-side" :class="{ 'duel-side--win': duelResultView.b === duelResultView.winner, 'duel-side--dim': duelResultView.b !== duelResultView.winner }">
+                <view v-if="duelResultView.b === duelResultView.winner" class="open-crown">👑 胜</view>
+                <image class="duel-avatar" :src="resolveAvatar(playerBySeat(duelResultView.b)?.avatarUrl ?? '')" mode="aspectFill" />
+                <view class="duel-name">{{ playerBySeat(duelResultView.b)?.nickname }}</view>
+                <view class="duel-reveal">{{ pickLabel(duelResultView.picks[String(duelResultView.b)], duelResultView.format) }}</view>
+              </view>
+            </view>
+            <view class="duel-stakes">胜 +{{ duelResultView.win }} / 败 -{{ duelResultView.lose }}</view>
+          </view>
+          <view v-else-if="duelView" class="duel-panel">
             <view class="duel-title">⚔️ 狭路相逢 · {{ duelFormatName(duelView.format) }}<text v-if="duelView.arena">（擂台）</text></view>
             <view class="duel-vs">
               <view class="duel-side">
@@ -363,8 +448,7 @@
 
     <!-- 聊天面板 -->
     <view v-if="chatPanelOpen" class="chat-panel-mask" @tap="chatPanelOpen = false">
-      <view class="chat-panel" @tap.stop>
-        <view class="chat-panel-tabs">
+      <view class="chat-panel" @tap.stop>        <view class="chat-panel-tabs">
           <view v-for="t in chatTabs" :key="t.key" class="chat-tab" :class="{ active: chatTab === t.key }" @tap="chatTab = t.key">
             {{ t.label }}
           </view>
@@ -404,6 +488,9 @@
         </view>
       </view>
     </view>
+
+    <!-- 玩法说明 -->
+    <GameRulesModal :visible="rulesOpen" title="枫趣冒险 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
   </view>
 </template>
 
@@ -414,7 +501,7 @@ import { cdnUrl } from '@/utils/cdn'
 import { resolveAvatarUrl as resolveAvatar } from '@/services/toolbox'
 import { useFeatures } from '@/composables/useFeatures'
 import { useAdventureRoom } from './composables/useAdventureRoom'
-import { cellToPoint, seatColor } from './utils/adventureBoard'
+import { cellToPoint, GOALS, GOAL_LABELS, seatColor } from './utils/adventureBoard'
 import {
   ITEMS,
   RPS_KEYS,
@@ -439,6 +526,77 @@ import {
   type AdventureSoundName,
 } from './utils/adventureSound'
 import type { AdventureChatMessage, AdventureEvent, AdventurePlayer } from '@/types/adventure'
+import GameRulesModal from '@/components/GameRulesModal.vue'
+
+const rulesOpen = ref(false)
+
+/** 玩法说明（玩家视角精简版；完整规则见 docs/adventure-rules.md）。 */
+const GAME_RULES: { heading?: string; lines: string[] }[] = [
+  {
+    heading: '🎯 目标与移动',
+    lines: [
+      '2-6 人登山竞速，率先精确走到登顶格者夺冠，整局打满全部名次',
+      '开局全员各掷一次双骰定先手，点数最大者先行；最大点并列的重新掷',
+      '房主开局前可选路线长度：枫林 40 / 溪谷 60 / 岩壁 80 / 枫顶 100 格，短局时云雾之后的区域不开放',
+      '每回合掷两颗骰子，按点数之和前进；双骰同点额外捡 2 枫叶',
+      '步数超过登顶格会反弹；枫叶够差额时自动「补票」登顶',
+      '棋盘分五段：山脚草原 → 枫叶林 → 清溪谷 → 岩壁 → 雪线',
+    ],
+  },
+  {
+    heading: '🏕️ 营地与机关格',
+    lines: [
+      '营地（21/41/61/81）是存档点：任何后退都不会跌破你已到过的营地，且营地内绝对安全',
+      '云梯/缆车向前跳、滑坡/落石向后退；枫叶格和温泉捡枫叶',
+      '商店花 3 枫叶买道具；补给站免费摸道具；手牌上限 3 张',
+      '雪崩格：你身后 5 格内的其他人全部退 2',
+      '岔路口二选一：捷径直达 vs 绕路捡枫叶，看天气预报再决定',
+    ],
+  },
+  {
+    heading: '⚔️ 狭路相逢（决斗）',
+    lines: [
+      '走到有人占的格子触发决斗，胜者前进败者后退（基础 +1 / -3，雪线翻倍）',
+      '决斗形式按段位轮换：草原猜拳、枫叶林暗标枫叶（价高者胜且支付所标）、清溪谷比点数、岩壁猜拳',
+      '擂台格可主动挑战任意玩家（+3 / -3）',
+      '旁观者可花 1 枫叶押注某一方，押中得 3',
+      '一回合最多一场决斗，之后再撞人只把对方顶退 2 格',
+    ],
+  },
+  {
+    heading: '🕳️ 事件格',
+    lines: [
+      '埋伏格：花 2 枫叶埋雷（归属保密），下一个踩中的对手退 3 且跳过一回合',
+      '命运交换：与前方最近的人换位；第一名则白捡 3 枫叶',
+      '山神小屋：和山神猜拳，赢了三选一（前进 4 / 摸道具 / +3 枫叶），输了交 2 枫叶买路钱',
+    ],
+  },
+  {
+    heading: '🎒 道具（掷骰后、走子前打出）',
+    lines: [
+      '⛏️ 登山镐：本回合 +2 步｜🎿 滑雪板：挡下一次滑坡/落石',
+      '🌪️ 大风咒：指定玩家退 4｜❄️ 雪球：指定玩家下回合 -3',
+      '🧥 换位斗篷：与任意玩家换位｜🚡 缆车票：前进到下一缆车站',
+      '🍁 枫叶袋：+5 枫叶｜🔮 改天换地：弃掉下一张天气牌',
+    ],
+  },
+  {
+    heading: '🌤️ 天气',
+    lines: [
+      '每打满一轮翻一张天气牌，下一张预报对全员公开——看得见的随机，提前规划',
+      '顺风全员前进、山风全员后退、泥石流领跑者后退、枫叶雨全员得枫叶',
+      '暴风滑坡翻倍、大雾禁道具、缆车停运、封顶暴雪无法进入雪线',
+    ],
+  },
+  {
+    heading: '⏸️ 存档与掉线',
+    lines: [
+      '房主可随时保存对局，下次继续（7 天内有效）',
+      '掉线不丢座位：回来即可接管，期间由托管代打',
+      '超时会自动托管；连续 3 次超时进入挂机模式',
+    ],
+  },
+]
 
 const {
   state: current,
@@ -456,6 +614,7 @@ const {
   createAndEnter,
   joinByCode,
   start,
+  setGoal,
   roll,
   useItem,
   confirmMove,
@@ -533,12 +692,21 @@ async function ensureBoard() {
     boardWrapHeight.value = `${Math.round(css * 1.14)}px`
     const dpr = Math.min(Math.max(win.pixelRatio || 2, 2), 3)
     const px = Math.min(Math.round(css * dpr), 1600)
+    const goal = current.value?.goal ?? 100
     const { adventureBoardImage } = await import('./utils/adventureRender')
-    boardSrc.value = await adventureBoardImage(px)
+    boardSrc.value = await adventureBoardImage(px, goal)
   } catch {
     boardSrc.value = '' // CSS 底色兜底，仍可玩
   }
 }
+
+/** 路线长度变化（开局锁定/等待室切换）时重渲染棋盘（云雾封锁区）。 */
+watch(
+  () => current.value?.goal,
+  () => {
+    if (current.value) void ensureBoard()
+  },
+)
 
 // ---------------------------------------------------------------- 棋子（全 DOM + CSS transition）
 
@@ -670,6 +838,56 @@ const choiceWaitingText = computed(() => {
   return `${seatPlayer(c.seat)?.nickname ?? '?'} 正在${c.kind === 'arena' ? '挑选挑战对象' : '做选择'}…`
 })
 
+// ---------------------------------------------------------------- 定先手展示 + 结果定格
+
+const openingView = computed(() => current.value?.opening ?? null)
+
+function openingRollOf(seat: number): [number, number] | null {
+  const roll = openingView.value?.rolls[String(seat)]
+  return roll ?? null
+}
+
+/** 定先手结果定格：最后一轮全员点数 + 先手者，浮层多停留一会儿再收起。 */
+const openingResult = ref<{ winner: number; rolls: Record<string, [number, number]> } | null>(null)
+const openingDice = ref<Record<string, [number, number]>>({})
+let openingResultTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 帧同步：重连/中间帧补齐已掷点数（最后一掷只存在于事件流里）。 */
+watch(
+  () => current.value?.opening?.rolls,
+  (rolls) => {
+    if (rolls) openingDice.value = { ...rolls }
+  },
+  { immediate: true },
+)
+
+function holdOpeningResult(winner: number) {
+  openingResult.value = { winner, rolls: { ...openingDice.value } }
+  if (openingResultTimer) clearTimeout(openingResultTimer)
+  openingResultTimer = setTimeout(() => (openingResult.value = null), 2500)
+}
+
+/** 决斗结果定格：双方亮招 + 胜者高亮（比点数决斗此前完全没有浮层）。 */
+const duelResultView = ref<{ a: number; b: number; picks: Record<string, number>; winner: number; win: number; lose: number; format: string } | null>(null)
+const duelPicks: Record<string, number> = {}
+let duelCtx: { a: number; b: number | null; format: string } | null = null
+let duelResultTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 决斗亮招文案：猜拳值（0石头/1布/2剪刀）、暗标枫叶、比点数骰子。 */
+function pickLabel(value: number | undefined, format: string): string {
+  if (value === undefined) return '…'
+  if (format === 'bid') return `${value} 🍁`
+  if (format === 'dice') return `🎲 ${value}`
+  return RPS_LABELS[value] ?? String(value)
+}
+
+function holdDuelResult(winner: number, win: number, lose: number) {
+  if (duelCtx === null || duelCtx.b === null) return
+  duelResultView.value = { a: duelCtx.a, b: duelCtx.b, picks: { ...duelPicks }, winner, win, lose, format: duelCtx.format }
+  if (duelResultTimer) clearTimeout(duelResultTimer)
+  duelResultTimer = setTimeout(() => (duelResultView.value = null), 2000)
+}
+
 // ---------------------------------------------------------------- 事件播报 + 音效
 
 const bannerText = ref('')
@@ -700,6 +918,25 @@ watch(
 
 function handleEvent(ev: AdventureEvent) {
   const st = current.value
+  // 定先手/决斗的展示层追踪（结果定格用）
+  if (ev.t === 'openRoll' && Array.isArray(ev.v)) {
+    openingDice.value[String(ev.seat)] = ev.v as [number, number]
+  } else if (ev.t === 'openTie') {
+    openingDice.value = {}
+  } else if (ev.t === 'firstPlayer' && ev.seat !== null && ev.seat !== undefined) {
+    holdOpeningResult(ev.seat)
+  } else if (ev.t === 'duelStart') {
+    duelCtx = { a: ev.a ?? 0, b: ev.b ?? null, format: ev.format ?? 'rps' }
+    for (const k of Object.keys(duelPicks)) delete duelPicks[k]
+  } else if (ev.t === 'duelTarget') {
+    if (duelCtx) duelCtx.b = ev.b ?? null
+  } else if (ev.t === 'duelPick' && ev.v && typeof ev.v === 'object') {
+    for (const [k, val] of Object.entries(ev.v as Record<string, number>)) duelPicks[k] = val
+  } else if (ev.t === 'duelTie') {
+    for (const k of Object.keys(duelPicks)) delete duelPicks[k]
+  } else if (ev.t === 'duelResult' && ev.winner !== undefined && ev.winner !== null) {
+    holdDuelResult(ev.winner, ev.win ?? 1, ev.lose ?? 3)
+  }
   // 登山镐加成本地跟踪：我掷骰时清零、我打出登山镐时 +2
   if (ev.t === 'roll' && ev.seat === st?.mySeat) resolveBonus.value = 0
   if (ev.t === 'item' && ev.seat === st?.mySeat && ev.v === 'pickaxe') resolveBonus.value += 2
@@ -749,8 +986,11 @@ function nickOf(seat: number | null | undefined): string {
 
 function eventText(ev: AdventureEvent): string {
   switch (ev.t) {
-    case 'start': return `🏔️ 对局开始，${nickOf(ev.seat)}先走`
+    case 'start': return ev.v === 'rematch' ? '🏔️ 再来一局！重新掷骰定先手' : '🏔️ 对局开始！掷骰定先手'
     case 'roll': return `${nickOf(ev.seat)} 掷出 ${(ev.v as number[] | undefined)?.join(' + ') ?? '?'}`
+    case 'openRoll': return '' // 定先手浮层实时展示，不占播报条
+    case 'openTie': return '🎲 最大点并列，并列者重掷！'
+    case 'firstPlayer': return `🎲 ${nickOf(ev.seat)} 掷得先手！`
     case 'doubles': return `${nickOf(ev.seat)} 双骰同点，捡 2 🍁`
     case 'ticket': return `${nickOf(ev.seat)} 花 ${ev.cost} 🍁 补票登顶！`
     case 'ladder': return `${nickOf(ev.seat)} 踩上云梯 → ${ev.to}`
@@ -807,7 +1047,7 @@ function eventSound(t: string): AdventureSoundName | null {
     case 'leaf': case 'spring': return 'leaf'
     case 'item': case 'shop': case 'supply': return 'item'
     case 'duelStart': case 'duelTarget': return 'duel'
-    case 'duelResult': return 'duelwin'
+    case 'duelResult': case 'firstPlayer': return 'duelwin'
     case 'bet': case 'betWin': return 'bet'
     case 'ambushHit': return 'trap'
     case 'summit': return 'summit'
@@ -1009,6 +1249,7 @@ $muted: #9aa79e;
   flex: 1; height: 76rpx; background: #fff; border: 2rpx solid rgba(33,72,61,0.15);
   border-radius: 16rpx; padding: 0 24rpx; font-size: 30rpx; letter-spacing: 8rpx; text-align: center;
 }
+.rules-entry { text-align: center; font-size: 26rpx; color: #21483d; text-decoration: underline; padding: 8rpx 0; }
 .my-rooms { width: 100%; background: #fff; border-radius: 20rpx; padding: 24rpx; }
 .my-rooms-title { font-size: 26rpx; font-weight: 700; color: $ink; margin-bottom: 16rpx; }
 .my-room-item { display: flex; align-items: center; gap: 16rpx; padding: 16rpx 8rpx; border-top: 2rpx solid rgba(33,72,61,0.06); }
@@ -1026,6 +1267,17 @@ $muted: #9aa79e;
 
 // ── 等待室 ──
 .waiting { padding: 24rpx; }
+.route-picker { background: #fff; border-radius: 20rpx; padding: 20rpx 24rpx; margin-bottom: 20rpx; }
+.route-title { font-size: 26rpx; font-weight: 700; color: $ink; margin-bottom: 14rpx; }
+.route-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; }
+.route-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 4rpx; padding: 14rpx 8rpx;
+  background: rgba(33, 72, 61, 0.05); border-radius: 14rpx; border: 3rpx solid transparent;
+}
+.route-active { border-color: $maple; background: rgba(232, 93, 74, 0.1); }
+.route-name { font-size: 21rpx; font-weight: 700; color: $ink; }
+.route-cells { font-size: 19rpx; color: $muted; }
+.route-current { font-size: 26rpx; color: $ink; font-weight: 600; }
 .seats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20rpx; }
 .seat-card {
   background: #fff; border-radius: 20rpx; padding: 24rpx 12rpx; display: flex; flex-direction: column;
@@ -1167,6 +1419,32 @@ $muted: #9aa79e;
 .duel-mid { font-size: 36rpx; font-weight: 900; color: $maple; }
 .duel-stakes { font-size: 24rpx; color: #8a6314; }
 .duel-countdown { font-size: 26rpx; font-weight: 800; color: $maple; }
+
+// ── 定先手浮层 ──
+.open-grid { display: flex; flex-wrap: wrap; gap: 16rpx; justify-content: center; }
+.open-side {
+  display: flex; flex-direction: column; align-items: center; gap: 6rpx; width: 168rpx;
+  background: rgba(33, 72, 61, 0.05); border-radius: 16rpx; padding: 12rpx 8rpx;
+  border: 3rpx solid transparent;
+}
+.open-tie { border-color: $gold; background: rgba(244, 185, 66, 0.14); }
+.open-avatar { width: 76rpx; height: 76rpx; }
+.open-dice { font-size: 20rpx; color: $ink; }
+.open-sum { font-weight: 800; color: $maple; font-size: 24rpx; }
+.open-wait { font-size: 20rpx; color: $muted; }
+.open-win { border-color: $gold; background: rgba(244, 185, 66, 0.16); animation: open-win-pulse 1s ease-in-out infinite; }
+.open-dim { opacity: 0.55; }
+.open-crown {
+  align-self: center; font-size: 20rpx; font-weight: 800; background: $gold; color: $ink;
+  border-radius: 999rpx; padding: 4rpx 14rpx; margin-bottom: 6rpx; box-shadow: 0 4rpx 10rpx rgba(0,0,0,0.25);
+}
+.duel-side--win { animation: open-win-pulse 1s ease-in-out infinite; }
+.duel-side--dim { opacity: 0.5; }
+.duel-reveal { font-size: 26rpx; font-weight: 800; color: $ink; margin-top: 4rpx; }
+@keyframes open-win-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
 .duel-picks { display: flex; flex-direction: column; align-items: center; gap: 12rpx; width: 100%; }
 .duel-hint { font-size: 24rpx; color: $ink; }
 .duel-candidates { display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: center; }

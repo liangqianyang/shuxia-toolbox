@@ -20,6 +20,17 @@ final class AdventureBoard
 {
     public const int SUMMIT = 100;
 
+    /** 房主可选的路线长度（登顶格）：都在段边界上，短局时之后的区域云雾封锁。 */
+    public const array GOALS = [40, 60, 80, 100];
+
+    /** 路线长度 => 展示名（等待室选择器/播报用）。 */
+    public const array GOAL_LABELS = [
+        40 => '枫林线 · 闪电局',
+        60 => '溪谷线 · 标准局',
+        80 => '岩壁线 · 长线局',
+        100 => '枫顶线 · 完整局',
+    ];
+
     /** 营地（存档点 + 安全区）。 */
     public const array CAMPS = [21, 41, 61, 81];
 

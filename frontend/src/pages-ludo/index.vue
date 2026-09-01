@@ -10,6 +10,7 @@
         <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
         <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
       </view>
+      <text class="lobby__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -17,6 +18,7 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
+          <text class="room__sound" @tap="rulesOpen = true">❓</text>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -129,6 +131,48 @@
           </view>
         </view>
 
+        <!-- 定先手（开局掷骰仪式 + 结果定格） -->
+        <view v-if="state.opening || openingResult" class="result-mask">
+          <!-- 结果定格：全员点数 + 先手者高亮 -->
+          <view v-if="!state.opening && openingResult" class="opening">
+            <view class="opening__title">🏆 先手诞生</view>
+            <view class="opening__grid">
+              <view
+                v-for="p in state.players.filter((x) => !x.left)"
+                :key="p.seat"
+                class="opening__side"
+                :class="{ 'opening__side--win': p.seat === openingResult.winner, 'opening__side--dim': p.seat !== openingResult.winner }"
+              >
+                <view v-if="p.seat === openingResult.winner" class="opening__crown">👑 先手</view>
+                <image class="opening__avatar" :src="avatarOf(p.avatarUrl)" mode="aspectFill" />
+                <view class="opening__name">{{ p.nickname }}</view>
+                <view v-if="openingResult.rolls[String(p.seat)] !== undefined" class="opening__dice">🎲 <text class="opening__sum">{{ openingResult.rolls[String(p.seat)] }}</text></view>
+              </view>
+            </view>
+            <view class="opening__wait">{{ nickOf(openingResult.winner) }} 掷得先手，出发！</view>
+          </view>
+          <view v-else-if="state.opening" class="opening">
+            <view class="opening__title">🎯 定先手<text v-if="state.opening.round > 1"> · 并列重掷第 {{ state.opening.round }} 轮</text></view>
+            <view class="opening__grid">
+              <view
+                v-for="p in state.players.filter((x) => !x.left)"
+                :key="p.seat"
+                class="opening__side"
+                :class="{ 'opening__side--tie': state.opening.tieSeats.includes(p.seat) }"
+              >
+                <image class="opening__avatar" :src="avatarOf(p.avatarUrl)" mode="aspectFill" />
+                <view class="opening__name">{{ p.nickname }}</view>
+                <view v-if="state.opening.rolls[String(p.seat)] !== undefined" class="opening__dice">🎲 <text class="opening__sum">{{ state.opening.rolls[String(p.seat)] }}</text></view>
+                <view v-else-if="state.opening.pending.includes(p.seat)" class="opening__wait">待掷…</view>
+                <view v-else class="opening__wait">本轮轮空</view>
+              </view>
+            </view>
+            <view class="opening__countdown">{{ turnCountdown }}s 后未掷自动代掷</view>
+            <button v-if="state.opening.mine" class="opening__btn" :disabled="acting" @tap="roll">🎲 掷骰定先手</button>
+            <view v-else class="opening__wait">等其他人掷骰…</view>
+          </view>
+        </view>
+
         <!-- 结算面板 -->
         <view v-if="state.status === 'finished'" class="result-mask">
           <view class="result">
@@ -165,6 +209,9 @@
         <button class="profile__save" :disabled="acting" @tap="saveMyProfile">保存</button>
       </view>
     </view>
+
+    <!-- 玩法说明 -->
+    <GameRulesModal :visible="rulesOpen" title="飞行棋 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
   </view>
 </template>
 
@@ -177,6 +224,54 @@ import { ludoBoardImage, LUDO_COLORS } from './utils/ludoRender'
 import { posToPoint } from './utils/ludoBoard'
 import { playLudoSound, ludoSoundEnabled, setLudoSoundEnabled } from './utils/ludoSound'
 import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
+import GameRulesModal from '@/components/GameRulesModal.vue'
+
+const rulesOpen = ref(false)
+
+/** 玩法说明（玩家视角精简版）。 */
+const GAME_RULES: { heading?: string; lines: string[] }[] = [
+  {
+    heading: '🎯 目标',
+    lines: [
+      '2-4 人联机，每人 4 架飞机，率先让全部飞机到达终点者获胜',
+      '排名按完成顺序结算，中途退出永远排在留下的人之后',
+    ],
+  },
+  {
+    heading: '🛫 起飞与掷 6',
+    lines: [
+      '开局全员各掷一颗骰子定先手，点数最大者先行；最大点并列的重新掷',
+      '掷出 6 点才能让飞机从机场起飞；掷 6 移动后再掷一次（连环机会）',
+      '掷 6 且刚好完成最后一架飞机时不再追加回合',
+    ],
+  },
+  {
+    heading: '⚡ 己色格与飞行',
+    lines: [
+      '落在自己颜色的格子（每 4 格一个）自动向前跳 4 格；48 死格不跳，跳完不再连跳',
+      '飞行格（跑道中段）触发飞行：碾压弧线下的敌机、直接飞到 28 格再接跳到 32',
+      '跳跃落在飞行格同样触发飞行——骰子 → 跳 → 飞 → 跳的大连招就来自这里',
+    ],
+  },
+  {
+    heading: '💥 击落与保护',
+    lines: [
+      '落在敌机所在格（非星标格）将其击落送回机场',
+      '星标格（各色起飞格）受保护：不可击落、可多机共存',
+    ],
+  },
+  {
+    heading: '🏁 终点',
+    lines: ['到终点需要精确步数，超出的部分反弹回来'],
+  },
+  {
+    heading: '⏱️ 超时与托管',
+    lines: [
+      '掷骰/走子各 20 秒，超时自动代走；连续 3 次超时进入挂机模式',
+      '可随时开托管，真人操作即刻接管',
+    ],
+  },
+]
 import { getWindowInfo } from '@/utils/canvasAdapter'
 import type { LudoColor, LudoEvent, LudoRoomState } from '@/types/ludo'
 
@@ -347,11 +442,19 @@ function nameOfSeat(current: LudoRoomState, seat: number | null | undefined): st
   return p.seat === current.mySeat ? '你' : p.nickname
 }
 
+function nickOf(seat: number | null | undefined): string {
+  if (seat === null || seat === undefined) return '?'
+  return state.value?.players.find((p) => p.seat === seat)?.nickname ?? '?'
+}
+
 function eventText(current: LudoRoomState, ev: LudoEvent): string {
   const name = nameOfSeat(current, ev.seat)
   const suffix = ev.auto ? '（托管）' : ''
   switch (ev.t) {
-    case 'start': return '🎲 对局开始，掷 6 起飞！'
+    case 'start': return '🎲 对局开始！掷骰定先手'
+    case 'openRoll': return '' // 定先手浮层实时展示，不占播报条
+    case 'openTie': return '🎲 最大点并列，并列者重掷！'
+    case 'firstPlayer': return `🎲 ${nickOf(ev.seat)} 掷得先手！`
     case 'roll': return `${name}${suffix} 掷出 ${ev.v} 点`
     case 'skip': return `${name}${suffix} 无处可走，跳过`
     case 'takeoff': return `${name}${suffix} 起飞 ✈️`
@@ -372,9 +475,20 @@ function eventText(current: LudoRoomState, ev: LudoEvent): string {
   }
 }
 
+/** 定先手结果定格：最后一轮全员点数 + 先手者，浮层多停留一会儿再收起。 */
+const openingResult = ref<{ winner: number; rolls: Record<string, number> } | null>(null)
+let openingResultTimer: ReturnType<typeof setTimeout> | null = null
+
+function holdOpeningResult(winner: number, rolls: Record<string, number>) {
+  openingResult.value = { winner, rolls: { ...rolls } }
+  if (openingResultTimer) clearTimeout(openingResultTimer)
+  openingResultTimer = setTimeout(() => (openingResult.value = null), 2500)
+}
+
 function eventSound(ev: LudoEvent) {
   switch (ev.t) {
     case 'roll': playLudoSound('roll'); break
+    case 'firstPlayer': playLudoSound('takeoff'); break
     case 'takeoff': playLudoSound('takeoff'); break
     case 'fly': playLudoSound('fly'); break
     case 'capture': case 'crush': playLudoSound('capture'); break
@@ -399,6 +513,9 @@ watch(
     for (const ev of events) {
       if (ev.seq <= lastSeq) continue
       lastSeq = ev.seq
+      if (ev.t === 'firstPlayer' && ev.seat != null && ev.v && typeof ev.v === 'object') {
+        holdOpeningResult(ev.seat, ev.v as Record<string, number>)
+      }
       const text = eventText(current, ev)
       if (text) {
         bannerText.value = text
@@ -626,6 +743,13 @@ $maple-light: #FBE4D5;
     display: flex;
     align-items: center;
     gap: 16rpx;
+  }
+
+  &__rules {
+    margin-top: 28rpx;
+    font-size: 26rpx;
+    color: $ink;
+    text-decoration: underline;
   }
 
   // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
@@ -1296,5 +1420,49 @@ $maple-light: #FBE4D5;
     font-weight: 700;
     border-radius: 44rpx;
   }
+}
+
+
+/* ── 定先手浮层 ── */
+.opening {
+  width: 82%;
+  max-width: 640rpx;
+  background: #fff8ed;
+  border-radius: 28rpx;
+  border: 4rpx solid #21483d;
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+.opening__title { font-size: 32rpx; font-weight: 800; color: #21483d; }
+.opening__grid { display: flex; flex-wrap: wrap; gap: 16rpx; justify-content: center; }
+.opening__side {
+  display: flex; flex-direction: column; align-items: center; gap: 6rpx; width: 156rpx;
+  background: rgba(33, 72, 61, 0.05); border-radius: 16rpx; padding: 14rpx 8rpx;
+  border: 3rpx solid transparent;
+}
+.opening__side--tie { border-color: #f4b942; background: rgba(244, 185, 66, 0.14); }
+.opening__avatar { width: 76rpx; height: 76rpx; border-radius: 50%; }
+.opening__name { font-size: 22rpx; color: #21483d; max-width: 140rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opening__dice { font-size: 22rpx; color: #21483d; }
+.opening__sum { font-weight: 800; color: #e85d4a; font-size: 30rpx; }
+.opening__wait { font-size: 20rpx; color: #9aa79e; }
+.opening__countdown { font-size: 26rpx; font-weight: 800; color: #e85d4a; }
+.opening__btn {
+  width: 100%; height: 92rpx; line-height: 92rpx; font-size: 32rpx; font-weight: 700;
+  background: #e85d4a; color: #fff; border-radius: 18rpx; border: none;
+}
+.opening__btn[disabled] { opacity: 0.45; }
+.opening__side--win { border-color: #f4b942; background: rgba(244, 185, 66, 0.16); animation: opening-win-pulse 1s ease-in-out infinite; }
+.opening__side--dim { opacity: 0.55; }
+.opening__crown {
+  font-size: 20rpx; font-weight: 800; background: #f4b942; color: #21483d;
+  border-radius: 999rpx; padding: 4rpx 14rpx; box-shadow: 0 4rpx 10rpx rgba(0,0,0,0.25);
+}
+@keyframes opening-win-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
 }
 </style>

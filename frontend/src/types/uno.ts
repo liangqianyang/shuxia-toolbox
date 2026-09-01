@@ -68,6 +68,8 @@ export interface UnoRoomState {
   dealerSeat: number | null
   /** 抽牌定庄家的各人抽到的牌（公开信息，seat 为键） */
   dealerDraws: Record<string, string> | null
+  /** 全员抽完后的亮牌展示窗口（true=正在展示比大小结果，数秒后定庄发牌）。 */
+  dealerReveal: boolean
   /** 我的座位号；旁观为 null */
   mySeat: number | null
   ownerSeat: number

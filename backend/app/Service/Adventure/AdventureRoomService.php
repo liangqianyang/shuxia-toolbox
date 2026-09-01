@@ -42,6 +42,9 @@ final class AdventureRoomService
     /** 掷骰后道具+确认窗口（秒）。 */
     public const int RESOLVE_SECONDS = 10;
 
+    /** 定先手阶段时限（秒）：全员掷双骰点大者先手，超时自动代掷。 */
+    public const int OPENING_SECONDS = 10;
+
     /** 选择窗（岔路/埋伏/商店/山神/擂台）时限（秒）。 */
     public const int CHOICE_SECONDS = 8;
 
@@ -141,7 +144,39 @@ final class AdventureRoomService
     }
 
     /**
-     * 开局：仅房主，2-6 人。天气牌库洗好、预报公开、先手随机。
+     * 房主在等待室设定路线长度（登顶格 40/60/80/100，都在段边界上）。
+     *
+     * @return array<string, mixed>
+     */
+    public function config(string $code, int $userId, int $goal): array
+    {
+        $room = Db::transaction(function () use ($code, $userId, $goal) {
+            $room = $this->lockByCode($code);
+            if ($this->seatOf($room->seats, $userId) !== 0) {
+                throw new BizException(403, '只有房主能设定路线');
+            }
+            if ($room->status !== 'waiting') {
+                throw new BizException(422, '开局后不能改路线');
+            }
+            if (! in_array($goal, AdventureBoard::GOALS, true)) {
+                throw new BizException(422, '路线长度不正确');
+            }
+            $state = $room->state;
+            $state['goal'] = $goal;
+            $room->state = $state;
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * 开局：仅房主，2-6 人。天气牌库洗好、预报公开、先手随机、锁定房主设定的路线长度。
      *
      * @return array<string, mixed>
      */
@@ -160,12 +195,13 @@ final class AdventureRoomService
                 throw new BizException(422, '2-6 人才能开局');
             }
             $old = $room->state;
-            $state = AdventureRule::setupGame($room->seats);
+            $goal = (int) ($old['goal'] ?? AdventureBoard::SUMMIT);
+            $state = AdventureRule::setupGame($room->seats, $goal);
             foreach ($room->seats as $uid) {
                 $state['scores'][(string) $uid] = (int) ($old['scores'][(string) $uid] ?? 0);
             }
             $state = $this->carryChat($old, $state);
-            $state = $this->pushEvent($state, ['t' => 'start', 'seat' => (int) $state['currentSeat']]);
+            $state = $this->pushEvent($state, ['t' => 'start', 'seat' => null, 'v' => 'opening']);
             $room->state = $state;
             $room->status = 'playing';
             $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
@@ -222,7 +258,8 @@ final class AdventureRoomService
     // ---------------------------------------------------------------- 回合动作
 
     /**
-     * 掷骰：act 阶段专属。双骰之和同点（双骰同点）额外 +2 枚枫叶。
+     * 掷骰：opening 阶段全员各掷一次定先手；act 阶段轮到本人掷双骰。
+     * 双骰之和同点（双骰同点）额外 +2 枚枫叶（仅正常回合）。
      *
      * @return array<string, mixed>
      */
@@ -231,6 +268,32 @@ final class AdventureRoomService
         $room = Db::transaction(function () use ($code, $userId) {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
+
+            if (($room->state['phase'] ?? '') === 'opening') {
+                // ── 定先手：该轮到且没掷过的人 ──
+                $seat = $this->requireSeated($room, $userId);
+                if ($room->status !== 'playing') {
+                    throw new BizException(422, '对局不在进行中');
+                }
+                if (in_array($seat, $room->state['leftSeats'] ?? [], true)) {
+                    throw new BizException(403, '你已离开本局');
+                }
+                if (! in_array($seat, AdventureRule::openingPendingSeats($room->state, $room->seats), true)) {
+                    throw new BizException(422, '现在不用你掷骰');
+                }
+                $state = $room->state;
+                $state['idleStrikes'][(string) $userId] = 0;
+                foreach (AdventureRule::rollOpening($state, $room->seats, $seat) as $event) {
+                    $state = $this->pushEvent($state, $event);
+                }
+                $room->state = $state;
+                $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
+                $this->touchSeenAt($room, $userId);
+                $room->version++;
+                $room->save();
+                return $room;
+            }
+
             [$seat, $state] = $this->requireMyPhase($room, $userId, 'act');
 
             $dice = [random_int(1, 6), random_int(1, 6)];
@@ -291,9 +354,10 @@ final class AdventureRoomService
                 if (AdventureRule::weatherActive($state, 'cablehalt')) {
                     throw new BizException(422, '缆车停运中，缆车票用不了');
                 }
+                $goal = (int) ($state['goal'] ?? AdventureBoard::SUMMIT);
                 $ahead = false;
                 foreach (AdventureBoard::CABLE_STATIONS as $station) {
-                    if ($station > (int) $state['positions'][$seat]) {
+                    if ($station > (int) $state['positions'][$seat] && $station <= $goal) {
                         $ahead = true;
                         break;
                     }
@@ -575,7 +639,8 @@ final class AdventureRoomService
             }
             $state = $this->pushEvent($state, ['t' => $on ? 'autoOn' : 'autoOff', 'seat' => $seat]);
             $room->state = $state;
-            if ($on && $room->status === 'playing' && (int) $state['currentSeat'] === $seat) {
+            if ($on && $room->status === 'playing') {
+                // 定先手阶段或轮到本人时立即由服务端代走（drainAuto 自己判断场景）
                 $this->drainAuto($room, $state);
             }
             $this->touchSeenAt($room, $userId);
@@ -765,7 +830,7 @@ final class AdventureRoomService
             }
             $state = AdventureRule::resetForRematch($old, array_values($seats));
             $state = $this->carryChat($old, $state);
-            $state = $this->pushEvent($state, ['t' => 'start', 'seat' => (int) $state['currentSeat'], 'v' => 'rematch']);
+            $state = $this->pushEvent($state, ['t' => 'start', 'seat' => null, 'v' => 'rematch']);
             $room->seats = array_values($seats);
             $room->state = $state;
             $room->status = 'playing';
@@ -839,7 +904,19 @@ final class AdventureRoomService
                 if ($activeCount <= 1) {
                     $room->state = $state;
                     $this->finishGame($room, $state, 'forfeit');
-                } elseif ((int) $state['currentSeat'] === $seat || (int) ($state['turnCtx']['seat'] ?? $seat) === $seat) {
+                } elseif (($state['phase'] ?? '') === 'opening') {
+                    // 定先手阶段离开：其余人都掷完则立即结算先手，否则继续等
+                    foreach (AdventureRule::resolveOpeningIfNeeded($state, $seats) as $event) {
+                        $state = $this->pushEvent($state, $event);
+                    }
+                    $room->state = $state;
+                    if (($state['phase'] ?? '') === 'opening') {
+                        $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+                    } else {
+                        $this->afterAdvance($room, $state);
+                    }
+                } elseif ((int) $state['currentSeat'] === $seat
+                    || ($state['turnCtx'] !== null && (int) $state['turnCtx']['seat'] === $seat)) {
                     // 我的回合/我的回合途中离开：直接推进（不补掷）
                     $state['phase'] = 'act';
                     $state['roll'] = null;
@@ -1082,7 +1159,8 @@ final class AdventureRoomService
             'mySeat' => $mySeat,
             'ownerSeat' => 0,
             'players' => $players,
-            'currentSeat' => $inPlay ? (int) ($state['currentSeat'] ?? 0) : null,
+            'currentSeat' => $inPlay && $state['currentSeat'] !== null ? (int) $state['currentSeat'] : null,
+            'opening' => $inPlay && ($state['phase'] ?? '') === 'opening' ? $this->serializeOpening($state, $room->seats, $mySeat) : null,
             'roll' => $inPlay ? ($state['roll'] ?? null) : null,
             'myItems' => $mySeat !== null && $inPlay ? array_values($state['items'][(string) $requesterId] ?? []) : [],
             'trapCount' => count($state['traps'] ?? []),
@@ -1092,6 +1170,7 @@ final class AdventureRoomService
                 'current' => $state['weather']['current'] ?? null,
                 'next' => $state['weather']['next'] ?? null,
             ],
+            'goal' => (int) ($state['goal'] ?? AdventureBoard::SUMMIT),
             'finishedOrder' => array_values($finishedOrder),
             'places' => $places,
             'turnTtl' => $room->turn_deadline_at !== null ? max(0, strtotime((string) $room->turn_deadline_at) - time()) : 0,
@@ -1104,6 +1183,19 @@ final class AdventureRoomService
             'chatSeq' => (int) ($state['chatSeq'] ?? 0),
             'sharePath' => '/pages-adventure/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
+        ];
+    }
+
+    /** 定先手阶段的对外结构：本轮点数公开、待掷名单、是否轮到我（无隐藏信息）。 */
+    private function serializeOpening(array $state, array $seats, ?int $mySeat): array
+    {
+        $pending = AdventureRule::openingPendingSeats($state, $seats);
+        return [
+            'round' => (int) ($state['opening']['round'] ?? 1),
+            'tieSeats' => array_values($state['opening']['tieSeats'] ?? []),
+            'rolls' => (object) ($state['opening']['rolls'] ?? []),
+            'pending' => $pending,
+            'mine' => $mySeat !== null && in_array($mySeat, $pending, true),
         ];
     }
 
@@ -1199,6 +1291,20 @@ final class AdventureRoomService
         $seats = $room->seats;
         $iterations = 0;
         while ($room->status === 'playing') {
+            // 0) 定先手：托管座位自动掷，剩下真人等输入
+            if (($state['phase'] ?? '') === 'opening') {
+                foreach (AdventureRule::openingPendingSeats($state, $seats) as $s) {
+                    if ($this->seatIsAuto($state, $seats, $s)) {
+                        foreach (AdventureRule::rollOpening($state, $seats, $s) as $event) {
+                            $state = $this->pushEvent($state, $event);
+                        }
+                    }
+                }
+                if (($state['phase'] ?? '') === 'opening') {
+                    break;
+                }
+                continue; // 定先手完成 → 顶部按当前座位继续
+            }
             // 1) 选择窗：托管座位用默认值
             if (($state['pendingChoice'] ?? null) !== null) {
                 $seat = (int) $state['pendingChoice']['seat'];
@@ -1315,6 +1421,24 @@ final class AdventureRoomService
         }
         $state = $room->state;
         $seats = $room->seats;
+
+        // 定先手阶段：受影响的是还没掷骰的人；超时自动代掷（不加挂机计数，仪式不罚）
+        if (($state['phase'] ?? '') === 'opening') {
+            $pending = AdventureRule::openingPendingSeats($state, $seats);
+            $exceptSeat = $exceptUserId !== null ? $this->seatOf($seats, $exceptUserId) : null;
+            if ($exceptSeat !== null && in_array($exceptSeat, $pending, true)) {
+                $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+                return false;
+            }
+            foreach ($pending as $s) {
+                foreach (AdventureRule::rollOpening($state, $seats, $s) as $event) {
+                    $state = $this->pushEvent($state, $event);
+                }
+            }
+            $room->state = $state;
+            $room->turn_deadline_at = $this->nextDeadline($state, $seats);
+            return true;
+        }
 
         $affected = [];
         if (($state['pendingDuel'] ?? null) !== null) {
@@ -1462,10 +1586,12 @@ final class AdventureRoomService
         return false;
     }
 
-    /** 下一窗口 deadline：决斗 10s / 选择 8s / 道具确认 10s / 掷骰 20s；挂机玩家压到 5s（仅自己回合）。 */
+    /** 下一窗口 deadline：定先手 10s / 决斗 10s / 选择 8s / 道具确认 10s / 掷骰 20s；挂机玩家压到 5s（仅自己回合）。 */
     private function nextDeadline(array $state, array $seats): string
     {
-        if (($state['pendingDuel'] ?? null) !== null) {
+        if (($state['phase'] ?? 'act') === 'opening') {
+            $seconds = self::OPENING_SECONDS;
+        } elseif (($state['pendingDuel'] ?? null) !== null) {
             $seconds = self::DUEL_SECONDS;
         } elseif (($state['pendingChoice'] ?? null) !== null) {
             $seconds = self::CHOICE_SECONDS;

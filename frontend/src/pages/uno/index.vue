@@ -10,6 +10,7 @@
         <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
         <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
       </view>
+      <text class="lobby__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -17,6 +18,7 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
+          <text class="room__sound" @tap="rulesOpen = true">❓</text>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -51,12 +53,21 @@
         <!-- 抽牌比大小定庄家（首局） -->
         <view v-if="state.phase === 'dealerDraw'" class="dealer">
           <view class="dealer__title">🎲 抽牌比大小定庄家</view>
-          <view class="dealer__sub">数字最大的玩家成为庄家先出牌 · {{ turnCountdown }}s 后未抽的将自动代抽</view>
+          <view v-if="state.dealerReveal" class="dealer__sub dealer__sub--reveal">
+            🎴 亮牌！<text class="dealer__winner-name">{{ dealerWinnerName }}</text> 点数最大（{{ dealerWinnerValue }}），坐庄先行 · {{ turnCountdown }}s 后发牌
+          </view>
+          <view v-else class="dealer__sub">数字最大的玩家成为庄家先出牌 · {{ turnCountdown }}s 后未抽的将自动代抽</view>
           <view class="dealer__players">
-            <view v-for="p in state.players" :key="p.userId" class="dealer__player">
+            <view
+              v-for="p in state.players"
+              :key="p.userId"
+              class="dealer__player"
+              :class="{ 'dealer__player--win': state.dealerReveal && p.seat === dealerWinnerSeat, 'dealer__player--dim': state.dealerReveal && p.seat !== dealerWinnerSeat }"
+            >
               <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="dealer__avatar" />
               <view v-else class="dealer__avatar dealer__avatar--placeholder">🍁</view>
               <text class="dealer__name">{{ p.nickname }}</text>
+              <view v-if="state.dealerReveal && p.seat === dealerWinnerSeat" class="dealer__crown">👑 庄</view>
               <image
                 v-if="dealerDrawOf(p.seat) && images[dealerDrawOf(p.seat)!]"
                 :src="images[dealerDrawOf(p.seat)!]"
@@ -66,8 +77,8 @@
               <view v-else class="dealer__card dealer__card--pending">?</view>
             </view>
           </view>
-          <button v-if="isSeated && !myDealerDrawn" class="dealer__draw" :disabled="acting" @tap="drawDealer">🍁 抽一张</button>
-          <view v-else-if="isSeated" class="dealer__waiting">已抽，等其他玩家…</view>
+          <button v-if="!state.dealerReveal && isSeated && !myDealerDrawn" class="dealer__draw" :disabled="acting" @tap="drawDealer">🍁 抽一张</button>
+          <view v-else-if="!state.dealerReveal && isSeated" class="dealer__waiting">已抽，等其他玩家…</view>
         </view>
 
         <template v-else>
@@ -339,6 +350,9 @@
         <button v-if="colorPickMode === 'wild'" class="color-panel__cancel" @tap="cancelColorPick">先不出这张</button>
       </view>
     </view>
+
+    <!-- 玩法说明 -->
+    <GameRulesModal :visible="rulesOpen" title="枫趣牌局 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
   </view>
 </template>
 
@@ -355,6 +369,56 @@ import { COLOR_META, UNO_COLORS, cardLabel, isWild, sortHand } from '@/utils/uno
 import { UNO_EMOJIS, UNO_PHRASE_GROUPS } from '@/utils/unoChat'
 import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
 import type { UnoChatMessage, UnoColor } from '@/types/uno'
+import GameRulesModal from '@/components/GameRulesModal.vue'
+
+const rulesOpen = ref(false)
+
+/** 玩法说明（玩家视角精简版，含本房间村规）。 */
+const GAME_RULES: { heading?: string; lines: string[] }[] = [
+  {
+    heading: '🎯 目标',
+    lines: [
+      '最先出完手牌的人赢下本局；多局累计胜场',
+      '结算：赢家收全场手牌分，数字牌按面值、功能牌 20 分、万能牌 50 分',
+    ],
+  },
+  {
+    heading: '🃏 出牌规则',
+    lines: [
+      '出的牌必须与桌面弃牌同色、或同数字/同符号；万能牌任何时候都能出',
+      '出变色牌时从四色中指定一种颜色',
+      '没有能出的牌可以主动摸一张；摸完本轮可以出任意能出的牌，也可以直接跳过',
+      '开局首张翻出变色牌时，首位玩家选颜色开局',
+    ],
+  },
+  {
+    heading: '⚡ 功能牌',
+    lines: ['跳过：下家停一回合', '反转：调转出牌方向（2 人局等于跳过对方）', '+2：下家摸 2 张并跳过', '万能+4：指定颜色且下家摸 4 张'],
+  },
+  {
+    heading: '🏔️ 本房间村规：+2/+4 可叠加',
+    lines: [
+      '出 +2/+4 不立即罚摸，而是累计叠起来压给下家',
+      '下家可以继续叠任意颜色的 +2/+4，或者放弃：整堆全摸并跳过',
+      '被裸 +4 时可以质疑（对方真没别的牌你输：他改摸 4；你错：你摸 6），也可以出 +2/+4 反击转为叠加',
+      '叠加出的 +4 不可再质疑',
+    ],
+  },
+  {
+    heading: '📣 喊 UNO',
+    lines: [
+      '手里剩最后 1 张时要按「喊 UNO」，忘了会被其他玩家举报罚摸 2 张',
+      '被 +4 后你有 10 秒决定是否质疑',
+    ],
+  },
+  {
+    heading: '💬 聊天与超时',
+    lines: [
+      '房间内可发快捷句、表情和文字（自由文字需过微信内容审核）',
+      '出牌 20 秒超时自动代打，连续 3 次进入挂机；可随时开托管',
+    ],
+  },
+]
 
 const {
   state,
@@ -526,6 +590,8 @@ function eventText(ev: { type: string; card?: string; [key: string]: unknown }):
       return `其他玩家都已离开或离线，${name} 获胜！`
     case 'dealer_draw':
       return `${name} 抽到了 ${label}`
+    case 'dealer_reveal':
+      return '🎴 全员亮牌！比比谁的点数大'
     case 'dealer':
       return ev.byWinner
         ? `上局赢家 ${name} 作为庄家先出牌`
@@ -626,6 +692,34 @@ const unoSeat = computed(() => state.value?.uno?.seat ?? -1)
 function dealerDrawOf(seat: number): string | null {
   return state.value?.dealerDraws?.[String(seat)] ?? null
 }
+
+/** 亮牌态的庄家判定（展示用，与服务端 pickDealer 同语义：数字最大、并列座位号小者）。 */
+const dealerWinnerSeat = computed<number | null>(() => {
+  const current = state.value
+  if (!current?.dealerReveal || !current.dealerDraws) return null
+  let winner: number | null = null
+  let best = -1
+  for (const p of current.players) {
+    if (p.left) continue
+    const card = current.dealerDraws[String(p.seat)]
+    if (!card) continue
+    const value = Number(card.slice(1))
+    if (value > best) {
+      best = value
+      winner = p.seat
+    }
+  }
+  return winner
+})
+const dealerWinnerName = computed(() => {
+  const seat = dealerWinnerSeat.value
+  return seat === null ? '?' : (state.value?.players.find((p) => p.seat === seat)?.nickname ?? '?')
+})
+const dealerWinnerValue = computed(() => {
+  const seat = dealerWinnerSeat.value
+  const card = seat === null ? null : (state.value?.dealerDraws?.[String(seat)] ?? null)
+  return card === null ? '?' : Number(card.slice(1))
+})
 
 const myDealerDrawn = computed(() => {
   const current = state.value
@@ -1008,6 +1102,7 @@ $maple-light: #FBE4D5;
     &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
   &__join { display: flex; align-items: center; gap: 16rpx; margin-top: 40rpx; }
+  &__rules { margin-top: 28rpx; font-size: 26rpx; color: $ink; text-decoration: underline; }
   // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
   &__input {
     width: 320rpx;
@@ -1142,6 +1237,15 @@ $maple-light: #FBE4D5;
     max-width: 640rpx;
   }
   &__player { display: flex; flex-direction: column; align-items: center; min-width: 140rpx; position: relative; }
+  &__player--win { animation: dealer-win-pulse 1s ease-in-out infinite; }
+  &__player--dim { opacity: 0.55; }
+  &__crown {
+    position: absolute; top: -10rpx; right: 6rpx; font-size: 22rpx; font-weight: 800;
+    background: $gold; color: $ink; border-radius: 999rpx; padding: 4rpx 12rpx;
+    box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.25); z-index: 2;
+  }
+  &__sub--reveal { color: #ffe9b8; font-weight: 700; }
+  &__winner-name { color: $gold; font-weight: 800; }
   &__avatar {
     width: 96rpx;
     height: 96rpx;
@@ -1768,5 +1872,10 @@ $maple-light: #FBE4D5;
 
     &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
+}
+
+@keyframes dealer-win-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
 }
 </style>

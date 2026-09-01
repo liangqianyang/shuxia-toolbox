@@ -161,11 +161,12 @@ export function useLudoRoom() {
     await act(() => startLudoGame(current.code))
   }
 
-  /** 掷骰（roll 阶段专属）。 */
+  /** 掷骰（roll 阶段专属；opening 定先手阶段轮到我也可掷）。 */
   async function roll() {
     const current = state.value
     if (!current) return
-    if (!isMyTurn.value || current.phase !== 'roll') return
+    const openingMine = current.phase === 'opening' && current.opening?.mine === true
+    if (!openingMine && (!isMyTurn.value || current.phase !== 'roll')) return
     await act(() => rollDice(current.code))
   }
 

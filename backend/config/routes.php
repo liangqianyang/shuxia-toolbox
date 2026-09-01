@@ -121,6 +121,7 @@ Router::addGroup('/api', function (): void {
     Router::get('/adventure/room/{code}', [AdventureController::class, 'state']);
     Router::get('/adventure/my-rooms', [AdventureController::class, 'myRooms']);
     Router::post('/adventure/room/{code}/start', [AdventureController::class, 'start']);
+    Router::post('/adventure/room/{code}/config', [AdventureController::class, 'config']);
     Router::post('/adventure/room/{code}/roll', [AdventureController::class, 'roll']);
     Router::post('/adventure/room/{code}/item', [AdventureController::class, 'item']);
     Router::post('/adventure/room/{code}/move', [AdventureController::class, 'move']);

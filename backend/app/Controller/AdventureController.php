@@ -51,6 +51,13 @@ final class AdventureController extends AbstractController
         return $this->ok($this->rooms->start($code, $this->requireUserId($request)));
     }
 
+    #[RateLimit(create: 4, capacity: 12, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function config(string $code, RequestInterface $request): array
+    {
+        $goal = (int) $request->input('goal', 0);
+        return $this->ok($this->rooms->config($code, $this->requireUserId($request), $goal));
+    }
+
     #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function roll(string $code, RequestInterface $request): array
     {

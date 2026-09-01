@@ -42,6 +42,9 @@ final class AdventureRule
     /** 决斗平局兜底轮数：超过转比点数。 */
     public const int DUEL_MAX_ROUNDS = 3;
 
+    /** 定先手阶段时限（秒）；并列重掷超过 OPENING_MAX_ROUNDS 轮后随机定（诚实 RNG 下几乎不可达）。 */
+    public const int OPENING_MAX_ROUNDS = 3;
+
     // ---------------------------------------------------------------- 几何/查询
 
     /** 天气 $id 是否生效中。 */
@@ -113,6 +116,93 @@ final class AdventureRule
         return $out;
     }
 
+    // ---------------------------------------------------------------- 定先手（开局掷骰仪式）
+
+    /** 定先手阶段还没掷骰的座位（活跃未离开；并列重掷轮只算并列者）。 */
+    public static function openingPendingSeats(array $state, array $seats): array
+    {
+        $out = [];
+        $opening = $state['opening'] ?? null;
+        if ($opening === null) {
+            return $out;
+        }
+        $tie = $opening['tieSeats'] ?? [];
+        $rolls = $opening['rolls'] ?? [];
+        foreach ($seats as $i => $uid) {
+            if (in_array($i, $state['leftSeats'] ?? [], true)) {
+                continue;
+            }
+            if ($tie !== [] && ! in_array($i, $tie, true)) {
+                continue;
+            }
+            if (! array_key_exists((string) $i, $rolls)) {
+                $out[] = (int) $i;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * 定先手掷骰（调用方已校验该轮到该座位）：记点数，全员掷完即结算。
+     *
+     * @param array<string, mixed> $state
+     * @param array<int, int> $seats
+     * @return array<int, array<string, mixed>>
+     */
+    public static function rollOpening(array &$state, array $seats, int $seat): array
+    {
+        $dice = [random_int(1, 6), random_int(1, 6)];
+        $state['opening']['rolls'][(string) $seat] = $dice;
+        $events = [['t' => 'openRoll', 'seat' => $seat, 'v' => $dice]];
+        return array_merge($events, self::resolveOpeningIfNeeded($state, $seats));
+    }
+
+    /**
+     * 全员掷完后结算：双骰之和大者先手；最大点并列只由并列者重掷；
+     * 并列超过 OPENING_MAX_ROUNDS 轮改随机定（兜底）。
+     *
+     * @param array<string, mixed> $state
+     * @param array<int, int> $seats
+     * @return array<int, array<string, mixed>>
+     */
+    public static function resolveOpeningIfNeeded(array &$state, array $seats): array
+    {
+        if (($state['phase'] ?? '') !== 'opening' || self::openingPendingSeats($state, $seats) !== []) {
+            return [];
+        }
+        $opening = $state['opening'];
+        $best = PHP_INT_MIN;
+        $sums = [];
+        foreach ($opening['rolls'] as $seatKey => $dice) {
+            $sum = (int) $dice[0] + (int) $dice[1];
+            $sums[(int) $seatKey] = $sum;
+            $best = max($best, $sum);
+        }
+        $winners = array_keys(array_filter($sums, static fn($s) => $s === $best));
+
+        if (count($winners) === 1) {
+            $winner = (int) $winners[0];
+            $state['phase'] = 'act';
+            $state['currentSeat'] = $winner;
+            $state['opening'] = null;
+            return [['t' => 'firstPlayer', 'seat' => $winner, 'v' => $sums]];
+        }
+        if ((int) $opening['round'] >= self::OPENING_MAX_ROUNDS) {
+            // 兜底：并列轮数用尽，随机定先手
+            $winner = (int) $winners[random_int(0, count($winners) - 1)];
+            $state['phase'] = 'act';
+            $state['currentSeat'] = $winner;
+            $state['opening'] = null;
+            return [['t' => 'firstPlayer', 'seat' => $winner, 'v' => $sums, 'cap' => true]];
+        }
+        $state['opening'] = [
+            'round' => (int) $opening['round'] + 1,
+            'tieSeats' => array_map('intval', $winners),
+            'rolls' => [],
+        ];
+        return [['t' => 'openTie', 'v' => array_map('intval', $winners), 'round' => (int) $opening['round'] + 1]];
+    }
+
     // ---------------------------------------------------------------- 位移与落格
 
     /**
@@ -130,6 +220,7 @@ final class AdventureRule
 
     /**
      * 统一位移入口：反弹/补票/封顶暴雪截断/营地托底 + 落格机关链。
+     * 登顶格取 state.goal（房主设定，默认 100）：exact=登顶、超出反弹、掷骰独享枫叶补票。
      * 返回事件列表（无 seq/ts，由服务端入环）。
      *
      * @param array<string, mixed> $state
@@ -141,29 +232,30 @@ final class AdventureRule
         $events = [];
         $from = (int) ($state['positions'][$seat] ?? 0);
         $uid = (string) $seats[$seat];
+        $goal = (int) ($state['goal'] ?? AdventureBoard::SUMMIT);
         $target = $from + $steps;
 
-        // 封顶暴雪：雪线外前进目标截断为 81 营地（已在 82-100 者雪线内自由）
+        // 封顶暴雪：雪线外前进目标截断为 81 营地（已在 82-100 者雪线内自由；goal<81 时到不了雪线，天然无效）
         if ($steps > 0 && $target > 81 && $from <= 80 && self::weatherActive($state, 'summitblizzard')) {
             $target = 81;
             $events[] = ['t' => 'blizzardBlock', 'seat' => $seat, 'to' => 81];
         }
 
-        if ($target > AdventureBoard::SUMMIT) {
-            $gap = AdventureBoard::SUMMIT - $from;
+        if ($target > $goal) {
+            $gap = $goal - $from;
             $ticketed = false;
             // 补票只在掷骰位移时生效（机关/天气/道具送上去不收钱）
             if ($semantics === 'dice' && $gap > 0 && $steps >= $gap) {
                 $leaves = (int) ($state['leaves'][$uid] ?? 0);
                 if ($leaves >= $gap) {
                     $state['leaves'][$uid] = $leaves - $gap;
-                    $target = AdventureBoard::SUMMIT;
+                    $target = $goal;
                     $ticketed = true;
                     $events[] = ['t' => 'ticket', 'seat' => $seat, 'cost' => $gap];
                 }
             }
             if (! $ticketed) {
-                $target = 2 * AdventureBoard::SUMMIT - $target;
+                $target = 2 * $goal - $target;
                 $events[] = ['t' => 'bounce', 'seat' => $seat, 'to' => $target];
             }
         }
@@ -179,7 +271,7 @@ final class AdventureRule
         $state['positions'][$seat] = $target;
         $events[] = ['t' => 'move', 'seat' => $seat, 'from' => $from, 'to' => $target];
 
-        if ($target === AdventureBoard::SUMMIT) {
+        if ($target === $goal) {
             return array_merge($events, self::finishSeat($state, $seat));
         }
         if ($depth >= self::CHAIN_DEPTH_MAX) {
@@ -969,19 +1061,22 @@ final class AdventureRule
     // ---------------------------------------------------------------- 开局
 
     /**
-     * 开局状态：全员山脚（pos=0）、3 枫叶、天气牌库洗好、预报公开、先手随机。
+     * 开局状态：全员山脚（pos=0）、3 枫叶、天气牌库洗好、预报公开；
+     * 先手由「定先手」掷骰仪式决定（phase=opening，全员掷双骰点大者先手）。
+     * $goal 登顶格（房主设定，默认 100）。
      *
      * @param array<int, int> $seats
      * @return array<string, mixed>
      */
-    public static function setupGame(array $seats): array
+    public static function setupGame(array $seats, int $goal = AdventureBoard::SUMMIT): array
     {
         $n = count($seats);
         $deck = self::shuffled(AdventureBoard::weatherDeckIds());
         $next = array_shift($deck);
         return [
-            'phase' => 'act',
-            'currentSeat' => random_int(0, $n - 1),
+            'phase' => 'opening',
+            'currentSeat' => null,
+            'opening' => ['round' => 1, 'tieSeats' => [], 'rolls' => []],
             'roundMarked' => [],
             'roll' => null,
             'turnBonus' => 0,
@@ -997,6 +1092,7 @@ final class AdventureRule
             'pendingChoice' => null,
             'pendingDuel' => null,
             'weather' => ['current' => null, 'next' => $next, 'deck' => $deck],
+            'goal' => $goal,
             'finishedOrder' => [],
             'leftSeats' => [],
             'leftProgress' => [],
@@ -1008,11 +1104,12 @@ final class AdventureRule
         ];
     }
 
-    /** 重开：保留 scores；聊天三件套由服务端 carryChat 带回。 */
+    /** 重开：保留 scores 与路线长度；聊天三件套由服务端 carryChat 带回。 */
     public static function resetForRematch(array $state, array $seats): array
     {
         $scores = $state['scores'] ?? [];
-        $fresh = self::setupGame($seats);
+        $goal = (int) ($state['goal'] ?? AdventureBoard::SUMMIT);
+        $fresh = self::setupGame($seats, $goal);
         $fresh['scores'] = $scores;
         return $fresh;
     }

@@ -13,6 +13,7 @@ import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
 import {
   adventureRematch,
   chooseAdventureOption,
+  configAdventureRoom,
   confirmAdventureMove,
   createAdventureRoom,
   fetchAdventureRoomState,
@@ -181,6 +182,13 @@ export function useAdventureRoom() {
     const current = state.value
     if (!current) return
     await act(() => startAdventureGame(current.code))
+  }
+
+  /** 房主在等待室设定路线长度（40/60/80/100）。 */
+  async function setGoal(goal: number) {
+    const current = state.value
+    if (!current) return
+    await act(() => configAdventureRoom(current.code, goal))
   }
 
   /** 掷骰（act 阶段专属）。 */
@@ -417,6 +425,7 @@ export function useAdventureRoom() {
     createAndEnter,
     joinByCode,
     start,
+    setGoal,
     roll,
     useItem,
     confirmMove,
