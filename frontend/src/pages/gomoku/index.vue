@@ -36,12 +36,14 @@
 
       <view class="gomoku__players">
         <view class="gomoku__player" :class="{ 'gomoku__player--me': myColor === 'black' }">
+          <view v-if="roomChat.chatBubbles['black']" class="gomoku__bubble" :class="{ 'gomoku__bubble--emoji': roomChat.chatBubbles['black'].isEmoji }">{{ roomChat.chatBubbles['black'].text }}</view>
           <view class="gomoku__stone gomoku__stone--black"></view>
           <text class="gomoku__player-name">{{ state.black?.nickname || '等待加入' }}</text>
           <text v-if="state.black" class="gomoku__dot" :class="{ 'gomoku__dot--off': !state.black.online }"></text>
         </view>
         <text class="gomoku__vs">VS</text>
         <view class="gomoku__player" :class="{ 'gomoku__player--me': myColor === 'white' }">
+          <view v-if="roomChat.chatBubbles['white']" class="gomoku__bubble" :class="{ 'gomoku__bubble--emoji': roomChat.chatBubbles['white'].isEmoji }">{{ roomChat.chatBubbles['white'].text }}</view>
           <view class="gomoku__stone gomoku__stone--white"></view>
           <text class="gomoku__player-name">{{ state.white?.nickname || '等待加入' }}</text>
           <text v-if="state.white" class="gomoku__dot" :class="{ 'gomoku__dot--off': !state.white.online }"></text>
@@ -148,10 +150,27 @@
       </view>
 
       <button class="gomoku__leave" @tap="onLeave">离开房间</button>
+
+      <!-- 聊天条 -->
+      <view class="gomoku__chat-zone">
+        <view class="gomoku__chat-bar">
+          <scroll-view class="gomoku__chat-feed" scroll-x :show-scrollbar="false">
+            <text v-for="m in roomChat.recentChats.value" :key="m.seq" class="gomoku__chat-item">
+              {{ roleNameOf(m.role ?? 'black') }}: {{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}
+            </text>
+          </scroll-view>
+          <view class="gomoku__chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
+            💬<text v-if="roomChat.unreadChat.value" class="gomoku__chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+          </view>
+        </view>
+      </view>
     </view>
 
     <!-- 玩法说明 -->
     <GameRulesModal :visible="rulesOpen" title="五子棋 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
+
+    <!-- 房间聊天面板 -->
+    <GameChatPanel :ctrl="roomChat" :text-enabled="unoChatTextEnabled" />
   </view>
 </template>
 
@@ -171,8 +190,22 @@ import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { GomokuColor } from '@/types/gomoku'
 import { playGomokuPlace, playGomokuWin } from '@/utils/gomokuAudio'
 import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameChatPanel from '@/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import { useFeatures } from '@/composables/useFeatures'
+import { gamePhraseText } from '@/utils/gameChat'
 
 const rulesOpen = ref(false)
+
+// ---------- 房间聊天（通用 useRoomChat + 共享面板；气泡按黑白座位键锚定） ----------
+const { unoChatTextEnabled, refreshFeatures } = useFeatures()
+const roomChat = useRoomChat({
+  chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
+  code: () => state.value?.code ?? '',
+  send: (kind, payload) => sendChat(kind, payload),
+})
+const roleNameOf = (role: string): string =>
+  role === 'black' ? (state.value?.black?.nickname ?? '黑方') : (state.value?.white?.nickname ?? '白方')
 
 /** 玩法说明（玩家视角精简版）。 */
 const GAME_RULES: { heading?: string; lines: string[] }[] = [
@@ -213,6 +246,7 @@ const {
   joinByCode,
   rps,
   chooseColor,
+  sendChat,
   tapIntersection,
   requestRematch,
   askUndo,
@@ -565,6 +599,7 @@ onLoad((query) => {
 })
 
 onShow(() => {
+  void refreshFeatures()
   if (state.value) startSync()
 })
 
@@ -994,4 +1029,28 @@ onShareAppMessage(() => ({
 .gomoku__rps-btn--wide { min-width: 240rpx; background: #21483d; }
 .gomoku__rps-btn[disabled] { opacity: 0.45; }
 .gomoku__rps-wait { font-size: 24rpx; color: $color-text-secondary; }
+
+/* ── 房间聊天 ── */
+.gomoku__player { position: relative; }
+.gomoku__bubble {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8rpx);
+  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(73, 62, 55, 0.15);
+  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.18); font-size: 24rpx; color: #493e37;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 12;
+  animation: gomoku-bubble-pop 0.18s ease-out;
+}
+.gomoku__bubble--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
+@keyframes gomoku-bubble-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8rpx); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.gomoku__chat-zone { padding: 16rpx 0 8rpx; }
+.gomoku__chat-bar { display: flex; align-items: center; gap: 12rpx; }
+.gomoku__chat-feed { flex: 1; background: $color-card; border: 2rpx solid $color-border; border-radius: 999rpx; padding: 8rpx 20rpx; white-space: nowrap; }
+.gomoku__chat-item { font-size: 22rpx; color: $color-text-secondary; margin-right: 24rpx; }
+.gomoku__chat-trigger { position: relative; font-size: 34rpx; padding: 6rpx 18rpx; background: $color-card; border: 2rpx solid $color-border; border-radius: 999rpx; }
+.gomoku__chat-unread {
+  position: absolute; top: -6rpx; right: -6rpx; background: #e85d4a; color: #fff; font-size: 18rpx;
+  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
+}
 </style>

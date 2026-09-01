@@ -30,6 +30,16 @@ export interface GomokuUndo {
   limit: number
 }
 
+/** 房间聊天消息（环形 50 条；role = 发送者座位色，旁观者不能发）。 */
+export interface GomokuChatMessage {
+  seq: number
+  uid: number
+  role: GomokuColor
+  kind: 'phrase' | 'emoji' | 'sticker' | 'text'
+  text: string
+  ts: number
+}
+
 /** 猜拳定选边窗口（出拳期只给本人出拳；选边期起双方出拳公开；done=已开局，保留结果供定格）。 */
 export interface GomokuRps {
   phase: 'pick' | 'choose' | 'done'
@@ -60,6 +70,8 @@ export interface GomokuRoomState {
   winReason: GomokuWinReason | null
   undo: GomokuUndo
   rps: GomokuRps | null
+  chat: GomokuChatMessage[]
+  chatSeq: number
   black: GomokuPlayer | null
   white: GomokuPlayer | null
   sharePath: string

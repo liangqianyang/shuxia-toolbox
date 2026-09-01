@@ -82,6 +82,7 @@ Router::addGroup('/api', function (): void {
     Router::post('/gomoku/room/{code}/rematch', [GomokuController::class, 'rematch']);
     Router::post('/gomoku/room/{code}/undo-request', [GomokuController::class, 'requestUndo']);
     Router::post('/gomoku/room/{code}/undo-respond', [GomokuController::class, 'respondUndo']);
+    Router::post('/gomoku/room/{code}/chat', [GomokuController::class, 'chat']);
     Router::post('/gomoku/room/{code}/leave', [GomokuController::class, 'leave']);
 
     // UNO 联机：房间创建/加入/开局、轮询同步（WS 降级通道）、出牌/摸牌/不出、
@@ -112,6 +113,7 @@ Router::addGroup('/api', function (): void {
     Router::post('/ludo/room/{code}/roll', [LudoController::class, 'roll']);
     Router::post('/ludo/room/{code}/move', [LudoController::class, 'move']);
     Router::post('/ludo/room/{code}/auto', [LudoController::class, 'auto']);
+    Router::post('/ludo/room/{code}/chat', [LudoController::class, 'chat']);
     Router::post('/ludo/room/{code}/rematch', [LudoController::class, 'rematch']);
     Router::post('/ludo/room/{code}/leave', [LudoController::class, 'leave']);
 

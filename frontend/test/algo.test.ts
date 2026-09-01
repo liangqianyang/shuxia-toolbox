@@ -1233,7 +1233,16 @@ function testAdventure() {
   assert(Object.keys(advConstants.WEATHER_CARDS).length === 12, '12 张天气牌')
   assert(advConstants.WEATHER_CARDS.summitblizzard.kind === 'rule' && advConstants.WEATHER_CARDS.tornado.kind === 'instant', '稀有牌类型')
 
-  // 聊天白名单（与后端 AdventureChat 双份同步：20 快捷句 / 27 表情 / 10 贴纸）
+  // 通用房间聊天白名单（与后端 Chat\GameChat 双份同步：20 快捷句 / 27 表情 / 10 贴纸，飞行棋/五子棋共用）
+{
+  const gameChat = require('@/utils/gameChat') as typeof import('@/utils/gameChat')
+  assert(gameChat.GAME_PHRASE_GROUPS.reduce((s, g) => s + g.phrases.length, 0) === 20, '通用聊天 20 条快捷句')
+  assert(gameChat.GAME_EMOJIS.length === 27, '通用聊天 27 个表情')
+  assert(Object.keys(gameChat.GAME_STICKERS).length === 10, '通用聊天 10 张贴纸')
+  assert(gameChat.gamePhraseText('nice_move') === '好棋！', '通用聊天 id 反查')
+}
+
+// 聊天白名单（与后端 AdventureChat 双份同步：20 快捷句 / 27 表情 / 10 贴纸）
   assert(adventureChat.ADVENTURE_PHRASE_GROUPS.reduce((s, g) => s + g.phrases.length, 0) === 20, '20 条快捷句')
   assert(adventureChat.ADVENTURE_EMOJIS.length === 27, '27 个表情')
   assert(Object.keys(adventureChat.ADVENTURE_STICKERS).length === 10, '10 张贴纸')

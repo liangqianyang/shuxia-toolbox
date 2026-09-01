@@ -46,6 +46,14 @@ final class GomokuController extends AbstractController
         return $this->ok($this->rooms->chooseColor($code, $this->requireUserId($request), $color));
     }
 
+    #[RateLimit(create: 8, capacity: 20, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function chat(string $code, RequestInterface $request): array
+    {
+        $kind = (string) $request->input('kind', '');
+        return $this->ok($this->rooms->chat($code, $this->requireUserId($request), $kind,
+            $request->input('id'), $request->input('text')));
+    }
+
     #[RateLimit(create: 2, capacity: 24, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function state(string $code, RequestInterface $request): array
     {

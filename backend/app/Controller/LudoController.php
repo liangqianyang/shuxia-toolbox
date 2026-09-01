@@ -67,6 +67,14 @@ final class LudoController extends AbstractController
         return $this->ok($this->rooms->toggleAuto($code, $this->requireUserId($request), $on));
     }
 
+    #[RateLimit(create: 8, capacity: 20, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function chat(string $code, RequestInterface $request): array
+    {
+        $kind = (string) $request->input('kind', '');
+        return $this->ok($this->rooms->chat($code, $this->requireUserId($request), $kind,
+            $request->input('id'), $request->input('text')));
+    }
+
     #[RateLimit(create: 2, capacity: 6, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function rematch(string $code, RequestInterface $request): array
     {

@@ -6,7 +6,11 @@ namespace App\Service\Gomoku;
 
 use App\Exception\BizException;
 use App\Model\GomokuRoom;
+use App\Service\Chat\GameChat;
+use App\Service\FeatureFlagService;
+use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
+use RuntimeException;
 use Hyperf\DbConnection\Db;
 
 /**
@@ -41,9 +45,16 @@ final class GomokuRoomService
     /** 胜者选边窗口（秒）：超时默认执黑。 */
     public const int RPS_CHOOSE_SECONDS = 8;
 
+    /** 聊天冷却（秒）/ 环形保留条数（同 uno/冒险棋/飞行棋）。 */
+    private const int CHAT_COOLDOWN_SECONDS = 3;
+
+    public const int CHAT_KEEP = 50;
+
     public function __construct(
         private readonly WechatUserService $users,
         private readonly GomokuWsPusher $pusher,
+        private readonly FeatureFlagService $flags,
+        private readonly WechatContentSecurityService $security,
     ) {}
 
     /**
@@ -229,6 +240,87 @@ final class GomokuRoomService
             }
         }
         return $swept;
+    }
+
+    /**
+     * 房间聊天：phrase（快捷句 id）/ emoji（表情字符）/ sticker（贴纸 id）/ text（自由文字，过审）。
+     * 白名单是通用 GameChat；自由文字开关复用 feature.uno_chat_text。等待/猜拳/对局/结算全程可用。
+     *
+     * @return array<string, mixed>
+     */
+    public function chat(string $code, int $userId, string $kind, ?string $id, ?string $text): array
+    {
+        if ($kind === 'phrase') {
+            $content = GameChat::phraseText((string) $id);
+            if ($content === null) {
+                throw new BizException(422, '快捷句不存在');
+            }
+        } elseif ($kind === 'emoji') {
+            $content = (string) $id;
+            if (! GameChat::isEmoji($content)) {
+                throw new BizException(422, '表情不存在');
+            }
+        } elseif ($kind === 'sticker') {
+            $content = (string) $id;
+            if (! GameChat::isSticker($content)) {
+                throw new BizException(422, '贴纸不存在');
+            }
+        } elseif ($kind === 'text') {
+            $this->flags->requireUnoChatTextEnabled();
+            $content = trim((string) $text);
+            $content = (string) preg_replace('/\s+/u', ' ', $content);
+            if ($content === '') {
+                throw new BizException(422, '消息不能为空');
+            }
+            if (mb_strlen($content) > GameChat::TEXT_MAX_LENGTH) {
+                throw new BizException(422, '最多 ' . GameChat::TEXT_MAX_LENGTH . ' 个字');
+            }
+            $user = $this->users->findUser($userId);
+            $openid = (string) ($user['openid'] ?? '');
+            if ($openid === '') {
+                throw new BizException(422, '账号信息缺失，发不出文字消息');
+            }
+            try {
+                // fail-closed：审核接口异常时宁可拒发（事务外执行；审核外呼已协程化不冻结 worker）
+                if (! $this->security->checkText($content, $openid)) {
+                    throw new BizException(422, '消息未通过内容审核，换个说法试试');
+                }
+            } catch (RuntimeException) {
+                throw new BizException(422, '内容审核暂时不可用，稍后再试');
+            }
+        } else {
+            throw new BizException(422, '消息类型不正确');
+        }
+
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+            $room = $this->lockByCode($code);
+            $role = $this->seatedRole($room, $userId);
+            if ($role === null) {
+                throw new BizException(403, '你不是本局玩家');
+            }
+            $now = time();
+            $lastAt = $room->chat_last_at ?? [];
+            if ($now - (int) ($lastAt[(string) $userId] ?? 0) < self::CHAT_COOLDOWN_SECONDS) {
+                throw new BizException(422, '发太快啦，歇一下');
+            }
+            $chat = $room->chat ?? [];
+            $seq = ($chat === [] ? 0 : (int) ($chat[count($chat) - 1]['seq'] ?? 0)) + 1;
+            $chat[] = ['seq' => $seq, 'uid' => $userId, 'role' => $role, 'kind' => $kind, 'text' => $content, 'ts' => $now];
+            if (count($chat) > self::CHAT_KEEP) {
+                $chat = array_slice($chat, -self::CHAT_KEEP);
+            }
+            $lastAt[(string) $userId] = $now;
+            $room->chat = $chat;
+            $room->chat_last_at = $lastAt;
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
     }
 
     /**
@@ -485,6 +577,8 @@ final class GomokuRoomService
             'black' => $this->playerCard($room->black_user_id, $room->black_seen_at, $onlineIds),
             'white' => $this->playerCard($room->white_user_id, $room->white_seen_at, $onlineIds),
             'rps' => $this->serializeRps($room, $myRole),
+            'chat' => array_values($room->chat ?? []),
+            'chatSeq' => $this->chatSeqOf($room),
             'sharePath' => '/pages/gomoku/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
@@ -528,6 +622,13 @@ final class GomokuRoomService
             $out['myTurn'] = $winner === null ? ! isset($picks[$me]) : $me === $winner;
         }
         return $out;
+    }
+
+    /** 聊天游标：最后一条的 seq（空为 0），客户端按 seq 增量出气泡。 */
+    private function chatSeqOf(GomokuRoom $room): int
+    {
+        $chat = $room->chat ?? [];
+        return $chat === [] ? 0 : (int) ($chat[count($chat) - 1]['seq'] ?? 0);
     }
 
     /** 写操作提交后向房间内 WS 连接广播最新状态（每个连接按自己视角序列化）。 */

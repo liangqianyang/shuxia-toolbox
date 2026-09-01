@@ -6,7 +6,11 @@ namespace App\Service\Ludo;
 
 use App\Exception\BizException;
 use App\Model\LudoRoom;
+use App\Service\Chat\GameChat;
+use App\Service\FeatureFlagService;
+use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
+use RuntimeException;
 use Hyperf\DbConnection\Db;
 
 /**
@@ -51,12 +55,19 @@ final class LudoRoomService
     /** state.events 环形数组保留条数。 */
     public const int EVENTS_KEEP = 16;
 
+    /** 聊天冷却（秒）/ 环形保留条数（同 uno/冒险棋）。 */
+    private const int CHAT_COOLDOWN_SECONDS = 3;
+
+    public const int CHAT_KEEP = 50;
+
     /** 其他玩家离线超过多久（秒）视为离场不再回来，判最后在线的人获胜。 */
     private const int OFFLINE_FORFEIT_SECONDS = 120;
 
     public function __construct(
         private readonly WechatUserService $users,
         private readonly LudoWsPusher $pusher,
+        private readonly FeatureFlagService $flags,
+        private readonly WechatContentSecurityService $security,
     ) {}
 
     /**
@@ -134,6 +145,7 @@ final class LudoRoomService
                 throw new BizException(422, '至少 2 人才能开局');
             }
             $state = LudoRule::setupGame($room->seats);
+            $state = $this->carryChat($room->state, $state);
             // 保留等待室期间的累计胜场（重开链）
             foreach ($room->seats as $uid) {
                 $state['scores'][(string) $uid] = (int) ($room->state['scores'][(string) $uid] ?? 0);
@@ -330,6 +342,7 @@ final class LudoRoomService
                 throw new BizException(422, '至少 2 人才能再来一局');
             }
             $state = LudoRule::resetForRematch($oldState, array_values($seats));
+            $state = $this->carryChat($oldState, $state);
             $state = $this->pushEvent($state, ['t' => 'rematch']);
             $room->seats = array_values($seats);
             $room->state = $state;
@@ -409,6 +422,86 @@ final class LudoRoomService
                     $room->state = $state;
                 }
             }
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * 房间聊天：phrase（快捷句 id）/ emoji（表情字符）/ sticker（贴纸 id）/ text（自由文字，过审）。
+     * 白名单是通用 GameChat；自由文字开关复用 feature.uno_chat_text（一个开关管所有房间聊天）。
+     *
+     * @return array<string, mixed>
+     */
+    public function chat(string $code, int $userId, string $kind, ?string $id, ?string $text): array
+    {
+        if ($kind === 'phrase') {
+            $content = GameChat::phraseText((string) $id);
+            if ($content === null) {
+                throw new BizException(422, '快捷句不存在');
+            }
+        } elseif ($kind === 'emoji') {
+            $content = (string) $id;
+            if (! GameChat::isEmoji($content)) {
+                throw new BizException(422, '表情不存在');
+            }
+        } elseif ($kind === 'sticker') {
+            $content = (string) $id;
+            if (! GameChat::isSticker($content)) {
+                throw new BizException(422, '贴纸不存在');
+            }
+        } elseif ($kind === 'text') {
+            $this->flags->requireUnoChatTextEnabled();
+            $content = trim((string) $text);
+            $content = (string) preg_replace('/\s+/u', ' ', $content);
+            if ($content === '') {
+                throw new BizException(422, '消息不能为空');
+            }
+            if (mb_strlen($content) > GameChat::TEXT_MAX_LENGTH) {
+                throw new BizException(422, '最多 ' . GameChat::TEXT_MAX_LENGTH . ' 个字');
+            }
+            $user = $this->users->findUser($userId);
+            $openid = (string) ($user['openid'] ?? '');
+            if ($openid === '') {
+                throw new BizException(422, '账号信息缺失，发不出文字消息');
+            }
+            try {
+                // fail-closed：审核接口异常时宁可拒发（事务外执行，不能持行锁等外呼；
+                // 审核外呼已协程化，不冻结 worker）
+                if (! $this->security->checkText($content, $openid)) {
+                    throw new BizException(422, '消息未通过内容审核，换个说法试试');
+                }
+            } catch (RuntimeException) {
+                throw new BizException(422, '内容审核暂时不可用，稍后再试');
+            }
+        } else {
+            throw new BizException(422, '消息类型不正确');
+        }
+
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+            $room = $this->lockByCode($code);
+            $seat = $this->requireSeated($room, $userId);
+            $state = $room->state;
+            $now = time();
+            if ($now - (int) ($state['chatLastAt'][(string) $userId] ?? 0) < self::CHAT_COOLDOWN_SECONDS) {
+                throw new BizException(422, '发太快啦，歇一下');
+            }
+            $chat = isset($state['chat']) && is_array($state['chat']) ? $state['chat'] : [];
+            $seq = (int) ($state['chatSeq'] ?? 0) + 1;
+            $chat[] = ['seq' => $seq, 'uid' => $userId, 'seat' => $seat, 'kind' => $kind, 'text' => $content, 'ts' => $now];
+            if (count($chat) > self::CHAT_KEEP) {
+                $chat = array_slice($chat, -self::CHAT_KEEP);
+            }
+            $state['chat'] = $chat;
+            $state['chatSeq'] = $seq;
+            $state['chatLastAt'][(string) $userId] = $now;
+            $room->state = $state;
+            $this->touchSeenAt($room, $userId);
             $room->version++;
             $room->save();
             return $room;
@@ -598,9 +691,22 @@ final class LudoRoomService
             'winnerUserId' => $room->winner_user_id,
             'winReason' => $room->win_reason,
             'scores' => $state['scores'] ?? [],
+            'chat' => array_values($state['chat'] ?? []),
+            'chatSeq' => (int) ($state['chatSeq'] ?? 0),
             'sharePath' => '/pages-ludo/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
+    }
+
+    /** 聊天三件套（chat/chatSeq/chatLastAt）随新 state 带走（开局/重开）。 */
+    private function carryChat(array $old, array $fresh): array
+    {
+        foreach (['chat', 'chatSeq', 'chatLastAt'] as $key) {
+            if (array_key_exists($key, $old)) {
+                $fresh[$key] = $old[$key];
+            }
+        }
+        return $fresh;
     }
 
     /** 写操作提交后向房间内 WS 连接广播最新状态。 */

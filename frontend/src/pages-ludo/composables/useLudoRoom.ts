@@ -13,6 +13,7 @@ import {
   createLudoRoom,
   fetchLudoRoomState,
   joinLudoRoom,
+  sendLudoChat,
   leaveLudoRoom,
   ludoRematch,
   movePlane,
@@ -187,6 +188,19 @@ export function useLudoRoom() {
     await act(() => toggleAuto(current.code, on))
   }
 
+  /** 聊天：不用 acting 锁（不打断对局操作），失败由 toast 提示。 */
+  async function sendChat(kind: string, payload: { id?: string; text?: string }): Promise<boolean> {
+    const current = state.value
+    if (!current) return false
+    try {
+      applyState(await sendLudoChat(current.code, kind, payload))
+      return true
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '发送失败')
+      return false
+    }
+  }
+
   async function requestRematch() {
     const current = state.value
     if (!current) return
@@ -359,6 +373,7 @@ export function useLudoRoom() {
     move,
     setAuto,
     requestRematch,
+    sendChat,
     exitRoom,
     startSync,
     stopSync,

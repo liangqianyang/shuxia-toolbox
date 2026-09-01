@@ -38,3 +38,8 @@ export function ludoRematch(code: string): Promise<LudoRoomState> {
 export function leaveLudoRoom(code: string): Promise<LudoRoomState> {
   return requestUserApi<LudoRoomState>(`/api/ludo/room/${code}/leave`, 'POST')
 }
+
+/** 房间聊天（phrase 传 id / emoji 传表情字符 / sticker 传 id / text 传文字）。 */
+export function sendLudoChat(code: string, kind: string, payload: { id?: string; text?: string }): Promise<LudoRoomState> {
+  return requestUserApi<LudoRoomState>(`/api/ludo/room/${code}/chat`, 'POST', { kind, ...payload })
+}

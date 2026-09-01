@@ -5,7 +5,7 @@
 import { cdnUrl } from '../../utils/cdn'
 const SOUND_KEY = 'shuxia-ludo-sound-enabled'
 
-export type LudoSoundName = 'roll' | 'takeoff' | 'capture' | 'fly' | 'finish' | 'win'
+export type LudoSoundName = 'roll' | 'takeoff' | 'capture' | 'fly' | 'finish' | 'win' | 'chat'
 
 const players = new Map<LudoSoundName, UniApp.InnerAudioContext>()
 let enabled = true

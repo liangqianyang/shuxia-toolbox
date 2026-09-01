@@ -45,3 +45,8 @@ export function respondUndo(code: string, accept: boolean): Promise<GomokuRoomSt
 export function leaveRoom(code: string): Promise<GomokuRoomState> {
   return requestUserApi<GomokuRoomState>(`/api/gomoku/room/${code}/leave`, 'POST')
 }
+
+/** 房间聊天（phrase 传 id / emoji 传表情字符 / sticker 传 id / text 传文字）。 */
+export function sendGomokuChat(code: string, kind: string, payload: { id?: string; text?: string }): Promise<GomokuRoomState> {
+  return requestUserApi<GomokuRoomState>(`/api/gomoku/room/${code}/chat`, 'POST', { kind, ...payload })
+}

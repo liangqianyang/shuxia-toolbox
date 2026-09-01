@@ -22,6 +22,8 @@ namespace App\Model;
  * @property null|string $undo_pending
  * @property null|string $undo_pending_at
  * @property null|array{round: int, picks: array<string, int>, winner: null|string, chosen: null|string} $rps
+ * @property null|array<int, array<string, mixed>> $chat
+ * @property null|array<string, int> $chat_last_at
  * @property null|string $turn_deadline_at
  * @property null|string $black_seen_at
  * @property null|string $white_seen_at
@@ -48,6 +50,8 @@ final class GomokuRoom extends Model
         'undo_pending_at',
         'rps',
         'turn_deadline_at',
+        'chat',
+        'chat_last_at',
         'black_seen_at',
         'white_seen_at',
     ];
@@ -62,5 +66,7 @@ final class GomokuRoom extends Model
         'moves' => 'array',
         'win_line' => 'array',
         'rps' => 'array',
+        'chat' => 'array',
+        'chat_last_at' => 'array',
     ];
 }

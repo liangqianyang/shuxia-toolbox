@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use GuzzleHttp\Client;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Redis\RedisFactory;
 use RuntimeException;
+use Swoole\Coroutine;
 use Throwable;
 
 /**
@@ -22,13 +22,50 @@ final class WechatContentSecurityService
     private const string MSG_CHECK_URL = 'https://api.weixin.qq.com/wxa/msg_sec_check';
     private const string TOKEN_CACHE_KEY = 'shuxia:wechat:mini_program:access_token';
 
-    private readonly Client $client;
+    /** 单次外呼超时（秒）：收紧到 3s，审核接口慢时快速 fail-closed，不再拖满 8s。 */
+    private const int HTTP_TIMEOUT = 3;
 
     public function __construct(
         private readonly ConfigInterface $config,
         private readonly RedisFactory $redisFactory,
-    ) {
-        $this->client = new Client();
+    ) {}
+
+    /**
+     * 协程化 HTTP 请求：`Coroutine::exec` 派生系统 curl，协程内等待结果。
+     * 关键收益：请求期间 worker 不被阻塞——房间轮询/WS 推送照常服务，
+     * 聊天协程自己仍等待结果（先审后播的合规语义不变）。
+     * 为什么不用 Swoole 协程 HTTP 客户端：本环境 Swoole 编译未开 --enable-openssl，
+     * 协程客户端做不了 HTTPS；系统 curl 自带 TLS（对端校验开启，与原生 curl 同强度）。
+     * 命令所有动态段均 escapeshellarg，无注入面。
+     *
+     * @param null|array<string, string> $query
+     * @param null|array<string, mixed> $json
+     * @return array<string, mixed>
+     */
+    private function coRequest(string $method, string $url, ?array $query = null, ?array $json = null): array
+    {
+        $fullUrl = $url . ($query !== null ? '?' . http_build_query($query) : '');
+        $cmd = 'curl -s -m ' . self::HTTP_TIMEOUT . ' -X ' . strtoupper($method);
+        if ($json !== null) {
+            $cmd .= ' -H ' . escapeshellarg('Content-Type: application/json')
+                . ' -d ' . escapeshellarg((string) json_encode($json, JSON_UNESCAPED_UNICODE));
+        }
+        $cmd .= ' ' . escapeshellarg($fullUrl);
+        $result = Coroutine::exec($cmd);
+        if (! is_array($result) || (int) ($result['code'] ?? -1) !== 0) {
+            $code = is_array($result) ? (int) ($result['code'] ?? -1) : -1;
+            throw new RuntimeException("内容安全接口 HTTP 失败（curl exit={$code}）");
+        }
+        $respBody = (string) ($result['output'] ?? '');
+        try {
+            $decoded = json_decode($respBody, true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable $e) {
+            throw new RuntimeException('内容安全接口响应解析失败：' . $e->getMessage(), 0, $e);
+        }
+        if (! is_array($decoded)) {
+            throw new RuntimeException('内容安全接口响应格式异常');
+        }
+        return $decoded;
     }
 
     /**
@@ -47,18 +84,13 @@ final class WechatContentSecurityService
 
         $token = $this->accessToken();
         try {
-            $response = $this->client->post(self::MSG_CHECK_URL, [
-                'query' => ['access_token' => $token],
-                'json' => [
-                    'content' => mb_substr($content, 0, 2500),
-                    'version' => 2,
-                    'scene' => $scene,
-                    'openid' => $openid,
-                ],
-                'timeout' => 8,
+            $body = $this->coRequest('POST', self::MSG_CHECK_URL, ['access_token' => $token], [
+                'content' => mb_substr($content, 0, 2500),
+                'version' => 2,
+                'scene' => $scene,
+                'openid' => $openid,
             ]);
-            $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
-        } catch (Throwable $e) {
+        } catch (RuntimeException $e) {
             throw new RuntimeException('内容安全检测失败：' . $e->getMessage(), 0, $e);
         }
 
@@ -90,16 +122,12 @@ final class WechatContentSecurityService
         }
 
         try {
-            $response = $this->client->get(self::TOKEN_URL, [
-                'query' => [
-                    'grant_type' => 'client_credential',
-                    'appid' => $appid,
-                    'secret' => $secret,
-                ],
-                'timeout' => 8,
+            $body = $this->coRequest('GET', self::TOKEN_URL, [
+                'grant_type' => 'client_credential',
+                'appid' => $appid,
+                'secret' => $secret,
             ]);
-            $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
-        } catch (Throwable $e) {
+        } catch (RuntimeException $e) {
             throw new RuntimeException('获取微信 access_token 失败：' . $e->getMessage(), 0, $e);
         }
 

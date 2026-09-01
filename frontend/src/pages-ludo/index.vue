@@ -62,6 +62,7 @@
             class="pchip"
             :class="{ 'pchip--current': p.seat === state.currentSeat && state.status === 'playing', 'pchip--left': p.left }"
           >
+            <view v-if="roomChat.chatBubbles[String(p.seat)]" class="seat-bubble" :class="{ 'seat-bubble--emoji': roomChat.chatBubbles[String(p.seat)].isEmoji }">{{ roomChat.chatBubbles[String(p.seat)].text }}</view>
             <view class="pchip__avatar-wrap">
               <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="pchip__avatar" />
               <view v-else class="pchip__avatar pchip__avatar--placeholder">✈️</view>
@@ -128,6 +129,20 @@
             <button class="dice-zone__auto" :class="{ 'dice-zone__auto--on': myAuto }" :disabled="acting" @tap="toggleMyAuto">
               {{ myAuto ? '取消托管' : '托管' }}
             </button>
+          </view>
+        </view>
+
+        <!-- 聊天条 -->
+        <view class="chat-zone">
+          <view class="chat-bar">
+            <scroll-view class="chat-feed" scroll-x :show-scrollbar="false">
+              <text v-for="m in roomChat.recentChats.value" :key="m.seq" class="chat-feed-item">
+                {{ seatNameOf(m.seat) }}: {{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}
+              </text>
+            </scroll-view>
+            <view class="chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
+              💬<text v-if="roomChat.unreadChat.value" class="chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+            </view>
           </view>
         </view>
 
@@ -212,6 +227,9 @@
 
     <!-- 玩法说明 -->
     <GameRulesModal :visible="rulesOpen" title="飞行棋 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
+
+    <!-- 房间聊天面板 -->
+    <GameChatPanel :ctrl="roomChat" :text-enabled="unoChatTextEnabled" />
   </view>
 </template>
 
@@ -225,8 +243,23 @@ import { posToPoint } from './utils/ludoBoard'
 import { playLudoSound, ludoSoundEnabled, setLudoSoundEnabled } from './utils/ludoSound'
 import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
 import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameChatPanel from '@/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import { useFeatures } from '@/composables/useFeatures'
+import { gamePhraseText } from '@/utils/gameChat'
 
 const rulesOpen = ref(false)
+
+// ---------- 房间聊天（通用 useRoomChat + 共享面板） ----------
+const { unoChatTextEnabled, refreshFeatures } = useFeatures()
+const roomChat = useRoomChat({
+  chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
+  code: () => state.value?.code ?? '',
+  send: (kind, payload) => sendChat(kind, payload),
+  onIncoming: () => playLudoSound('chat'),
+})
+const seatNameOf = (seat: number | null | undefined): string =>
+  seat === null || seat === undefined ? '?' : (state.value?.players.find((p) => p.seat === seat)?.nickname ?? '?')
 
 /** 玩法说明（玩家视角精简版）。 */
 const GAME_RULES: { heading?: string; lines: string[] }[] = [
@@ -293,6 +326,7 @@ const {
   move,
   setAuto,
   requestRematch,
+  sendChat,
   exitRoom,
   startSync,
   stopSync,
@@ -658,6 +692,7 @@ onLoad(async (query) => {
 })
 
 onShow(() => {
+  void refreshFeatures()
   if (state.value) startSync()
 })
 
@@ -1464,5 +1499,28 @@ $maple-light: #FBE4D5;
 @keyframes opening-win-pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.07); }
+}
+
+/* ── 房间聊天 ── */
+.seat-bubble {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8rpx);
+  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(33, 72, 61, 0.15);
+  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(33, 72, 61, 0.18); font-size: 24rpx; color: #21483d;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 12;
+  animation: ludo-bubble-pop 0.18s ease-out;
+}
+.seat-bubble--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
+@keyframes ludo-bubble-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8rpx); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.chat-zone { padding: 8rpx 24rpx 24rpx; }
+.chat-bar { display: flex; align-items: center; gap: 12rpx; }
+.chat-feed { flex: 1; background: rgba(255, 255, 255, 0.85); border-radius: 999rpx; padding: 8rpx 20rpx; white-space: nowrap; }
+.chat-feed-item { font-size: 22rpx; color: #9aa79e; margin-right: 24rpx; }
+.chat-trigger { position: relative; font-size: 34rpx; padding: 6rpx 18rpx; background: #fff; border-radius: 999rpx; }
+.chat-unread {
+  position: absolute; top: -6rpx; right: -6rpx; background: #e85d4a; color: #fff; font-size: 18rpx;
+  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
 }
 </style>

@@ -5,7 +5,7 @@
 
 import { computed, ref } from 'vue'
 import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
-import { chooseGomokuColor, createRoom, fetchRoomState, joinRoom, leaveRoom, placeMove, rematch, requestUndo, respondUndo, rpsRoom } from '@/services/gomoku'
+import { chooseGomokuColor, createRoom, fetchRoomState, joinRoom, leaveRoom, placeMove, rematch, requestUndo, respondUndo, rpsRoom, sendGomokuChat } from '@/services/gomoku'
 import type { GomokuColor, GomokuRoomState, GomokuWsFrame } from '@/types/gomoku'
 
 const WS_MAX_FAILURES = 3
@@ -346,9 +346,23 @@ export function useGomokuRoom() {
     applyState(await chooseGomokuColor(current.code, color))
   }
 
+  /** 聊天：不用 busy 锁（不打断对局操作），失败由 toast 提示。 */
+  async function sendChat(kind: string, payload: { id?: string; text?: string }): Promise<boolean> {
+    const current = state.value
+    if (!current) return false
+    try {
+      applyState(await sendGomokuChat(current.code, kind, payload))
+      return true
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '发送失败')
+      return false
+    }
+  }
+
   return {
     rps,
     chooseColor,
+    sendChat,
     state,
     transport,
     placing,

@@ -93,8 +93,20 @@ export interface LudoRoomState {
   winnerUserId: number | null
   winReason: string | null
   scores: Record<string, number>
+  chat: LudoChatMessage[]
+  chatSeq: number
   sharePath: string
   updatedAt: string
+}
+
+/** 房间聊天消息（环形 50 条，seq 单调增）。 */
+export interface LudoChatMessage {
+  seq: number
+  uid: number
+  seat: number
+  kind: 'phrase' | 'emoji' | 'sticker' | 'text'
+  text: string
+  ts: number
 }
 
 export interface LudoStateResponse {

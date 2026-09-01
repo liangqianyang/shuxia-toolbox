@@ -98,6 +98,7 @@
               }"
               @tap="tapPlayerChip(p.seat)"
             >
+              <view v-if="chatBubbles[p.seat]" class="seat-bubble" :class="{ 'seat-bubble--emoji': chatBubbles[p.seat].isEmoji }">{{ chatBubbles[p.seat].text }}</view>
               <view class="player-avatar-wrap">
                 <image class="player-avatar" :src="resolveAvatar(p.avatarUrl)" mode="aspectFill" />
                 <view class="player-dot" :style="{ background: seatColor(p.seat) }" />
@@ -448,10 +449,6 @@
         </view>
       </view>
 
-      <!-- 座位气泡（棋盘上方飘字） -->
-      <view v-for="(bubble, seat) in chatBubbles" :key="seat" class="chat-bubble" :class="{ 'chat-bubble-emoji': bubble.isEmoji }">
-        {{ bubble.text }}
-      </view>
     </view>
 
     <!-- 聊天面板 -->
@@ -489,8 +486,18 @@
         </view>
         <view v-else class="chat-text-row">
           <template v-if="adventureChatTextEnabled">
-            <input v-model="chatInput" class="chat-input" maxlength="40" placeholder="说点什么…（过审后广播）" />
+            <input
+              v-model="chatInput"
+              class="chat-input"
+              type="text"
+              maxlength="40"
+              placeholder="说点什么（40 字内，须经审核）"
+              confirm-type="send"
+              :disabled="chatCooldown > 0"
+              @confirm="sendText"
+            />
             <button class="btn btn-primary btn-sm" :disabled="chatCooling || !chatInput.trim()" @tap="sendText">{{ chatCooling ? `${chatCooldown}s` : '发送' }}</button>
+
           </template>
           <view v-else class="chat-text-off">文字聊天维护中，快捷句/表情/贴纸仍可用</view>
         </view>
@@ -1258,9 +1265,12 @@ async function sendSticker(id: string) {
 async function sendText() {
   const text = chatInput.value.trim()
   if (!text || chatCooling.value) return
+  // 同 uno：发送即清空输入并收起面板——消息随后出现在底部 feed / 座位气泡里
+  chatInput.value = ''
+  chatPanelOpen.value = false
   startChatCooldown()
   const ok = await sendChat('text', { text })
-  if (ok) chatInput.value = ''
+  if (!ok) chatInput.value = text // 发送失败还原文字（重开面板可见）
 }
 
 // ---------------------------------------------------------------- 生命周期
@@ -1378,7 +1388,7 @@ $muted: #9aa79e;
 
 // ── 玩家条 ──
 .players-bar { background: #fff; border-radius: 20rpx; padding: 16rpx 8rpx; white-space: nowrap; }
-.players-row { display: inline-flex; gap: 16rpx; padding: 0 12rpx; }
+.players-row { display: inline-flex; gap: 16rpx; padding: 0 12rpx; padding-top: 64rpx; margin-top: -32rpx; }
 .player-chip {
   display: inline-flex; flex-direction: column; align-items: center; gap: 6rpx; width: 140rpx;
   padding: 12rpx 8rpx; border-radius: 16rpx; border: 3rpx solid transparent; position: relative;
@@ -1570,11 +1580,19 @@ $muted: #9aa79e;
   position: absolute; top: -6rpx; right: -6rpx; background: $maple; color: #fff; font-size: 18rpx;
   border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
 }
-.chat-bubble {
-  position: fixed; left: 50%; bottom: 320rpx; transform: translateX(-50%); background: rgba(33,72,61,0.88);
-  color: #fff; font-size: 26rpx; padding: 12rpx 32rpx; border-radius: 20rpx; z-index: 60; pointer-events: none;
+/* 座位气泡：锚定在各自玩家条头像上方（同 uno 的 seat-bubble） */
+.seat-bubble {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8rpx);
+  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(33,72,61,0.15);
+  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(33,72,61,0.18); font-size: 24rpx; color: #21483d;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 12;
+  animation: bubble-pop 0.18s ease-out;
 }
-.chat-bubble-emoji { font-size: 44rpx; }
+.seat-bubble--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
+@keyframes bubble-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8rpx); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 .chat-panel-mask { position: fixed; inset: 0; background: rgba(33,42,38,0.5); z-index: 100; display: flex; align-items: flex-end; }
 .chat-panel {
   width: 100%; max-height: 72vh; background: $cream; border-radius: 32rpx 32rpx 0 0; padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
