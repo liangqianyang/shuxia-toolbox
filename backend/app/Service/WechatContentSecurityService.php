@@ -22,8 +22,12 @@ final class WechatContentSecurityService
     private const string MSG_CHECK_URL = 'https://api.weixin.qq.com/wxa/msg_sec_check';
     private const string TOKEN_CACHE_KEY = 'shuxia:wechat:mini_program:access_token';
 
-    /** 单次外呼超时（秒）：收紧到 3s，审核接口慢时快速 fail-closed，不再拖满 8s。 */
-    private const int HTTP_TIMEOUT = 3;
+    /** 单次外呼总超时（秒）。协程化后等待期间不冻结 worker，8s 安全；
+     *  生产网络到微信 API 实测 >3s（curl exit=28），收紧会误杀。 */
+    private const int HTTP_TIMEOUT = 8;
+
+    /** TCP 连接超时（秒），与总超时分开给 DNS 慢的环境留余量。 */
+    private const int CONNECT_TIMEOUT = 5;
 
     public function __construct(
         private readonly ConfigInterface $config,
@@ -45,7 +49,8 @@ final class WechatContentSecurityService
     private function coRequest(string $method, string $url, ?array $query = null, ?array $json = null): array
     {
         $fullUrl = $url . ($query !== null ? '?' . http_build_query($query) : '');
-        $cmd = 'curl -s -m ' . self::HTTP_TIMEOUT . ' -X ' . strtoupper($method);
+        // -4 强制 IPv4：Docker/云环境 IPv6 优先尝试会挂到超时（curl exit=28 的常见元凶）
+        $cmd = 'curl -s -4 --connect-timeout ' . self::CONNECT_TIMEOUT . ' -m ' . self::HTTP_TIMEOUT . ' -X ' . strtoupper($method);
         if ($json !== null) {
             $cmd .= ' -H ' . escapeshellarg('Content-Type: application/json')
                 . ' -d ' . escapeshellarg((string) json_encode($json, JSON_UNESCAPED_UNICODE));
