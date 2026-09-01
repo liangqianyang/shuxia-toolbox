@@ -5,7 +5,7 @@
 
 import { computed, ref } from 'vue'
 import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
-import { createRoom, fetchRoomState, joinRoom, leaveRoom, placeMove, rematch, requestUndo, respondUndo } from '@/services/gomoku'
+import { chooseGomokuColor, createRoom, fetchRoomState, joinRoom, leaveRoom, placeMove, rematch, requestUndo, respondUndo, rpsRoom } from '@/services/gomoku'
 import type { GomokuColor, GomokuRoomState, GomokuWsFrame } from '@/types/gomoku'
 
 const WS_MAX_FAILURES = 3
@@ -113,8 +113,8 @@ export function useGomokuRoom() {
     startSync()
   }
 
-  async function createAndEnter(color: GomokuColor) {
-    await enterRoom(await createRoom(color))
+  async function createAndEnter() {
+    await enterRoom(await createRoom())
   }
 
   async function joinByCode(code: string) {
@@ -310,7 +310,23 @@ export function useGomokuRoom() {
     }
   }
 
+  /** 猜拳出拳（rps 阶段）。 */
+  async function rps(pick: string) {
+    const current = state.value
+    if (!current) return
+    applyState(await rpsRoom(current.code, pick))
+  }
+
+  /** 胜者选边（rps 选边期）。 */
+  async function chooseColor(color: string) {
+    const current = state.value
+    if (!current) return
+    applyState(await chooseGomokuColor(current.code, color))
+  }
+
   return {
+    rps,
+    chooseColor,
     state,
     transport,
     placing,

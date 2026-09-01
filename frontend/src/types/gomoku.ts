@@ -4,7 +4,7 @@ export type GomokuColor = 'black' | 'white'
 
 export type GomokuRole = GomokuColor | 'spectator'
 
-export type GomokuStatus = 'waiting' | 'playing' | 'finished' | 'closed'
+export type GomokuStatus = 'waiting' | 'rps' | 'playing' | 'finished' | 'closed'
 
 export type GomokuWinReason = 'five' | 'forfeit' | 'draw'
 
@@ -30,6 +30,21 @@ export interface GomokuUndo {
   limit: number
 }
 
+/** 猜拳定选边窗口（出拳期只给本人出拳；选边期起双方出拳公开；done=已开局，保留结果供定格）。 */
+export interface GomokuRps {
+  phase: 'pick' | 'choose' | 'done'
+  round: number
+  winner: GomokuColor | null
+  chosen: GomokuColor | null
+  myPick: number | null
+  opponentPicked: boolean
+  picks: { black: number | null; white: number | null } | null
+  /** 平局重出轮的上轮出拳（展示「都是石头」）。 */
+  lastPicks: { black: number | null; white: number | null } | null
+  myTurn: boolean
+  ttl: number
+}
+
 /** 房间完整状态（HTTP 接口与 WS 推送同一 shape）。 */
 export interface GomokuRoomState {
   code: string
@@ -44,6 +59,7 @@ export interface GomokuRoomState {
   winLine: Array<[number, number]> | null
   winReason: GomokuWinReason | null
   undo: GomokuUndo
+  rps: GomokuRps | null
   black: GomokuPlayer | null
   white: GomokuPlayer | null
   sharePath: string

@@ -32,30 +32,42 @@ final class GomokuRoomService
     /** 悔棋请求决策时限（秒）：超时未同意即视为拒绝。 */
     public const int UNDO_DECISION_SECONDS = 10;
 
+    /** 猜拳定选边：出拳窗口（秒）。 */
+    public const int RPS_SECONDS = 10;
+
+    /** 猜拳平局重出上限；超过后随机定胜者（诚实 RNG 下几乎不可达）。 */
+    public const int RPS_MAX_ROUNDS = 3;
+
+    /** 胜者选边窗口（秒）：超时默认执黑。 */
+    public const int RPS_CHOOSE_SECONDS = 8;
+
     public function __construct(
         private readonly WechatUserService $users,
         private readonly GomokuWsPusher $pusher,
     ) {}
 
     /**
-     * 创建房间：创建者可选执黑/执白，好友加入后坐对面空位。插入前顺手清理 24h 未更新的旧房。
+     * 创建房间：创建者先临时坐黑（黑白只是猜拳前的标签），最终执子由开局猜拳定选边。
+     * 插入前顺手清理 24h 未更新的旧房。
      *
      * @return array<string, mixed> 完整房间状态
      */
-    public function create(int $userId, string $color = 'black'): array
+    public function create(int $userId): array
     {
         GomokuRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId, $color) {
+        $room = Db::transaction(function () use ($userId) {
             $room = new GomokuRoom();
             $room->code = $this->newCode();
-            $room->black_user_id = $color === 'white' ? 0 : $userId;
-            $room->white_user_id = $color === 'white' ? $userId : 0;
+            $room->black_user_id = $userId;
+            $room->white_user_id = 0;
             $room->status = 'waiting';
             $room->moves = [];
             $room->version = 1;
-            $room->black_seen_at = $color === 'white' ? null : date('Y-m-d H:i:s');
-            $room->white_seen_at = $color === 'white' ? date('Y-m-d H:i:s') : null;
+            $room->rps = null;
+            $room->turn_deadline_at = null;
+            $room->black_seen_at = date('Y-m-d H:i:s');
+            $room->white_seen_at = null;
             $room->save();
             return $room;
         });
@@ -84,7 +96,10 @@ final class GomokuRoomService
                     $room->white_user_id = $userId;
                     $room->white_seen_at = date('Y-m-d H:i:s');
                 }
-                $room->status = 'playing';
+                // 双人坐满 → 猜拳定选边（胜者选执黑/执白），选完才正式开局
+                $room->status = 'rps';
+                $room->rps = ['round' => 1, 'picks' => [], 'winner' => null, 'chosen' => null];
+                $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::RPS_SECONDS);
                 $room->version++;
                 $room->save();
             }
@@ -109,6 +124,111 @@ final class GomokuRoomService
             return ['changed' => false, 'version' => $room->version];
         }
         return ['changed' => true] + $this->serialize($room, $userId);
+    }
+
+    /**
+     * 猜拳定选边（rps 阶段）：双人各暗出一拳（r石头/p布/s剪刀），双方到齐即结算；
+     * 平局重出（上限 RPS_MAX_ROUNDS 后随机定），胜者进入选边窗口。
+     *
+     * @return array<string, mixed>
+     */
+    public function rps(string $code, int $userId, string $pick): array
+    {
+        $map = ['r' => 0, 'p' => 1, 's' => 2];
+        if (! isset($map[$pick])) {
+            throw new BizException(422, '出拳不正确');
+        }
+        $room = Db::transaction(function () use ($code, $userId, $map, $pick) {
+            $room = $this->lockByCode($code);
+            $this->applyDueRpsIfNeeded($room, $userId);
+            $role = $this->requireRpsRole($room, $userId);
+            $rps = $room->rps;
+            if (($rps['winner'] ?? null) !== null) {
+                throw new BizException(422, '猜拳已分出胜负，等对方选边');
+            }
+            if (isset($rps['picks'][$role])) {
+                throw new BizException(422, '你已经出过拳了');
+            }
+            $rps['picks'][$role] = $map[$pick];
+            $room->rps = $rps;
+            $this->resolveRps($room);
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * 胜者选边（rps 阶段）：选执黑先手或执白后手；超时未选默认执黑。
+     *
+     * @return array<string, mixed>
+     */
+    public function chooseColor(string $code, int $userId, string $color): array
+    {
+        if (! in_array($color, ['black', 'white'], true)) {
+            throw new BizException(422, '颜色不正确');
+        }
+        $room = Db::transaction(function () use ($code, $userId, $color) {
+            $room = $this->lockByCode($code);
+            $this->applyDueRpsIfNeeded($room, $userId);
+            $role = $this->requireRpsRole($room, $userId);
+            $rps = $room->rps;
+            if (($rps['winner'] ?? null) === null) {
+                throw new BizException(422, '猜拳还没分出胜负');
+            }
+            if ($role !== $rps['winner']) {
+                throw new BizException(422, '由猜拳胜者选边');
+            }
+            $this->applyColorChoice($room, $color);
+            $this->touchSeenAt($room, $userId);
+            $room->version++;
+            $room->save();
+            return $room;
+        });
+
+        $state = $this->serialize($room, $userId);
+        $this->broadcast($room);
+        return $state;
+    }
+
+    /**
+     * Timer 清扫入口：把所有「rps 阶段且窗口已到期」的房间自动推进
+     * （出拳期到 → 代未出者随机出并结算；选边期到 → 默认执黑开局）。返回推进的房间数。
+     */
+    public function sweepDueRpsRooms(): int
+    {
+        $codes = GomokuRoom::query()
+            ->where('status', 'rps')
+            ->whereNotNull('turn_deadline_at')
+            ->where('turn_deadline_at', '<=', date('Y-m-d H:i:s'))
+            ->limit(50)
+            ->pluck('code');
+        $swept = 0;
+        foreach ($codes as $code) {
+            $room = Db::transaction(function () use ($code) {
+                $room = $this->lockByCode((string) $code);
+                if ($room->status !== 'rps' || $room->turn_deadline_at === null
+                    || strtotime((string) $room->turn_deadline_at) > time()) {
+                    return null;
+                }
+                if (! $this->applyDueRpsIfNeeded($room)) {
+                    return null;
+                }
+                $room->version++;
+                $room->save();
+                return $room;
+            });
+            if ($room instanceof GomokuRoom) {
+                $this->broadcast($room);
+                ++$swept;
+            }
+        }
+        return $swept;
     }
 
     /**
@@ -264,7 +384,8 @@ final class GomokuRoomService
     }
 
     /**
-     * 再来一局：终局后由任一入座玩家发起，清空棋局并交换黑白。
+     * 再来一局：终局后由任一入座玩家发起，清空棋局并重新猜拳定选边
+     * （黑白列只作猜拳前的临时标签，最终执子由胜者选边决定）。
      *
      * @return array<string, mixed>
      */
@@ -278,7 +399,6 @@ final class GomokuRoomService
             if ($room->status !== 'finished') {
                 throw new BizException(422, '对局结束后才能再来一局');
             }
-            [$room->black_user_id, $room->white_user_id] = [$room->white_user_id, $room->black_user_id];
             $room->moves = [];
             $room->winner = null;
             $room->win_line = null;
@@ -287,7 +407,9 @@ final class GomokuRoomService
             $room->undo_white = self::UNDO_LIMIT;
             $room->undo_pending = null;
             $room->undo_pending_at = null;
-            $room->status = 'playing';
+            $room->rps = ['round' => 1, 'picks' => [], 'winner' => null, 'chosen' => null];
+            $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::RPS_SECONDS);
+            $room->status = 'rps';
             $now = date('Y-m-d H:i:s');
             $room->black_seen_at = $now;
             $room->white_seen_at = $now;
@@ -362,9 +484,50 @@ final class GomokuRoomService
             ],
             'black' => $this->playerCard($room->black_user_id, $room->black_seen_at, $onlineIds),
             'white' => $this->playerCard($room->white_user_id, $room->white_seen_at, $onlineIds),
+            'rps' => $this->serializeRps($room, $myRole),
             'sharePath' => '/pages/gomoku/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
+    }
+
+    /**
+     * 猜拳定选边的对外结构（视角裁剪：出拳期只给本人出拳，对方只给「已出/未出」；
+     * 选边期起双方出拳公开；正式开局后保留 winner/picks/chosen 供前端结果定格）。
+     *
+     * @param string $myRole 'black'|'white'|'spectator'
+     * @return null|array<string, mixed>
+     */
+    private function serializeRps(GomokuRoom $room, string $myRole): ?array
+    {
+        $rps = $room->rps;
+        if (! is_array($rps)) {
+            return null;
+        }
+        $winner = $rps['winner'] ?? null;
+        $chosen = $rps['chosen'] ?? null;
+        $inRps = $room->status === 'rps';
+        if (! $inRps && $chosen === null) {
+            return null; // 旧局数据 / 未进入猜拳
+        }
+        $picks = $rps['picks'] ?? [];
+        $me = $myRole !== 'spectator' ? $myRole : null;
+        $out = [
+            'phase' => $inRps ? ($winner === null ? 'pick' : 'choose') : 'done',
+            'round' => (int) ($rps['round'] ?? 1),
+            'winner' => $winner,
+            'chosen' => $chosen,
+            'myPick' => $me !== null ? ($picks[$me] ?? null) : null,
+            'opponentPicked' => $me !== null ? isset($picks[$this->opponentOf($me)]) : (isset($picks['black']) && isset($picks['white'])),
+            // 双方出拳在选边期起公开（结算瞬间已同时亮出）；平局重出轮带出上轮结果
+            'picks' => $winner === null ? null : ['black' => $picks['black'] ?? null, 'white' => $picks['white'] ?? null],
+            'lastPicks' => isset($rps['lastPicks']) ? ['black' => $rps['lastPicks']['black'] ?? null, 'white' => $rps['lastPicks']['white'] ?? null] : null,
+            'myTurn' => false,
+            'ttl' => $room->turn_deadline_at !== null ? max(0, strtotime((string) $room->turn_deadline_at) - time()) : 0,
+        ];
+        if ($inRps && $me !== null) {
+            $out['myTurn'] = $winner === null ? ! isset($picks[$me]) : $me === $winner;
+        }
+        return $out;
     }
 
     /** 写操作提交后向房间内 WS 连接广播最新状态（每个连接按自己视角序列化）。 */
@@ -417,6 +580,109 @@ final class GomokuRoomService
     private function opponentOf(string $role): string
     {
         return $role === 'black' ? 'white' : 'black';
+    }
+
+    /** 校验「已入座且处于 rps 阶段」，返回座位色。 */
+    private function requireRpsRole(GomokuRoom $room, int $userId): string
+    {
+        $role = $this->seatedRole($room, $userId);
+        if ($role === null) {
+            throw new BizException(403, '你不是本局玩家');
+        }
+        if ($room->status !== 'rps') {
+            throw new BizException(422, '不在猜拳定选边阶段');
+        }
+        return $role;
+    }
+
+    /**
+     * 双方出拳到齐后结算：0石头/1布/2剪刀，a 胜 b ⟺ (a−b+3) mod 3 == 1；
+     * 平局重出（清空双方出拳、轮数+1），超上限随机定；胜者进入选边窗口。
+     * 调用方负责后续 version++/save；本方法负责写 rps 与 deadline。
+     */
+    private function resolveRps(GomokuRoom $room): void
+    {
+        $rps = $room->rps;
+        if (! isset($rps['picks']['black'], $rps['picks']['white'])) {
+            return; // 还有一方没出
+        }
+        $pb = (int) $rps['picks']['black'];
+        $pw = (int) $rps['picks']['white'];
+        $winner = null;
+        if ($pb !== $pw) {
+            $winner = ((($pb - $pw) + 3) % 3) === 1 ? 'black' : 'white';
+        } elseif ((int) $rps['round'] >= self::RPS_MAX_ROUNDS) {
+            $winner = random_int(0, 1) === 0 ? 'black' : 'white';
+        }
+        if ($winner === null) {
+            $rps['round'] = (int) $rps['round'] + 1;
+            $rps['lastPicks'] = $rps['picks']; // 平局亮拳：展示上轮「都是石头」再重出
+            $rps['picks'] = [];
+            $room->rps = $rps;
+            $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::RPS_SECONDS);
+            return;
+        }
+        $rps['winner'] = $winner;
+        $room->rps = $rps;
+        $room->turn_deadline_at = date('Y-m-d H:i:s', time() + self::RPS_CHOOSE_SECONDS);
+    }
+
+    /**
+     * 应用选边结果：胜者要的颜色若与当前临时座位不符则交换黑白列（连 seen_at 一起），
+     * 进入正式对局；rps 保留 winner/picks/chosen 供前端展示定格。
+     */
+    private function applyColorChoice(GomokuRoom $room, string $color): void
+    {
+        $rps = $room->rps;
+        $winner = (string) $rps['winner'];
+        if ($winner !== $color) {
+            [$room->black_user_id, $room->white_user_id] = [$room->white_user_id, $room->black_user_id];
+            [$room->black_seen_at, $room->white_seen_at] = [$room->white_seen_at, $room->black_seen_at];
+        }
+        $rps['chosen'] = $color;
+        $room->rps = $rps;
+        $room->status = 'playing';
+        $room->turn_deadline_at = null;
+    }
+
+    /**
+     * rps 窗口到期的懒推进（事务内、已持行锁）。返回是否有推进。
+     * $exceptUserId：若到期待办的正是请求者本人（还没出拳/还没选边），刷新 deadline 放行——
+     * 防「懒推进 → 回滚 → 再请求再推进」把活跃玩家软锁在 422 循环。
+     */
+    private function applyDueRpsIfNeeded(GomokuRoom $room, ?int $exceptUserId = null): bool
+    {
+        if ($room->status !== 'rps' || $room->turn_deadline_at === null) {
+            return false;
+        }
+        if (strtotime((string) $room->turn_deadline_at) > time()) {
+            return false;
+        }
+        $rps = $room->rps ?? [];
+        $phase = ($rps['winner'] ?? null) === null ? 'pick' : 'choose';
+        if ($exceptUserId !== null) {
+            $role = $this->seatedRole($room, $exceptUserId);
+            $mineToDo = $role !== null
+                && ($phase === 'pick' ? ! isset($rps['picks'][$role]) : $role === ($rps['winner'] ?? null));
+            if ($mineToDo) {
+                $room->turn_deadline_at = date('Y-m-d H:i:s', time() + ($phase === 'pick' ? self::RPS_SECONDS : self::RPS_CHOOSE_SECONDS));
+                return false;
+            }
+        }
+        if ($phase === 'pick') {
+            // 出拳超时：代未出者随机出，然后照常结算（可能进入选边或平局重出）
+            foreach (['black', 'white'] as $r) {
+                if (! isset($rps['picks'][$r])) {
+                    $rps['picks'][$r] = random_int(0, 2);
+                }
+            }
+            $room->rps = $rps;
+            $this->resolveRps($room);
+        } else {
+            // 选边超时：默认执黑
+            $this->applyColorChoice($room, 'black');
+        }
+        return true;
     }
 
     /** 更新入座玩家的 seen_at 心跳；不 bump version，避免心跳搅动同步计数。 */

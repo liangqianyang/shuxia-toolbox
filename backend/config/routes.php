@@ -75,6 +75,8 @@ Router::addGroup('/api', function (): void {
     // 联机五子棋：房间创建/加入、轮询同步（WS 降级通道）、落子、再来一局与离开。
     Router::post('/gomoku/room', [GomokuController::class, 'create']);
     Router::post('/gomoku/room/{code}/join', [GomokuController::class, 'join']);
+    Router::post('/gomoku/room/{code}/rps', [GomokuController::class, 'rps']);
+    Router::post('/gomoku/room/{code}/choose-color', [GomokuController::class, 'chooseColor']);
     Router::get('/gomoku/room/{code}', [GomokuController::class, 'state']);
     Router::post('/gomoku/room/{code}/move', [GomokuController::class, 'move']);
     Router::post('/gomoku/room/{code}/rematch', [GomokuController::class, 'rematch']);

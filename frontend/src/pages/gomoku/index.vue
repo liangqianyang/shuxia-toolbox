@@ -7,24 +7,6 @@
         <text class="gomoku__brand-title">五子棋</text>
         <text class="gomoku__brand-sub">创建房间，邀请好友联机对弈</text>
       </view>
-      <view class="gomoku__color-pick">
-        <view
-          class="gomoku__color-option"
-          :class="{ 'gomoku__color-option--active': createColor === 'black' }"
-          @tap="createColor = 'black'"
-        >
-          <view class="gomoku__stone gomoku__stone--black"></view>
-          <text>执黑先手</text>
-        </view>
-        <view
-          class="gomoku__color-option"
-          :class="{ 'gomoku__color-option--active': createColor === 'white' }"
-          @tap="createColor = 'white'"
-        >
-          <view class="gomoku__stone gomoku__stone--white"></view>
-          <text>执白后手</text>
-        </view>
-      </view>
       <button class="gomoku__primary" :disabled="busy" @tap="onCreate">创建房间</button>
       <view class="gomoku__divider"><text>或加入好友的房间</text></view>
       <view class="gomoku__join">
@@ -91,6 +73,75 @@
         >{{ undoButtonText }}</button>
       </view>
 
+      <!-- 猜拳定选边（开局仪式：出拳 → 胜者选边 → 定格） -->
+      <view v-if="state.status === 'rps' || rpsHold" class="gomoku__rps-mask">
+        <view class="gomoku__rps">
+          <!-- 出拳阶段 -->
+          <view v-if="state.status === 'rps' && state.rps && state.rps.phase === 'pick'" class="gomoku__rps-body">
+            <view class="gomoku__rps-title">✊ 猜拳定选边<text v-if="state.rps.round > 1"> · 平局重出第 {{ state.rps.round }} 轮</text></view>
+            <view v-if="state.rps.lastPicks" class="gomoku__rps-sub">上轮：{{ rpsLabel(state.rps.lastPicks.black) }} vs {{ rpsLabel(state.rps.lastPicks.white) }}，平局！</view>
+            <view class="gomoku__rps-sub">胜者可选执黑先手或执白后手 · {{ rpsCountdown }}s 后未出自动代出</view>
+            <view class="gomoku__rps-sides">
+              <view class="gomoku__rps-side">
+                <view class="gomoku__rps-stone gomoku__rps-stone--black"></view>
+                <text class="gomoku__rps-name">{{ state.black?.nickname ?? '等待' }}</text>
+                <text class="gomoku__rps-status">{{ state.myRole === 'black' ? (state.rps.myPick === null ? '出拳中…' : '已出 ✓') : (state.rps.opponentPicked ? '已出 ✓' : '出拳中…') }}</text>
+              </view>
+              <text class="gomoku__rps-vs">VS</text>
+              <view class="gomoku__rps-side">
+                <view class="gomoku__rps-stone gomoku__rps-stone--white"></view>
+                <text class="gomoku__rps-name">{{ state.white?.nickname ?? '等待' }}</text>
+                <text class="gomoku__rps-status">{{ state.myRole === 'white' ? (state.rps.myPick === null ? '出拳中…' : '已出 ✓') : (state.rps.opponentPicked ? '已出 ✓' : '出拳中…') }}</text>
+              </view>
+            </view>
+            <view v-if="state.rps.myTurn" class="gomoku__rps-btns">
+              <button v-for="(label, i) in RPS_LABELS" :key="i" class="gomoku__rps-btn" :disabled="busy" @tap="rps(RPS_KEYS[i])">{{ label }}</button>
+            </view>
+            <view v-else class="gomoku__rps-wait">已出拳，等对方…</view>
+          </view>
+          <!-- 选边阶段（双方出拳已公开） -->
+          <view v-else-if="state.status === 'rps' && state.rps && state.rps.phase === 'choose'" class="gomoku__rps-body">
+            <view class="gomoku__rps-title">🏆 {{ rpsWinnerName }} 赢得选边权</view>
+            <view class="gomoku__rps-reveal">
+              <view class="gomoku__rps-side" :class="{ 'gomoku__rps-side--win': state.rps.winner === 'black' }">
+                <view class="gomoku__rps-stone gomoku__rps-stone--black"></view>
+                <text class="gomoku__rps-name">{{ state.black?.nickname ?? '?' }}</text>
+                <text class="gomoku__rps-pick">{{ rpsLabel(state.rps.picks?.black) }}</text>
+              </view>
+              <text class="gomoku__rps-vs">VS</text>
+              <view class="gomoku__rps-side" :class="{ 'gomoku__rps-side--win': state.rps.winner === 'white' }">
+                <view class="gomoku__rps-stone gomoku__rps-stone--white"></view>
+                <text class="gomoku__rps-name">{{ state.white?.nickname ?? '?' }}</text>
+                <text class="gomoku__rps-pick">{{ rpsLabel(state.rps.picks?.white) }}</text>
+              </view>
+            </view>
+            <view v-if="state.rps.myTurn" class="gomoku__rps-btns">
+              <button class="gomoku__rps-btn gomoku__rps-btn--wide" :disabled="busy" @tap="chooseColor('black')">⚫ 执黑先手</button>
+              <button class="gomoku__rps-btn gomoku__rps-btn--wide" :disabled="busy" @tap="chooseColor('white')">⚪ 执白后手</button>
+            </view>
+            <view v-else class="gomoku__rps-wait">等{{ rpsWinnerName }}选边…（{{ rpsCountdown }}s 后默认执黑）</view>
+          </view>
+          <!-- 结果定格：开局后短暂展示 -->
+          <view v-else-if="rpsHold && rpsHoldData" class="gomoku__rps-body">
+            <view class="gomoku__rps-title">✅ {{ rpsHoldData.winnerName }} 选择{{ rpsHoldData.chosen === 'black' ? '执黑先手' : '执白后手' }}</view>
+            <view class="gomoku__rps-reveal">
+              <view class="gomoku__rps-side">
+                <view class="gomoku__rps-stone gomoku__rps-stone--black"></view>
+                <text class="gomoku__rps-name">{{ rpsHoldData.black }}</text>
+                <text class="gomoku__rps-pick">{{ rpsLabel(rpsHoldData.picks.black) }}</text>
+              </view>
+              <text class="gomoku__rps-vs">VS</text>
+              <view class="gomoku__rps-side">
+                <view class="gomoku__rps-stone gomoku__rps-stone--white"></view>
+                <text class="gomoku__rps-name">{{ rpsHoldData.white }}</text>
+                <text class="gomoku__rps-pick">{{ rpsLabel(rpsHoldData.picks.white) }}</text>
+              </view>
+            </view>
+            <view class="gomoku__rps-wait">对局开始！</view>
+          </view>
+        </view>
+      </view>
+
       <view v-if="state.status === 'finished'" class="gomoku__result">
         <text class="gomoku__result-text">{{ resultText }}</text>
         <button v-if="isSeated" class="gomoku__primary gomoku__result-btn" :disabled="busy" @tap="onRematch">再来一局</button>
@@ -129,7 +180,7 @@ const GAME_RULES: { heading?: string; lines: string[] }[] = [
     heading: '🎯 规则',
     lines: [
       '黑白双方轮流落子，任意方向（横、竖、斜）先连成五子者获胜',
-      '创建房间时可选执黑（先手）或执白（后手）',
+      '开局双方猜拳，胜者选执黑（先手）或执白（后手）；平局重出，超时自动代出',
     ],
   },
   {
@@ -160,6 +211,8 @@ const {
   undoCountdown,
   createAndEnter,
   joinByCode,
+  rps,
+  chooseColor,
   tapIntersection,
   requestRematch,
   askUndo,
@@ -171,8 +224,75 @@ const {
 
 const instance = getCurrentInstance()
 const joinCode = ref('')
-const createColor = ref<GomokuColor>('black')
 const busy = ref(false)
+
+// ---------- 猜拳定选边 ----------
+/** 下标对齐服务端编码：0=石头 1=布 2=剪刀（r/p/s 键序同此）。 */
+const RPS_LABELS = ['石头', '布', '剪刀']
+const RPS_KEYS = ['r', 'p', 's']
+const rpsCountdown = ref(0)
+let rpsCountdownTimer: ReturnType<typeof setInterval> | null = null
+
+function rpsLabel(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '…'
+  return RPS_LABELS[value] ?? String(value)
+}
+
+const rpsWinnerName = computed(() => {
+  const rps = state.value?.rps
+  if (!rps?.winner) return '?'
+  return (rps.winner === 'black' ? state.value?.black : state.value?.white)?.nickname ?? '?'
+})
+
+/** 结果定格：status 从 rps → playing 时用最后一份 rps 数据停留 2s。 */
+const rpsHold = ref(false)
+const rpsHoldData = ref<{ winnerName: string; chosen: string; picks: { black: number | null; white: number | null }; black: string; white: string } | null>(null)
+let rpsHoldTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => [state.value?.status, state.value?.rps?.phase] as const,
+  ([status, phase]) => {
+    if (status === 'rps' && phase === 'pick') {
+      const rps = state.value?.rps
+      if (rps?.myTurn) {
+        if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
+        rpsCountdown.value = rps.ttl
+        rpsCountdownTimer = setInterval(() => {
+          if (rpsCountdown.value > 0) rpsCountdown.value--
+        }, 1000)
+      }
+    }
+    if (status === 'rps' && phase === 'choose') {
+      const rps = state.value?.rps
+      if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
+      rpsCountdown.value = rps?.ttl ?? 0
+      rpsCountdownTimer = setInterval(() => {
+        if (rpsCountdown.value > 0) rpsCountdown.value--
+      }, 1000)
+    }
+    if (status === 'playing') {
+      if (rpsCountdownTimer) { clearInterval(rpsCountdownTimer); rpsCountdownTimer = null }
+      const rps = state.value?.rps
+      if (rps && rps.phase === 'done' && rps.chosen && !rpsHold.value) {
+        const st = state.value
+        const winnerRole = rps.winner
+        rpsHoldData.value = {
+          winnerName: (winnerRole === 'black' ? st?.black : st?.white)?.nickname ?? '?',
+          chosen: rps.chosen,
+          picks: rps.picks ?? { black: null, white: null },
+          black: st?.black?.nickname ?? '?',
+          white: st?.white?.nickname ?? '?',
+        }
+        rpsHold.value = true
+        if (rpsHoldTimer) clearTimeout(rpsHoldTimer)
+        rpsHoldTimer = setTimeout(() => {
+          rpsHold.value = false
+          rpsHoldData.value = null
+        }, 2000)
+      }
+    }
+  },
+)
 /** 两次点击确认落子：第一次点出幽灵子预览，第二次点同一位置才提交 */
 const pendingMove = ref<{ x: number; y: number } | null>(null)
 let previewHintShown = false
@@ -406,7 +526,7 @@ async function guard(action: () => Promise<void>) {
 
 async function onCreate() {
   await guard(async () => {
-    await createAndEnter(createColor.value)
+    await createAndEnter()
     await initBoard()
   })
 }
@@ -838,4 +958,40 @@ onShareAppMessage(() => ({
     }
   }
 }
+
+/* ── 猜拳定选边 ── */
+.gomoku__rps-mask {
+  position: fixed; inset: 0; background: rgba(33, 42, 38, 0.55); z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+}
+.gomoku__rps {
+  width: 82%; max-width: 620rpx; background: $color-card; border-radius: 28rpx;
+  border: 4rpx solid #493e37; padding: 32rpx; display: flex; flex-direction: column;
+  align-items: center; gap: 20rpx;
+}
+.gomoku__rps-body { display: flex; flex-direction: column; align-items: center; gap: 18rpx; width: 100%; }
+.gomoku__rps-title { font-size: 32rpx; font-weight: 800; color: $color-text; }
+.gomoku__rps-sub { font-size: 22rpx; color: $color-text-secondary; }
+.gomoku__rps-sides, .gomoku__rps-reveal { display: flex; align-items: center; gap: 28rpx; }
+.gomoku__rps-side { display: flex; flex-direction: column; align-items: center; gap: 8rpx; min-width: 160rpx; padding: 14rpx 10rpx; border-radius: 16rpx; border: 3rpx solid transparent; }
+.gomoku__rps-side--win { border-color: #f4b942; background: rgba(244, 185, 66, 0.15); animation: gomoku-rps-pulse 1s ease-in-out infinite; }
+@keyframes gomoku-rps-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+.gomoku__rps-stone { width: 84rpx; height: 84rpx; border-radius: 50%; }
+.gomoku__rps-stone--black { background: #2b2b2b; border: 4rpx solid #0f0f0f; }
+.gomoku__rps-stone--white { background: #fafafa; border: 4rpx solid #d9d2c7; }
+.gomoku__rps-name { font-size: 24rpx; color: $color-text; max-width: 180rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gomoku__rps-status { font-size: 20rpx; color: $color-text-secondary; }
+.gomoku__rps-pick { font-size: 26rpx; font-weight: 800; color: $color-text; }
+.gomoku__rps-vs { font-size: 34rpx; font-weight: 900; color: #e85d4a; }
+.gomoku__rps-btns { display: flex; gap: 14rpx; flex-wrap: wrap; justify-content: center; }
+.gomoku__rps-btn {
+  min-width: 140rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; font-weight: 700;
+  background: #e85d4a; color: #fff; border-radius: 16rpx; border: none; padding: 0 24rpx;
+}
+.gomoku__rps-btn--wide { min-width: 240rpx; background: #21483d; }
+.gomoku__rps-btn[disabled] { opacity: 0.45; }
+.gomoku__rps-wait { font-size: 24rpx; color: $color-text-secondary; }
 </style>

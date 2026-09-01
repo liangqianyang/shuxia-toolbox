@@ -22,17 +22,28 @@ final class GomokuController extends AbstractController
     #[RateLimit(create: 4, capacity: 10, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function create(RequestInterface $request): array
     {
-        $color = (string) $request->input('color', 'black');
-        if (! in_array($color, ['black', 'white'], true)) {
-            throw new BizException(422, '执子颜色不正确');
-        }
-        return $this->ok($this->rooms->create($this->requireUserId($request), $color));
+        // 执子颜色改由开局猜拳定选边（胜者选执黑/执白），创建不再传色
+        return $this->ok($this->rooms->create($this->requireUserId($request)));
     }
 
     #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function join(string $code, RequestInterface $request): array
     {
         return $this->ok($this->rooms->join($code, $this->requireUserId($request)));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function rps(string $code, RequestInterface $request): array
+    {
+        $pick = (string) $request->input('pick', '');
+        return $this->ok($this->rooms->rps($code, $this->requireUserId($request), $pick));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function chooseColor(string $code, RequestInterface $request): array
+    {
+        $color = (string) $request->input('color', '');
+        return $this->ok($this->rooms->chooseColor($code, $this->requireUserId($request), $color));
     }
 
     #[RateLimit(create: 2, capacity: 24, key: [ApiKeyMiddleware::class, 'bucketKey'])]
