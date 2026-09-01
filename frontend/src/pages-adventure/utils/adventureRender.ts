@@ -5,7 +5,7 @@
  * 山脚起点（pos=0）在棋盘底边下方，由页面层留白容纳，画布本身保持正方形。
  */
 import { canvasToFile, createDrawingCanvas } from '../../utils/canvasAdapter'
-import { CAMPS, CELLS, SEGMENT_COLORS, SEGMENTS, cellToPoint, isCamp, type CellType } from './adventureBoard'
+import { CELLS, cellToPoint, type CellType } from './adventureBoard'
 
 /** 品牌底色（奶油白/墨绿/枫叶红/金黄，同枫趣牌局色板）。 */
 const BOARD_BG = '#FFF8ED'
@@ -13,22 +13,29 @@ const BOARD_INK = '#21483D'
 const MAPLE = '#E85D4A'
 const GOLD = '#F4B942'
 
-/** 机关格底色（在段位浅底上再强调一层）。 */
+/**
+ * 机关格语义三族（降低视觉噪音的关键：11 种底色 → 3 种语义色）。
+ * 前进=绿族 / 后退·危险=暖红族 / 功能·选择=金黄族；营地与登顶格单独强调。
+ */
+const FAMILY_FORWARD = '#DCEEDD' // 云梯/缆车/枫叶/温泉（前进与收益）
+const FAMILY_DANGER = '#F6DDD3' // 滑坡/落石/雪崩/埋伏/擂台（后退与冲突）
+const FAMILY_CHOICE = '#F8ECC8' // 商店/补给/山神/命运/岔路（功能与选择）
+
 const CELL_TINT: Partial<Record<CellType, string>> = {
-  leaf: '#F7D9C4',
-  spring: '#FBE3C9',
-  ladder: '#D8ECCE',
-  cable: '#D5E4F2',
-  slide: '#F2D3CB',
-  rock: '#E9DCCB',
-  shop: '#F6E2AE',
-  supply: '#DDEAD8',
-  ambush: '#EBD9E2',
-  fate: '#E0DCF2',
-  shrine: '#F9E7C9',
-  arena: '#F6CFCA',
-  avalanche: '#DDE8F0',
-  fork: '#E8E3D2',
+  leaf: FAMILY_FORWARD,
+  spring: FAMILY_FORWARD,
+  ladder: FAMILY_FORWARD,
+  cable: FAMILY_FORWARD,
+  slide: FAMILY_DANGER,
+  rock: FAMILY_DANGER,
+  avalanche: FAMILY_DANGER,
+  ambush: FAMILY_DANGER,
+  arena: FAMILY_DANGER,
+  shop: FAMILY_CHOICE,
+  supply: FAMILY_CHOICE,
+  shrine: FAMILY_CHOICE,
+  fate: FAMILY_CHOICE,
+  fork: FAMILY_CHOICE,
 }
 
 const boardImageCache = new Map<string, Promise<string>>()
@@ -64,13 +71,18 @@ async function renderBoard(px: number, goal: number): Promise<string> {
   roundRect(ctx, ctx.lineWidth / 2, ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth, s * 0.32)
   ctx.stroke()
 
-  // ── 五段色带（每段两行，视觉上五条横带） ──
-  for (let i = 0; i < SEGMENTS.length; i++) {
-    const rowTop = (9 - (i * 2 + 1)) * s // 段的上行所在行（自底数）
-    ctx.fillStyle = SEGMENT_COLORS[i].band
-    roundRect(ctx, s * 0.16, rowTop + s * 0.16, px - s * 0.32, s * 2 - s * 0.32, s * 0.22)
-    ctx.fill()
+  // ── 山道路径本体：蛇形连线穿过 1..goal 格心（一眼看懂路线的关键） ──
+  ctx.strokeStyle = 'rgba(33, 72, 61, 0.22)'
+  ctx.lineWidth = Math.max(2, s * 0.07)
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  for (let n = 1; n <= goal; n++) {
+    const [x, y] = pt(n)
+    if (n === 1) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
   }
+  ctx.stroke()
 
   // ── 100 格 ──
   for (let n = 1; n <= 100; n++) {
@@ -80,7 +92,6 @@ async function renderBoard(px: number, goal: number): Promise<string> {
     const margin = s * 0.07
     const def = CELLS[n]
     const type = def?.type ?? 'plain'
-    const seg = SEGMENTS.findIndex((g) => n >= g.from && n <= g.to)
 
     // 云雾封锁区：短局时登顶格之后的区域不可达
     if (n > goal) {
@@ -96,90 +107,77 @@ async function renderBoard(px: number, goal: number): Promise<string> {
     }
 
     if (type === 'camp') {
-      // 营地：实底 + 帐篷 + 双层描边
-      ctx.fillStyle = '#DCEBD2'
-      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.2)
+      // 营地：存档点，最醒目的一档（帐篷 + 数字）
+      ctx.fillStyle = '#CFE3C2'
+      roundRect(ctx, x + margin * 0.5, y + margin * 0.5, s - margin, s - margin, s * 0.22)
       ctx.fill()
       ctx.strokeStyle = '#4E7A3A'
-      ctx.lineWidth = Math.max(1.5, s * 0.05)
+      ctx.lineWidth = Math.max(2, s * 0.06)
       ctx.stroke()
-      drawTent(ctx, cx, cy + s * 0.1, s * 0.3, '#4E7A3A')
+      drawTent(ctx, cx, cy + s * 0.12, s * 0.32, '#4E7A3A')
+      ctx.fillStyle = '#2E5B24'
+      ctx.font = `bold ${Math.round(s * 0.24)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(String(n), cx, y + s - margin)
     } else if (n === goal) {
       // 登顶格（枫顶/短局终点）：三角峰 + 旗帜
-      ctx.fillStyle = '#DCE7F3'
-      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.2)
+      ctx.fillStyle = '#CFE0F0'
+      roundRect(ctx, x + margin * 0.5, y + margin * 0.5, s - margin, s - margin, s * 0.22)
       ctx.fill()
       ctx.strokeStyle = '#3A5A7E'
-      ctx.lineWidth = Math.max(1.5, s * 0.05)
+      ctx.lineWidth = Math.max(2, s * 0.06)
       ctx.stroke()
-      drawPeak(ctx, cx, cy + s * 0.06, s * 0.34)
-    } else {
-      // 普通/机关格：段位浅底 + 机关色 + 图标
-      ctx.fillStyle = CELL_TINT[type] ?? SEGMENT_COLORS[seg].cell
-      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.16)
+      drawPeak(ctx, cx, cy + s * 0.06, s * 0.36)
+      ctx.fillStyle = '#3A5A7E'
+      ctx.font = `bold ${Math.round(s * 0.24)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(String(n), cx, y + s - margin)
+    } else if (type !== 'plain') {
+      // 机关格：语义族底色 + 图标（无描边——路线连线已提供结构感）
+      ctx.fillStyle = CELL_TINT[type] ?? FAMILY_CHOICE
+      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.18)
       ctx.fill()
-      if (type !== 'plain') {
-        ctx.strokeStyle = SEGMENT_COLORS[seg].text
-        ctx.lineWidth = Math.max(1, s * 0.03)
-        roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.16)
-        ctx.stroke()
+      drawGlyph(ctx, type, cx, cy, s * 0.92, '#3C4A44', def)
+      // 岔路格标目标格号，帮助决策
+      if (type === 'fork' && def?.options) {
+        const jump = def.options.find((o) => o.to !== null)
+        if (jump) {
+          ctx.fillStyle = 'rgba(33,72,61,0.75)'
+          ctx.font = `bold ${Math.round(s * 0.2)}px sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'bottom'
+          ctx.fillText(`→${jump.to}`, cx, y + s - margin * 0.8)
+        }
       }
-      if (def) drawGlyph(ctx, type, cx, cy, s, SEGMENT_COLORS[seg].text, def)
     }
+    // 普通格：只铺路线底（无格号——每 10 一个里程碑数字，见下）
 
-    // 格号（右下角小字，每 10 加粗）
-    ctx.fillStyle = 'rgba(33,72,61,0.55)'
-    ctx.font = `${n % 10 === 0 ? 'bold ' : ''}${Math.round(s * 0.2)}px sans-serif`
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'bottom'
-    ctx.fillText(String(n), x + s - margin * 1.6, y + s - margin * 1.2)
+    // 里程碑数字：仅整十格（10/20/…/100），粗体居底
+    if (n % 10 === 0 && type !== 'camp' && n !== goal) {
+      ctx.fillStyle = 'rgba(33,72,61,0.5)'
+      ctx.font = `bold ${Math.round(s * 0.26)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(String(n), cx, y + s - margin * 0.6)
+    }
   }
 
-  // ── 蛇形方向箭头（每行行尾一个 chevron，提示走向） ──
-  ctx.fillStyle = 'rgba(33,72,61,0.28)'
-  for (let row = 0; row < 10; row++) {
-    const toRight = row % 2 === 0
-    const col = toRight ? 9 : 0
-    const cx = ((col + 0.5) / 10) * px
-    const cy = (1 - (row + 0.28) / 10) * px
-    const r = s * 0.07
-    ctx.beginPath()
-    if (toRight) {
-      ctx.moveTo(cx - r, cy - r)
-      ctx.lineTo(cx + r, cy)
-      ctx.lineTo(cx - r, cy + r)
-    } else {
-      ctx.moveTo(cx + r, cy - r)
-      ctx.lineTo(cx - r, cy)
-      ctx.lineTo(cx + r, cy + r)
-    }
-    ctx.closePath()
-    ctx.fill()
-  }
-
-  // ── 缆车虚线（长跳转的可视化；伸入云雾封锁区的缆车线不画） ──
-  ctx.strokeStyle = 'rgba(74,127,181,0.55)'
-  ctx.lineWidth = Math.max(1.5, s * 0.045)
-  ctx.setLineDash([s * 0.12, s * 0.1])
+  // ── 缆车线：极淡弧线提示长跳转（不再画车厢，只留一条线索） ──
+  ctx.strokeStyle = 'rgba(74,127,181,0.25)'
+  ctx.lineWidth = Math.max(1.5, s * 0.04)
+  ctx.setLineDash([s * 0.1, s * 0.14])
   for (const from of [14, 38, 62]) {
     const to = CELLS[from]?.to
     if (!to || to > goal) continue
     const [x1, y1] = pt(from)
     const [x2, y2] = pt(to)
-    const lift = Math.min(y1, y2) - s * 0.55 // 弧顶抬到两格上方
+    const lift = Math.min(y1, y2) - s * 0.45
     ctx.beginPath()
-    ctx.moveTo(x1, y1 - s * 0.2)
-    ctx.quadraticCurveTo((x1 + x2) / 2, lift, x2, y2 - s * 0.2)
+    ctx.moveTo(x1, y1 - s * 0.18)
+    ctx.quadraticCurveTo((x1 + x2) / 2, lift, x2, y2 - s * 0.18)
     ctx.stroke()
-    // 缆车小厢
-    ctx.setLineDash([])
-    ctx.fillStyle = 'rgba(74,127,181,0.75)'
-    const midX = (x1 + x2) / 2
-    const t = 0.5
-    const bezY = (1 - t) * (1 - t) * (y1 - s * 0.2) + 2 * (1 - t) * t * lift + t * t * (y2 - s * 0.2)
-    roundRect(ctx, midX - s * 0.08, bezY - s * 0.02, s * 0.16, s * 0.13, s * 0.03)
-    ctx.fill()
-    ctx.setLineDash([s * 0.12, s * 0.1])
   }
   ctx.setLineDash([])
 
@@ -462,5 +460,3 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
-/** 营地集合（页面画“存档点”角标用）。 */
-export { CAMPS, isCamp }
