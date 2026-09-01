@@ -6,7 +6,7 @@
  */
 import { computed, ref } from 'vue'
 import { requestUserApi } from '@/services/toolbox'
-import { DECK_THEMES, GRAIL_MAX_CASTS, throwGrail } from '@/utils/fortune/theme'
+import { DECK_THEMES, GRAIL_MAX_CASTS, defaultQuestion, throwGrail } from '@/utils/fortune/theme'
 import type {
   DeckKey,
   FortuneCategory,
@@ -26,6 +26,13 @@ export function useFortune() {
   const deck = ref<DeckKey>('guanyin')
   const category = ref<FortuneCategory>('other')
   const question = ref('')
+
+  /** 实际问事：用户没填时用签种的默认问题（占位文案去掉「例如：」）。 */
+  const effectiveQuestion = computed(() => {
+    const typed = question.value.trim()
+    if (typed) return typed
+    return defaultQuestion(DECK_THEMES[deck.value])
+  })
 
   const quota = ref<FortuneQuota | null>(null)
   const draw = ref<FortuneDrawResult | null>(null)
@@ -77,7 +84,7 @@ export function useFortune() {
       const result = await requestUserApi<FortuneDrawResult>('/api/fortune/draw', 'POST', {
         deck: deck.value,
         category: category.value,
-        question: question.value.trim() || undefined,
+        question: effectiveQuestion.value,
       })
       draw.value = result
       quota.value = result.quota
@@ -171,6 +178,7 @@ export function useFortune() {
     deck,
     category,
     question,
+    effectiveQuestion,
     quota,
     draw,
     reading,

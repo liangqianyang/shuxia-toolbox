@@ -153,7 +153,7 @@
 
       <!-- 答案之书答案 -->
       <view v-else class="fortune__stick-card fortune__stick-card--book" :style="{ background: theme.paper, borderColor: theme.primaryDeep }">
-        <text v-if="question" class="fortune__book-question">「 {{ question }} 」</text>
+        <text class="fortune__book-question">「 {{ effectiveQuestion }} 」</text>
         <text class="fortune__book-answer" :style="{ color: theme.primaryDeep }">{{ draw.stick.answer }}</text>
         <text class="fortune__book-page">—— 第 {{ draw.stick.no }} 页 ——</text>
       </view>
@@ -254,6 +254,7 @@ const {
   deck,
   category,
   question,
+  effectiveQuestion,
   quota,
   draw,
   reading,
@@ -443,7 +444,7 @@ async function renderCardToFile(): Promise<string> {
     deck: theme.value,
     stick: draw.value.stick,
     categoryName: categoryName.value,
-    question: question.value.trim() || null,
+    question: effectiveQuestion.value,
     luckyHint: reading.value?.luckyHint,
     date: new Date().toISOString().slice(0, 10),
   }, 1080, 1440)

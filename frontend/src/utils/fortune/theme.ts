@@ -39,8 +39,9 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     shakeHint: '摇一摇手机，或长按签筒',
     askPlaceholder: '例如：最近的事情会有好结果吗？',
     defaultCategory: 'luck',
-    primary: '#3E7C59',
-    primaryDeep: '#24503A',
+    // 紫竹林观音：签筒/主色取紫竹色，与关帝红、月老粉、答案之书藏青区分
+    primary: '#6B5B95',
+    primaryDeep: '#4A3F73',
     paper: '#F5F1E4',
     accent: '#B03A2E',
     ink: '#33312B',
@@ -89,6 +90,11 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     accent: '#C9A227',
     ink: '#2E2C26',
   },
+}
+
+/** 占位文案去掉「例如：」前缀，作为用户未填问题时的默认问事。 */
+export function defaultQuestion(theme: DeckTheme): string {
+  return theme.askPlaceholder.replace(/^例如：/, '')
 }
 
 export const DECK_LIST: DeckTheme[] = [

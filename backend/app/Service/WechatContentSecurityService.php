@@ -18,7 +18,7 @@ use Throwable;
  */
 final class WechatContentSecurityService
 {
-    private const string TOKEN_URL = 'https://api.weixin.qq.com/cgi-bin/token';
+    private const string TOKEN_URL = 'https://api.weixin.qq.com/cgi-bin/stable_token';
     private const string MSG_CHECK_URL = 'https://api.weixin.qq.com/wxa/msg_sec_check';
     private const string TOKEN_CACHE_KEY = 'shuxia:wechat:mini_program:access_token';
 
@@ -51,12 +51,36 @@ final class WechatContentSecurityService
                 . ' -d ' . escapeshellarg((string) json_encode($json, JSON_UNESCAPED_UNICODE));
         }
         $cmd .= ' ' . escapeshellarg($fullUrl);
-        $result = Coroutine::exec($cmd);
-        if (! is_array($result) || (int) ($result['code'] ?? -1) !== 0) {
-            $code = is_array($result) ? (int) ($result['code'] ?? -1) : -1;
-            throw new RuntimeException("内容安全接口 HTTP 失败（curl exit={$code}）");
+        $respBody = null;
+        $exitCode = null;
+        try {
+            $result = Coroutine::exec($cmd);
+            if (is_array($result)) {
+                $exitCode = (int) ($result['code'] ?? -1);
+                if ($exitCode === 0) {
+                    $respBody = (string) ($result['output'] ?? '');
+                }
+            }
+        } catch (Throwable) {
+            // 协程 exec 异常（如环境禁用）：走下方阻塞回退
         }
-        $respBody = (string) ($result['output'] ?? '');
+        if ($respBody === null) {
+            // 回退：阻塞式原生 HTTP（协程 curl 子进程不可用时不至于整体失败；
+            // 频率低（token 缓存 2h / 每条文字消息一次），阻塞可接受）
+            $context = stream_context_create([
+                'http' => [
+                    'method' => strtoupper($method),
+                    'timeout' => self::HTTP_TIMEOUT,
+                    'ignore_errors' => true,
+                    'header' => $json !== null ? "Content-Type: application/json\r\n" : '',
+                    'content' => $json !== null ? (string) json_encode($json, JSON_UNESCAPED_UNICODE) : '',
+                ],
+            ]);
+            $respBody = @file_get_contents($fullUrl, false, $context);
+            if ($respBody === false) {
+                throw new RuntimeException("内容安全接口 HTTP 失败（curl exit=" . ($exitCode ?? 'n/a') . '，回退亦失败）');
+            }
+        }
         try {
             $decoded = json_decode($respBody, true, 512, JSON_THROW_ON_ERROR);
         } catch (Throwable $e) {
@@ -82,19 +106,15 @@ final class WechatContentSecurityService
             return true;
         }
 
-        $token = $this->accessToken();
-        try {
-            $body = $this->coRequest('POST', self::MSG_CHECK_URL, ['access_token' => $token], [
-                'content' => mb_substr($content, 0, 2500),
-                'version' => 2,
-                'scene' => $scene,
-                'openid' => $openid,
-            ]);
-        } catch (RuntimeException $e) {
-            throw new RuntimeException('内容安全检测失败：' . $e->getMessage(), 0, $e);
-        }
+        $body = $this->msgSecCheck($this->accessToken(), $content, $openid, $scene);
 
         $errcode = (int) ($body['errcode'] ?? -1);
+        if (in_array($errcode, [40001, 40014, 41001, 42001], true)) {
+            // 缓存的 token 已失效（如另一环境用旧端点刷新顶掉了）：清缓存强刷一次再试
+            $this->redisFactory->get('default')->del(self::TOKEN_CACHE_KEY);
+            $body = $this->msgSecCheck($this->accessToken(true), $content, $openid, $scene);
+            $errcode = (int) ($body['errcode'] ?? -1);
+        }
         if ($errcode !== 0) {
             $errmsg = is_string($body['errmsg'] ?? null) ? $body['errmsg'] : 'unknown';
             throw new RuntimeException('内容安全接口返回错误：' . $errmsg);
@@ -104,15 +124,32 @@ final class WechatContentSecurityService
         return (int) ($result['suggest'] ?? 0) === 0;
     }
 
+    /** 调 msg_sec_check；网络层异常统一包装。 */
+    private function msgSecCheck(string $token, string $content, string $openid, int $scene): array
+    {
+        try {
+            return $this->coRequest('POST', self::MSG_CHECK_URL, ['access_token' => $token], [
+                'content' => mb_substr($content, 0, 2500),
+                'version' => 2,
+                'scene' => $scene,
+                'openid' => $openid,
+            ]);
+        } catch (RuntimeException $e) {
+            throw new RuntimeException('内容安全检测失败：' . $e->getMessage(), 0, $e);
+        }
+    }
+
     /**
      * 获取小程序 access_token；统一使用 Redis 缓存，避免频繁请求微信接口。
      */
-    private function accessToken(): string
+    private function accessToken(bool $forceRefresh = false): string
     {
         $redis = $this->redisFactory->get('default');
-        $cached = $redis->get(self::TOKEN_CACHE_KEY);
-        if (is_string($cached) && $cached !== '') {
-            return (string) $cached;
+        if (! $forceRefresh) {
+            $cached = $redis->get(self::TOKEN_CACHE_KEY);
+            if (is_string($cached) && $cached !== '') {
+                return (string) $cached;
+            }
         }
 
         $appid = (string) $this->config->get('wechat.mini_program.appid', '');
@@ -122,7 +159,9 @@ final class WechatContentSecurityService
         }
 
         try {
-            $body = $this->coRequest('GET', self::TOKEN_URL, [
+            // stable_token：新旧 token 并存不互相顶替——开发/生产共用同一 appid 时，
+            // 旧 /cgi-bin/token 端点一方刷新会让另一方的缓存 token 立即失效（40001）。
+            $body = $this->coRequest('POST', self::TOKEN_URL, null, [
                 'grant_type' => 'client_credential',
                 'appid' => $appid,
                 'secret' => $secret,
