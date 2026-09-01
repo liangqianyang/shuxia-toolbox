@@ -71,18 +71,7 @@ async function renderBoard(px: number, goal: number): Promise<string> {
   roundRect(ctx, ctx.lineWidth / 2, ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth, s * 0.32)
   ctx.stroke()
 
-  // ── 山道路径本体：蛇形连线穿过 1..goal 格心（一眼看懂路线的关键） ──
-  ctx.strokeStyle = 'rgba(33, 72, 61, 0.22)'
-  ctx.lineWidth = Math.max(2, s * 0.07)
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
-  ctx.beginPath()
-  for (let n = 1; n <= goal; n++) {
-    const [x, y] = pt(n)
-    if (n === 1) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
-  ctx.stroke()
+
 
   // ── 100 格 ──
   for (let n = 1; n <= 100; n++) {
@@ -116,7 +105,7 @@ async function renderBoard(px: number, goal: number): Promise<string> {
       ctx.stroke()
       drawTent(ctx, cx, cy + s * 0.12, s * 0.32, '#4E7A3A')
       ctx.fillStyle = '#2E5B24'
-      ctx.font = `bold ${Math.round(s * 0.24)}px sans-serif`
+      ctx.font = `bold ${Math.round(s * 0.22)}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'bottom'
       ctx.fillText(String(n), cx, y + s - margin)
@@ -130,37 +119,35 @@ async function renderBoard(px: number, goal: number): Promise<string> {
       ctx.stroke()
       drawPeak(ctx, cx, cy + s * 0.06, s * 0.36)
       ctx.fillStyle = '#3A5A7E'
-      ctx.font = `bold ${Math.round(s * 0.24)}px sans-serif`
+      ctx.font = `bold ${Math.round(s * 0.22)}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'bottom'
       ctx.fillText(String(n), cx, y + s - margin)
-    } else if (type !== 'plain') {
-      // 机关格：语义族底色 + 图标（无描边——路线连线已提供结构感）
-      ctx.fillStyle = CELL_TINT[type] ?? FAMILY_CHOICE
-      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.18)
+    } else {
+      // 普通/机关格：每格一个瓦片（普通=纯白、机关=语义三族色）+ 图标
+      ctx.fillStyle = type === 'plain' ? '#FFFFFF' : (CELL_TINT[type] ?? FAMILY_CHOICE)
+      roundRect(ctx, x + margin, y + margin, s - margin * 2, s - margin * 2, s * 0.14)
       ctx.fill()
-      drawGlyph(ctx, type, cx, cy, s * 0.92, '#3C4A44', def)
+      if (type !== 'plain') {
+        drawGlyph(ctx, type, cx, cy - s * 0.04, s * 0.86, '#3C4A44', def)
+      }
       // 岔路格标目标格号，帮助决策
       if (type === 'fork' && def?.options) {
         const jump = def.options.find((o) => o.to !== null)
         if (jump) {
           ctx.fillStyle = 'rgba(33,72,61,0.75)'
-          ctx.font = `bold ${Math.round(s * 0.2)}px sans-serif`
+          ctx.font = `bold ${Math.round(s * 0.19)}px sans-serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'bottom'
-          ctx.fillText(`→${jump.to}`, cx, y + s - margin * 0.8)
+          ctx.fillText(`→${jump.to}`, cx, y + s - margin * 0.7)
         }
       }
-    }
-    // 普通格：只铺路线底（无格号——每 10 一个里程碑数字，见下）
-
-    // 里程碑数字：仅整十格（10/20/…/100），粗体居底
-    if (n % 10 === 0 && type !== 'camp' && n !== goal) {
-      ctx.fillStyle = 'rgba(33,72,61,0.5)'
-      ctx.font = `bold ${Math.round(s * 0.26)}px sans-serif`
-      ctx.textAlign = 'center'
+      // 格号：每格都有（右下角浅灰小字，整十加粗）
+      ctx.fillStyle = n % 10 === 0 ? 'rgba(33,72,61,0.75)' : 'rgba(33,72,61,0.42)'
+      ctx.font = `${n % 10 === 0 ? 'bold ' : ''}${Math.round(s * 0.21)}px sans-serif`
+      ctx.textAlign = 'right'
       ctx.textBaseline = 'bottom'
-      ctx.fillText(String(n), cx, y + s - margin * 0.6)
+      ctx.fillText(String(n), x + s - margin * 1.5, y + s - margin * 1.1)
     }
   }
 

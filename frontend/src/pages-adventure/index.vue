@@ -142,7 +142,7 @@
         </view>
 
         <!-- 棋盘 -->
-        <view class="board-wrap" :style="{ height: boardWrapHeight }">
+        <view class="board-wrap" :style="{ height: boardWrapHeight, width: boardCssSize ? boardCssSize + 'px' : 'auto' }">
           <image
             v-if="boardSrc"
             class="board-img"
@@ -284,9 +284,8 @@
                 <view v-else class="open-wait muted">本轮轮空</view>
               </view>
             </view>
-            <view class="duel-countdown">{{ turnCountdown }}s 后未掷自动代掷</view>
             <button v-if="current.opening.mine" class="btn btn-primary btn-lg" :loading="acting" @tap="onRoll">{{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰定先手' }}</button>
-            <view v-else class="duel-hint muted">等其他人掷骰…</view>
+            <view v-else class="duel-hint muted">已出，等其他人掷骰…</view>
           </view>
         </view>
 
@@ -1425,7 +1424,7 @@ $muted: #9aa79e;
 .weather-arrow { font-size: 20rpx; color: $muted; white-space: nowrap; }
 
 // ── 棋盘 ──
-.board-wrap { position: relative; margin: 8rpx 12rpx; }
+.board-wrap { position: relative; margin: 8rpx auto; }
 .board-img { width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 20rpx; }
 .board-fallback { width: 100%; aspect-ratio: 1 / 1; border-radius: 20rpx; background: #f2ead9; }
 .token {
