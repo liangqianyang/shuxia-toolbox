@@ -56,10 +56,10 @@ async function renderBoard(px: number): Promise<string> {
   const s = px / GRID // 一格的物理像素
   const cell = (p: Point): [number, number] => [p.x * px, p.y * px]
 
-  /** 方格（格中心 p，留缝 inset、圆角 r）。 */
-  const drawCellSquare = (p: Point, fill: string, stroke: string | null) => {
+  /** 方格（格中心 p；inset 默认细缝，实色格稍大内缩以抵消实心色块的"更大"光学错觉）。 */
+  const drawCellSquare = (p: Point, fill: string, stroke: string | null, solid = false) => {
     const [cx, cy] = cell(p)
-    const inset = s * 0.03
+    const inset = s * (solid ? 0.07 : 0.03)
     roundRect(ctx, cx - s / 2 + inset, cy - s / 2 + inset, s - inset * 2, s - inset * 2, s * 0.1)
     ctx.fillStyle = fill
     ctx.fill()
@@ -89,7 +89,7 @@ async function renderBoard(px: number): Promise<string> {
       const [cx, cy] = cell(hangarSlot(color, i))
       ctx.fillStyle = '#FFFFFF'
       ctx.beginPath()
-      ctx.arc(cx, cy, s * 0.52, 0, Math.PI * 2)
+      ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2)
       ctx.fill()
     }
   })
@@ -100,13 +100,13 @@ async function renderBoard(px: number): Promise<string> {
     const color = i % 4
     if (i === starIndex(color)) {
       // 起飞格 = 星标保护格
-      drawCellSquare(p, LUDO_COLORS[color].hex, null)
+      drawCellSquare(p, LUDO_COLORS[color].hex, null, true)
       drawStar(ctx, cell(p), s * 0.3, '#FFFFFF', BOARD_INK)
       return
     }
     if (flyFromIndices.has(i)) {
       // 飞行格：白色小飞机标记（朝飞行弧出发方向）
-      drawCellSquare(p, LUDO_COLORS[color].hex, null)
+      drawCellSquare(p, LUDO_COLORS[color].hex, null, true)
       drawPaperPlane(ctx, cell(p), s * 0.28, RING[i], flyArc(color).ctrl)
       return
     }

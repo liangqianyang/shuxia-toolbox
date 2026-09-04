@@ -98,15 +98,17 @@
               <image class="plane__img" :src="cdnUrl('/pages-ludo/static/ludo/planes/' + planeAsset(pl.color))" mode="aspectFit" />
             </view>
 
-            <!-- 中心骰子：任何人掷骰都在棋盘中心摇给全员看（自己/托管/他人统一由 roll 事件揭示结果） -->
+            <!-- 中心骰子：任何人掷骰都在棋盘中心摇给全员看（自己/托管/他人统一由 roll 事件揭示结果）。
+                 掷骰人用骰盘描边色标识（本方视角无文字，棋盘中不出现"我"/昵称） -->
             <view v-if="centerDice" class="center-dice" :class="{ 'center-dice--fade': centerDice.fade }">
-              <image
-                class="center-dice__img"
-                :class="{ 'center-dice__img--rolling': centerDice.face == null }"
-                :src="centerDiceSrc"
-                mode="aspectFit"
-              />
-              <view class="center-dice__tag" :style="{ background: colorHex(centerDice.color) }">{{ centerDice.name }}</view>
+              <view class="center-dice__disc" :style="{ borderColor: colorHex(centerDice.color) }">
+                <image
+                  class="center-dice__img"
+                  :class="{ 'center-dice__img--rolling': centerDice.face == null }"
+                  :src="centerDiceSrc"
+                  mode="aspectFit"
+                />
+              </view>
             </view>
 
             <!-- 摇骰帧预载（0 尺寸，只走图片下载管线） -->
@@ -259,6 +261,7 @@ import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/u
 import { useLudoRoom } from './composables/useLudoRoom'
 import { ludoBoardImage, LUDO_COLORS } from './utils/ludoRender'
 import { posToPoint } from './utils/ludoBoard'
+import { HANGAR } from './utils/ludo'
 import { playLudoSound, ludoSoundEnabled, setLudoSoundEnabled } from './utils/ludoSound'
 import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
 import GameRulesModal from '@/components/GameRulesModal.vue'
@@ -390,20 +393,34 @@ const planeSprites = computed<PlaneSprite[]>(() => {
   if (!current || !current.planes) return []
   const sprites: PlaneSprite[] = []
   // 同格多机微错位（星标/跑道共存、己机叠格）
+  // 另：各色飞机素材图形在精灵图内质心偏心不同（红左下/黄左下/蓝下/绿右下，实测 CDN 素材），
+  // 按偏心反向补偿（× 精灵宽 7.4%），让飞机视觉重心正落在格心/停机圆心——
+  // 精灵盒居中但图形歪的话，在白色停机圆上仍会明显看着"不居中"。
+  const PLANE_W_PCT = 7.4
+  const ART_BIAS: Array<[number, number]> = [
+    [-0.0667, 0.0698], // 红
+    [-0.0594, 0.0615], // 黄
+    [-0.0115, 0.0646], // 蓝
+    [0.0542, 0.0719], // 绿
+  ]
   const cellGroups = new Map<string, number>()
   current.planes.forEach((row, seat) => {
     row.forEach((pos, p) => {
       const color = current.colors?.[seat] ?? null
       const pt = posToPoint(color ?? 0, pos, p)
-      const key = pos >= 51 && pos < 56 ? `home-${seat}-${pos}` : `${color}-${pos}`
+      // 机场内 4 架各有停机位（hangarSlot 按 planeIdx 定位），必须按飞机编号分组——
+      // 否则 4 架共享 pos=-1 同组、被错误叠加上错位偏移，停不到白色停机圆心上。
+      const key = pos === HANGAR ? `hangar-${seat}-${p}` : pos >= 51 && pos < 56 ? `home-${seat}-${pos}` : `${color}-${pos}`
       const idx = cellGroups.get(key) ?? 0
       cellGroups.set(key, idx + 1)
+      const bias = ART_BIAS[color ?? 0] ?? [0, 0]
       sprites.push({
         seat,
         p,
         color,
-        x: pt.x * 100 + (idx % 2 === 1 ? 3.2 : 0) - (idx > 1 ? 1.6 : 0),
-        y: pt.y * 100 + (idx > 1 ? 3.2 : 0),
+        // 同格多机居中 2×2 微错位（±0.9% ≈ 格宽 13%）+ 素材偏心补偿
+        x: pt.x * 100 + (idx % 2 === 0 ? -0.9 : 0.9) - bias[0] * PLANE_W_PCT,
+        y: pt.y * 100 + (idx < 2 ? -0.9 : 0.9) - bias[1] * PLANE_W_PCT,
         done: pos === 56,
       })
     })
@@ -438,7 +455,6 @@ const diceFaceSrc = computed(() => {
 // ---------- 中心骰子（棋盘正中摇骰，掷骰瞬间全员可见） ----------
 interface CenterDice {
   seat: number
-  name: string
   color: LudoColor | null
   /** null = 还在摇（roll 帧轮播）；数字 = 已定格结果。 */
   face: number | null
@@ -446,6 +462,8 @@ interface CenterDice {
 }
 const centerDice = ref<CenterDice | null>(null)
 let centerDiceTimers: ReturnType<typeof setTimeout>[] = []
+/** 会话令牌：防止旧会话的安全网定时器误杀新会话。 */
+let centerDiceSession = 0
 
 const centerDiceSrc = computed(() => {
   void diceTick.value // 摇骰期间由定时器触发重算（roll_1..4 帧轮播）
@@ -478,18 +496,31 @@ function stopDiceAnimIfIdle() {
 
 /** 中心起摇（face=null 轮播 roll 帧）；带结果则直接定格。 */
 function playCenterRoll(seat: number, face: number | null) {
+  const session = ++centerDiceSession
   const st = state.value
   const player = st?.players.find((p) => p.seat === seat)
   clearCenterDiceTimers()
   centerDice.value = {
     seat,
-    name: seat === st?.mySeat ? '我' : (player?.nickname ?? '?'),
     color: player?.color ?? null,
     face,
     fade: false,
   }
   ensureDiceAnim()
-  if (face != null) settleCenterDice(face)
+  if (face != null) {
+    settleCenterDice(face)
+    return
+  }
+  // 安全网：roll 事件 4s 内没到（请求失败/点按时回合已过期 no-op），自动收场防永转
+  centerDiceTimers.push(
+    setTimeout(() => {
+      if (centerDiceSession !== session) return
+      if (centerDice.value?.face == null) {
+        centerDice.value = null
+        stopDiceAnimIfIdle()
+      }
+    }, 4000),
+  )
 }
 
 function settleCenterDice(face: number) {
@@ -1213,8 +1244,8 @@ $maple-light: #FBE4D5;
 
 .plane {
   position: absolute;
-  width: 9.2%;
-  height: 9.2%;
+  width: 7.4%; /* ≈ 1.1× 格宽（格 6.67%）：飞机落在格内不再视觉溢出 */
+  height: 7.4%;
   transform: translate(-50%, -50%);
   transition: left 0.45s cubic-bezier(0.34, 1.3, 0.64, 1), top 0.45s cubic-bezier(0.34, 1.3, 0.64, 1);
   z-index: 2;
@@ -1242,7 +1273,7 @@ $maple-light: #FBE4D5;
   50% { transform: translate(-50%, -50%) scale(1.16); }
 }
 
-/* 中心骰子：掷骰瞬间在棋盘正中摇给全员看 */
+/* 中心骰子：掷骰瞬间在棋盘正中摇给全员看；掷骰人用骰盘描边色标识（棋盘中不出现文字） */
 .center-dice {
   position: absolute;
   left: 50%;
@@ -1250,33 +1281,29 @@ $maple-light: #FBE4D5;
   transform: translate(-50%, -50%);
   width: 21%; /* 相对 .board（定位父级），给子元素确定尺寸基准 */
   z-index: 6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8rpx;
   transition: opacity 0.24s;
 
   &--fade { opacity: 0; }
 
-  &__img {
+  &__disc {
     width: 100%;
     aspect-ratio: 1;
-    filter: drop-shadow(0 6rpx 14rpx rgba(33, 72, 61, 0.45));
-
-    &--rolling { animation: dice-shake 0.26s linear infinite; }
+    background: #fff;
+    border: 6rpx solid rgba(33, 72, 61, 0.9); /* 兜底色，行内样式按掷骰人座位色覆盖 */
+    border-radius: 26%;
+    box-shadow: 0 6rpx 16rpx rgba(33, 72, 61, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7%;
+    box-sizing: border-box;
   }
 
-  &__tag {
-    max-width: 190rpx;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 20rpx;
-    font-weight: 700;
-    color: #fff;
-    padding: 2rpx 14rpx;
-    border-radius: 999rpx;
-    box-shadow: 0 2rpx 8rpx rgba(33, 72, 61, 0.35);
+  &__img {
+    width: 100%;
+    height: 100%;
+
+    &--rolling { animation: dice-shake 0.26s linear infinite; }
   }
 }
 
