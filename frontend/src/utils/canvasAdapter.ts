@@ -28,19 +28,45 @@ const downloadedImageSources = new Map<string, Promise<string>>()
 
 /**
  * 取窗口信息。uni.getSystemInfoSync 已废弃（控制台告警），优先用 uni.getWindowInfo；
- * 老版本/不支持时回退 getSystemInfoSync。
+ * 老版本/不支持时回退 getSystemInfoSync。windowHeight/safeAreaBottom 供棋盘类页面
+ * 按「可用高度」自适应棋盘尺寸（保证骰子/按钮一屏可见）。
  */
-export function getWindowInfo(): { windowWidth: number; pixelRatio: number } {
+export function getWindowInfo(): {
+  windowWidth: number
+  windowHeight: number
+  pixelRatio: number
+  safeAreaBottom: number
+} {
   const u = uni as unknown as {
-    getWindowInfo?: () => { windowWidth?: number; pixelRatio?: number }
-    getSystemInfoSync: () => { windowWidth: number; pixelRatio: number }
+    getWindowInfo?: () => {
+      windowWidth?: number
+      windowHeight?: number
+      pixelRatio?: number
+      safeAreaInsets?: { bottom?: number }
+    }
+    getSystemInfoSync: () => {
+      windowWidth: number
+      windowHeight: number
+      pixelRatio: number
+      safeAreaInsets?: { bottom?: number }
+    }
   }
   if (typeof u.getWindowInfo === 'function') {
     const w = u.getWindowInfo()
-    return { windowWidth: w.windowWidth ?? 0, pixelRatio: w.pixelRatio ?? 1 }
+    return {
+      windowWidth: w.windowWidth ?? 0,
+      windowHeight: w.windowHeight ?? 0,
+      pixelRatio: w.pixelRatio ?? 1,
+      safeAreaBottom: w.safeAreaInsets?.bottom ?? 0,
+    }
   }
   const s = u.getSystemInfoSync()
-  return { windowWidth: s.windowWidth, pixelRatio: s.pixelRatio }
+  return {
+    windowWidth: s.windowWidth,
+    windowHeight: s.windowHeight,
+    pixelRatio: s.pixelRatio,
+    safeAreaBottom: s.safeAreaInsets?.bottom ?? 0,
+  }
 }
 
 /**

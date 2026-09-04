@@ -97,6 +97,22 @@
             >
               <image class="plane__img" :src="cdnUrl('/pages-ludo/static/ludo/planes/' + planeAsset(pl.color))" mode="aspectFit" />
             </view>
+
+            <!-- 中心骰子：任何人掷骰都在棋盘中心摇给全员看（自己/托管/他人统一由 roll 事件揭示结果） -->
+            <view v-if="centerDice" class="center-dice" :class="{ 'center-dice--fade': centerDice.fade }">
+              <image
+                class="center-dice__img"
+                :class="{ 'center-dice__img--rolling': centerDice.face == null }"
+                :src="centerDiceSrc"
+                mode="aspectFit"
+              />
+              <view class="center-dice__tag" :style="{ background: colorHex(centerDice.color) }">{{ centerDice.name }}</view>
+            </view>
+
+            <!-- 摇骰帧预载（0 尺寸，只走图片下载管线） -->
+            <view class="dice-preload">
+              <image v-for="i in 4" :key="i" :src="cdnUrl('/pages-ludo/static/ludo/dice/roll_' + i + '.png')" mode="aspectFit" />
+            </view>
           </view>
 
           <!-- 事件播报条 -->
@@ -110,7 +126,7 @@
             <view v-if="state.status === 'playing' && state.roll" class="dice-zone__countdown">{{ turnCountdown }}s</view>
           </view>
           <view class="dice-zone__body">
-            <image class="dice" :class="{ 'dice--rolling': diceRolling }" :src="diceFaceSrc" mode="aspectFit" />
+            <image class="dice" :src="diceFaceSrc" mode="aspectFit" />
             <button
               v-if="isMyTurn && state.phase === 'roll'"
               class="dice-zone__roll"
@@ -132,16 +148,19 @@
           </view>
         </view>
 
-        <!-- 聊天条 -->
+        <!-- 聊天条（同 uno：消息竖向每行一条，💬 触发按钮靠左） -->
         <view class="chat-zone">
           <view class="chat-bar">
-            <scroll-view class="chat-feed" scroll-x :show-scrollbar="false">
-              <text v-for="m in roomChat.recentChats.value" :key="m.seq" class="chat-feed-item">
-                {{ seatNameOf(m.seat) }}: {{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}
-              </text>
-            </scroll-view>
+            <view v-if="roomChat.recentChats.value.length" class="chat-feed">
+              <view v-for="m in roomChat.recentChats.value" :key="m.seq" class="chat-feed-item">
+                <text class="chat-feed-name">{{ seatNameOf(m.seat) }}：</text>
+                <text class="chat-feed-text" :class="{ 'chat-feed-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
+              </view>
+            </view>
             <view class="chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
-              💬<text v-if="roomChat.unreadChat.value" class="chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+              <text class="chat-trigger-icon">💬</text>
+              <text class="chat-trigger-hint">快捷聊天…</text>
+              <text v-if="roomChat.unreadChat.value" class="chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
             </view>
           </view>
         </view>
@@ -407,15 +426,100 @@ function colorHex(color: LudoColor | null): string {
 const diceRolling = ref(false)
 let diceAnimTimer: ReturnType<typeof setInterval> | null = null
 
+/** 最近一次掷骰的实际点数（来自 roll 事件；skip 分支服务端不写 state.roll，不能靠它展示）。 */
+const lastRollFace = ref<number | null>(null)
+
+/** 底部小骰子只静态展示最近点数（掷骰动画在棋盘中心，全员可见）。 */
 const diceFaceSrc = computed(() => {
-  void diceTick.value // 掷骰动画期间由定时器触发重算（轮播 roll_1..4 帧）
-  const current = state.value
-  if (diceRolling.value) {
+  const v = lastRollFace.value ?? state.value?.roll ?? 1
+  return cdnUrl(`/pages-ludo/static/ludo/dice/dice_${v}.png`)
+})
+
+// ---------- 中心骰子（棋盘正中摇骰，掷骰瞬间全员可见） ----------
+interface CenterDice {
+  seat: number
+  name: string
+  color: LudoColor | null
+  /** null = 还在摇（roll 帧轮播）；数字 = 已定格结果。 */
+  face: number | null
+  fade: boolean
+}
+const centerDice = ref<CenterDice | null>(null)
+let centerDiceTimers: ReturnType<typeof setTimeout>[] = []
+
+const centerDiceSrc = computed(() => {
+  void diceTick.value // 摇骰期间由定时器触发重算（roll_1..4 帧轮播）
+  if (centerDice.value?.face == null) {
     return cdnUrl(`/pages-ludo/static/ludo/dice/roll_${1 + (Math.floor(diceTick.value / 120) % 4)}.png`)
   }
-  if (current?.roll) return cdnUrl(`/pages-ludo/static/ludo/dice/dice_${current.roll}.png`)
-  return cdnUrl('/pages-ludo/static/ludo/dice/dice_6.png')
+  return cdnUrl(`/pages-ludo/static/ludo/dice/dice_${centerDice.value.face}.png`)
 })
+
+function clearCenterDiceTimers() {
+  centerDiceTimers.forEach(clearTimeout)
+  centerDiceTimers = []
+}
+
+function ensureDiceAnim() {
+  if (!diceAnimTimer) {
+    diceAnimTimer = setInterval(() => {
+      diceTick.value = Date.now()
+    }, 120)
+  }
+}
+
+function stopDiceAnimIfIdle() {
+  if (centerDice.value?.face == null) return // 还有摇骰会话在跑
+  if (diceAnimTimer) {
+    clearInterval(diceAnimTimer)
+    diceAnimTimer = null
+  }
+}
+
+/** 中心起摇（face=null 轮播 roll 帧）；带结果则直接定格。 */
+function playCenterRoll(seat: number, face: number | null) {
+  const st = state.value
+  const player = st?.players.find((p) => p.seat === seat)
+  clearCenterDiceTimers()
+  centerDice.value = {
+    seat,
+    name: seat === st?.mySeat ? '我' : (player?.nickname ?? '?'),
+    color: player?.color ?? null,
+    face,
+    fade: false,
+  }
+  ensureDiceAnim()
+  if (face != null) settleCenterDice(face)
+}
+
+function settleCenterDice(face: number) {
+  if (!centerDice.value) return
+  centerDice.value = { ...centerDice.value, face }
+  stopDiceAnimIfIdle()
+  // 停留后淡出收场
+  centerDiceTimers.push(
+    setTimeout(() => {
+      if (centerDice.value) centerDice.value = { ...centerDice.value, fade: true }
+      centerDiceTimers.push(
+        setTimeout(() => {
+          centerDice.value = null
+          stopDiceAnimIfIdle()
+        }, 240),
+      )
+    }, 1500),
+  )
+}
+
+/** roll 事件到达：本地已起手（同座位在摇）就短悬念后定格；否则（他人/托管掷）起摇一段再定格。 */
+function revealCenterRoll(seat: number, face: number) {
+  const cur = centerDice.value
+  if (cur && cur.seat === seat && cur.face == null) {
+    centerDiceTimers.push(setTimeout(() => settleCenterDice(face), 260))
+    return
+  }
+  playCenterRoll(seat, null)
+  centerDiceTimers.push(setTimeout(() => settleCenterDice(face), 460))
+}
 
 const currentText = computed(() => {
   const current = state.value
@@ -431,21 +535,14 @@ const currentText = computed(() => {
 async function onRoll() {
   if (diceRolling.value) return
   diceRolling.value = true
-  if (diceAnimTimer) clearInterval(diceAnimTimer)
-  diceAnimTimer = setInterval(() => {
-    // 触发 diceFaceSrc 重算（滚动帧轮播）
-    diceTick.value = Date.now()
-  }, 120)
+  const mySeat = state.value?.mySeat
+  if (mySeat != null) playCenterRoll(mySeat, null) // 中心起摇（结果由 roll 事件揭示）
   playLudoSound('roll')
   try {
     await roll()
   } finally {
     setTimeout(() => {
       diceRolling.value = false
-      if (diceAnimTimer) {
-        clearInterval(diceAnimTimer)
-        diceAnimTimer = null
-      }
     }, 380)
   }
 }
@@ -537,10 +634,12 @@ watch(
     const current = state.value
     if (!current) return
     if (current.code !== lastRoomCode) {
-      // 换房/首次进房：快进到最新事件，不把历史事件当新播报
+      // 换房/首次进房：快进到最新事件，不把历史事件当新播报；但播种最近点数（断线重连/中途进房底部骰子不误导）
       lastRoomCode = current.code
       const seqs = (current.events ?? []).map((e) => e.seq)
       lastSeq = seqs.length ? Math.max(...seqs) : 0
+      const rolls = (current.events ?? []).filter((e) => e.t === 'roll' && typeof e.v === 'number')
+      lastRollFace.value = rolls.length ? (rolls[rolls.length - 1]!.v as number) : null
       return
     }
     const events = current.events ?? []
@@ -549,6 +648,14 @@ watch(
       lastSeq = ev.seq
       if (ev.t === 'firstPlayer' && ev.seat != null && ev.v && typeof ev.v === 'object') {
         holdOpeningResult(ev.seat, ev.v as Record<string, number>)
+      }
+      if (ev.t === 'start' || ev.t === 'rematch') {
+        lastRollFace.value = null // 新一局：清掉上一局的最近点数
+      }
+      if (ev.t === 'roll' && ev.seat != null && typeof ev.v === 'number') {
+        // 中心骰子：任何人掷骰（自己/他人/托管）都在棋盘中心摇给全员看
+        lastRollFace.value = ev.v
+        revealCenterRoll(ev.seat, ev.v)
       }
       const text = eventText(current, ev)
       if (text) {
@@ -1135,6 +1242,53 @@ $maple-light: #FBE4D5;
   50% { transform: translate(-50%, -50%) scale(1.16); }
 }
 
+/* 中心骰子：掷骰瞬间在棋盘正中摇给全员看 */
+.center-dice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 21%; /* 相对 .board（定位父级），给子元素确定尺寸基准 */
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  transition: opacity 0.24s;
+
+  &--fade { opacity: 0; }
+
+  &__img {
+    width: 100%;
+    aspect-ratio: 1;
+    filter: drop-shadow(0 6rpx 14rpx rgba(33, 72, 61, 0.45));
+
+    &--rolling { animation: dice-shake 0.26s linear infinite; }
+  }
+
+  &__tag {
+    max-width: 190rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 20rpx;
+    font-weight: 700;
+    color: #fff;
+    padding: 2rpx 14rpx;
+    border-radius: 999rpx;
+    box-shadow: 0 2rpx 8rpx rgba(33, 72, 61, 0.35);
+  }
+}
+
+/* 摇骰帧预载：藏一张 0 尺寸图让图片管线先下载 roll 帧，首摇不白屏 */
+.dice-preload {
+  position: absolute;
+  left: -9999rpx;
+  width: 1rpx;
+  height: 1rpx;
+  overflow: hidden;
+}
+
 .event-banner {
   margin-top: 14rpx;
   min-height: 56rpx;
@@ -1236,10 +1390,6 @@ $maple-light: #FBE4D5;
 .dice {
   width: 88rpx;
   height: 88rpx;
-
-  &--rolling {
-    animation: dice-shake 0.28s linear infinite;
-  }
 }
 
 @keyframes dice-shake {
@@ -1515,12 +1665,20 @@ $maple-light: #FBE4D5;
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 .chat-zone { padding: 8rpx 24rpx 24rpx; }
-.chat-bar { display: flex; align-items: center; gap: 12rpx; }
-.chat-feed { flex: 1; background: rgba(255, 255, 255, 0.85); border-radius: 999rpx; padding: 8rpx 20rpx; white-space: nowrap; }
-.chat-feed-item { font-size: 22rpx; color: #9aa79e; margin-right: 24rpx; }
-.chat-trigger { position: relative; font-size: 34rpx; padding: 6rpx 18rpx; background: #fff; border-radius: 999rpx; }
+.chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
+.chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: rgba(255, 255, 255, 0.85); border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
+.chat-feed-item { display: flex; align-items: baseline; font-size: 22rpx; }
+.chat-feed-name { color: #9aa79e; flex-shrink: 0; }
+.chat-feed-text { color: rgba(33, 72, 61, 0.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-feed-text--emoji { font-size: 30rpx; }
+.chat-trigger {
+  position: relative; display: flex; align-items: center; gap: 10rpx;
+  height: 60rpx; padding: 0 26rpx; background: #fff; border: 2rpx solid rgba(33, 72, 61, 0.12); border-radius: 30rpx;
+}
+.chat-trigger-icon { font-size: 26rpx; }
+.chat-trigger-hint { font-size: 24rpx; color: rgba(33, 72, 61, 0.45); }
 .chat-unread {
-  position: absolute; top: -6rpx; right: -6rpx; background: #e85d4a; color: #fff; font-size: 18rpx;
-  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
+  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: #e85d4a; color: #fff; font-size: 18rpx;
+  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx; text-align: center;
 }
 </style>

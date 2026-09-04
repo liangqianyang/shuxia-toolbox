@@ -61,11 +61,6 @@ export function useRoomChat(options: UseRoomChatOptions) {
     return m.text
   }
 
-  function chatPreview(m: RoomChatMessage): string {
-    const body = m.kind === 'sticker' ? '[贴纸]' : m.kind === 'emoji' ? m.text : chatBody(m)
-    return body
-  }
-
   watch(
     () => options.chat(),
     (chat) => {
@@ -159,7 +154,6 @@ export function useRoomChat(options: UseRoomChatOptions) {
     chatLog,
     phraseGroups,
     chatBody,
-    chatPreview,
     bubbleKeyOf,
     sendPhrase,
     sendEmoji,

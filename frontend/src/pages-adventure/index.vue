@@ -189,13 +189,31 @@
             <text v-else class="turn-text muted">对局已暂停</text>
           </view>
 
-          <!-- 骰子 -->
-          <view class="dice-zone">
+          <!-- 掷骰行：骰子与主操作按钮同排（压缩纵向占用，保证一屏可见） -->
+          <view class="act-row">
             <view class="dice-pair" :class="{ 'dice-shaking': diceRolling || diceShaking }">
               <view v-for="(d, i) in displayDice" :key="i" class="dice">{{ d }}</view>
             </view>
             <view v-if="resolveBonus > 0" class="dice-bonus">+{{ resolveBonus }} ⛏️</view>
             <view v-if="slowAhead > 0" class="dice-slow">−{{ slowAhead }} ❄️</view>
+            <button
+              v-if="current.status === 'playing' && current.currentSeat === mySeat && current.phase === 'act' && !current.pendingDuel && !current.pendingChoice"
+              class="btn btn-primary btn-lg"
+              :loading="acting"
+              @tap="onRoll"
+            >
+              {{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰' }}
+            </button>
+            <button
+              v-if="isMyResolve && !current.pendingDuel && !current.pendingChoice"
+              class="btn btn-gold btn-lg"
+              :loading="acting"
+              @tap="confirmMove"
+            >
+              🥾 走 {{ previewSteps }} 步
+            </button>
+            <button class="btn btn-ghost btn-sm act-side" @tap="setAuto(!myAuto)">{{ myAuto ? '取消托管' : '托管' }}</button>
+            <button v-if="isOwner && current.status === 'playing'" class="btn btn-ghost btn-sm" @tap="onSave">保存</button>
           </view>
 
           <!-- 道具手牌 -->
@@ -217,28 +235,6 @@
               </view>
             </scroll-view>
             <view v-if="targetingItem" class="targeting-hint">已选「{{ itemName(targetingItem) }}」→ 点击上方玩家头像指定目标 <text class="link" @tap="targetingItem = ''">取消</text></view>
-          </view>
-
-          <!-- 操作按钮 -->
-          <view class="action-btns">
-            <button
-              v-if="current.status === 'playing' && current.currentSeat === mySeat && current.phase === 'act' && !current.pendingDuel && !current.pendingChoice"
-              class="btn btn-primary btn-lg"
-              :loading="acting"
-              @tap="onRoll"
-            >
-              {{ diceRolling ? '🎲 掷骰中…' : '🎲 掷骰' }}
-            </button>
-            <button
-              v-if="isMyResolve && !current.pendingDuel && !current.pendingChoice"
-              class="btn btn-gold btn-lg"
-              :loading="acting"
-              @tap="confirmMove"
-            >
-              🥾 走 {{ previewSteps }} 步
-            </button>
-            <button class="btn btn-ghost" @tap="setAuto(!myAuto)">{{ myAuto ? '取消托管' : '托管' }}</button>
-            <button v-if="isOwner && current.status === 'playing'" class="btn btn-ghost" @tap="onSave">保存并退出</button>
           </view>
         </view>
 
@@ -433,16 +429,19 @@
           </view>
         </view>
 
-        <!-- ══ 聊天 ══ -->
+        <!-- ══ 聊天（同 uno：消息竖向每行一条，💬 触发按钮靠左） ══ -->
         <view v-if="inPlay || current.status === 'finished'" class="chat-zone">
           <view class="chat-bar">
-            <scroll-view class="chat-feed" scroll-x :show-scrollbar="false">
-              <text v-for="m in recentChats" :key="m.seq" class="chat-feed-item" :class="{ 'chat-feed-me': m.seat === mySeat }">
-                {{ chatPreview(m) }}
-              </text>
-            </scroll-view>
+            <view v-if="recentChats.length" class="chat-feed">
+              <view v-for="m in recentChats" :key="m.seq" class="chat-feed-item" :class="{ 'chat-feed-me': m.seat === mySeat }">
+                <text class="chat-feed-name">{{ m.seat === mySeat ? '我' : nickOf(m.seat) }}：</text>
+                <text class="chat-feed-text" :class="{ 'chat-feed-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : chatBody(m) }}</text>
+              </view>
+            </view>
             <view class="chat-trigger" @tap="chatPanelOpen = true">
-              💬<text v-if="unreadChat" class="chat-unread">{{ unreadChat > 9 ? '9+' : unreadChat }}</text>
+              <text class="chat-trigger-icon">💬</text>
+              <text class="chat-trigger-hint">快捷聊天…</text>
+              <text v-if="unreadChat" class="chat-unread">{{ unreadChat > 9 ? '9+' : unreadChat }}</text>
             </view>
           </view>
         </view>
@@ -542,6 +541,7 @@ import {
 import type { AdventureChatMessage, AdventureEvent, AdventurePlayer } from '@/types/adventure'
 import GameRulesModal from '@/components/GameRulesModal.vue'
 import { adventureBoardImage } from './utils/adventureRender'
+import { getWindowInfo } from '@/utils/canvasAdapter'
 
 const rulesOpen = ref(false)
 
@@ -697,16 +697,26 @@ function medal(place: number | null): string {
 
 // ---------------------------------------------------------------- 棋盘渲染
 
+/** 棋盘画布是正方形，wrap 再留 14% 高度给山脚出发带（cellToPoint y 最大 1.06 + 棋子半径）。 */
+const BOARD_H_RATIO = 1.14
+/** 一屏内棋盘以外区块（顶栏/玩家条/天气栏/回合行/掷骰行/道具栏）的纵向开销估算（rpx，含余量）。
+ *  聊天条在预算外（页面最底部）：矮屏滚动可见，换取骰子与操作按钮一屏可见。 */
+const BOARD_OVERHEAD_RPX = 840
+/** 棋盘最小边长（px）：再小宁可让页面轻微滚动，保住棋盘可读性。 */
+const BOARD_MIN_CSS = 240
+
 const boardSrc = ref('')
 const boardWrapHeight = ref('0px')
 
 const boardCssSize = ref(0)
 
 async function ensureBoard() {
-  const win = uni.getWindowInfo ? uni.getWindowInfo() : uni.getSystemInfoSync()
-  const css = Math.min(win.windowWidth - 24, 560)
+  const win = getWindowInfo()
+  const rpx = win.windowWidth / 750
+  const availH = win.windowHeight - win.safeAreaBottom - BOARD_OVERHEAD_RPX * rpx
+  const css = Math.max(Math.min(win.windowWidth - 24, 560, availH / BOARD_H_RATIO), BOARD_MIN_CSS)
   boardCssSize.value = Math.round(css)
-  boardWrapHeight.value = `${Math.round(css * 1.14)}px`
+  boardWrapHeight.value = `${Math.round(css * BOARD_H_RATIO)}px`
   const dpr = Math.min(Math.max(win.pixelRatio || 2, 2), 3)
   const px = Math.min(Math.round(css * dpr), 1600)
   const goal = current.value?.goal ?? 100
@@ -741,8 +751,6 @@ watch(
 )
 
 // ---------------------------------------------------------------- 棋子（全 DOM + CSS transition）
-
-const BOARD_H_RATIO = 1.14
 
 const tokens = computed(() => {
   const st = current.value
@@ -1186,11 +1194,6 @@ function chatBody(m: AdventureChatMessage): string {
   if (m.kind === 'phrase') return adventurePhraseText(m.text) ?? m.text
   return m.text
 }
-function chatPreview(m: AdventureChatMessage): string {
-  const name = m.seat === current.value?.mySeat ? '我' : nickOf(m.seat)
-  const body = m.kind === 'sticker' ? '[贴纸]' : m.kind === 'emoji' ? m.text : chatBody(m)
-  return `${name}: ${body}`
-}
 
 watch(
   () => current.value?.chat,
@@ -1463,8 +1466,9 @@ $muted: #9aa79e;
 .turn-line { display: flex; align-items: center; justify-content: space-between; }
 .turn-text { font-size: 26rpx; color: $ink; font-weight: 600; }
 .countdown { font-size: 28rpx; font-weight: 800; color: $maple; min-width: 70rpx; text-align: right; }
-.dice-zone { display: flex; align-items: center; justify-content: center; gap: 20rpx; }
-.dice-pair { display: flex; gap: 16rpx; }
+.act-row { display: flex; align-items: center; gap: 16rpx; }
+.act-side { margin-left: auto; }
+.dice-pair { display: flex; gap: 16rpx; flex-shrink: 0; }
 .dice {
   width: 88rpx; height: 88rpx; border-radius: 18rpx; background: #fff; border: 3rpx solid $ink;
   display: flex; align-items: center; justify-content: center; font-size: 44rpx; font-weight: 800; color: $ink;
@@ -1492,7 +1496,6 @@ $muted: #9aa79e;
 .hand-empty { font-size: 22rpx; color: $muted; line-height: 90rpx; }
 .targeting-hint { font-size: 22rpx; color: $maple; margin-top: 8rpx; }
 .link { text-decoration: underline; }
-.action-btns { display: flex; gap: 16rpx; }
 
 // ── 决斗浮层 ──
 .duel-overlay { position: fixed; inset: 0; background: rgba(33,42,38,0.55); z-index: 90; display: flex; align-items: center; justify-content: center; }
@@ -1570,14 +1573,22 @@ $muted: #9aa79e;
 
 // ── 聊天 ──
 .chat-zone { padding: 8rpx 24rpx 24rpx; }
-.chat-bar { display: flex; align-items: center; gap: 12rpx; }
-.chat-feed { flex: 1; background: rgba(255,255,255,0.85); border-radius: 999rpx; padding: 8rpx 20rpx; white-space: nowrap; }
-.chat-feed-item { font-size: 22rpx; color: $muted; margin-right: 24rpx; }
-.chat-feed-me { color: $ink; font-weight: 600; }
-.chat-trigger { position: relative; font-size: 34rpx; padding: 6rpx 18rpx; background: #fff; border-radius: 999rpx; }
+.chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
+.chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: rgba(255,255,255,0.85); border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
+.chat-feed-item { display: flex; align-items: baseline; font-size: 22rpx; }
+.chat-feed-name { color: $muted; flex-shrink: 0; }
+.chat-feed-text { color: rgba(33, 72, 61, 0.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-feed-text--emoji { font-size: 30rpx; }
+.chat-feed-me .chat-feed-name, .chat-feed-me .chat-feed-text { color: $ink; font-weight: 600; }
+.chat-trigger {
+  position: relative; display: flex; align-items: center; gap: 10rpx;
+  height: 60rpx; padding: 0 26rpx; background: #fff; border: 2rpx solid rgba(33, 72, 61, 0.12); border-radius: 30rpx;
+}
+.chat-trigger-icon { font-size: 26rpx; }
+.chat-trigger-hint { font-size: 24rpx; color: $muted; }
 .chat-unread {
-  position: absolute; top: -6rpx; right: -6rpx; background: $maple; color: #fff; font-size: 18rpx;
-  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
+  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: $maple; color: #fff; font-size: 18rpx;
+  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx; text-align: center;
 }
 /* 座位气泡：锚定在各自玩家条头像上方（同 uno 的 seat-bubble） */
 .seat-bubble {

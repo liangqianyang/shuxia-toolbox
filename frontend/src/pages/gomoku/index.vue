@@ -151,16 +151,19 @@
 
       <button class="gomoku__leave" @tap="onLeave">离开房间</button>
 
-      <!-- 聊天条 -->
+      <!-- 聊天条（同 uno：消息竖向每行一条，💬 触发按钮靠左） -->
       <view class="gomoku__chat-zone">
         <view class="gomoku__chat-bar">
-          <scroll-view class="gomoku__chat-feed" scroll-x :show-scrollbar="false">
-            <text v-for="m in roomChat.recentChats.value" :key="m.seq" class="gomoku__chat-item">
-              {{ roleNameOf(m.role ?? 'black') }}: {{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}
-            </text>
-          </scroll-view>
+          <view v-if="roomChat.recentChats.value.length" class="gomoku__chat-feed">
+            <view v-for="m in roomChat.recentChats.value" :key="m.seq" class="gomoku__chat-item">
+              <text class="gomoku__chat-name">{{ roleNameOf(m.role ?? 'black') }}：</text>
+              <text class="gomoku__chat-text" :class="{ 'gomoku__chat-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
+            </view>
+          </view>
           <view class="gomoku__chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
-            💬<text v-if="roomChat.unreadChat.value" class="gomoku__chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+            <text class="gomoku__chat-trigger-icon">💬</text>
+            <text class="gomoku__chat-trigger-hint">快捷聊天…</text>
+            <text v-if="roomChat.unreadChat.value" class="gomoku__chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
           </view>
         </view>
       </view>
@@ -1045,12 +1048,20 @@ onShareAppMessage(() => ({
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 .gomoku__chat-zone { padding: 16rpx 0 8rpx; }
-.gomoku__chat-bar { display: flex; align-items: center; gap: 12rpx; }
-.gomoku__chat-feed { flex: 1; background: $color-card; border: 2rpx solid $color-border; border-radius: 999rpx; padding: 8rpx 20rpx; white-space: nowrap; }
-.gomoku__chat-item { font-size: 22rpx; color: $color-text-secondary; margin-right: 24rpx; }
-.gomoku__chat-trigger { position: relative; font-size: 34rpx; padding: 6rpx 18rpx; background: $color-card; border: 2rpx solid $color-border; border-radius: 999rpx; }
+.gomoku__chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
+.gomoku__chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: $color-card; border: 2rpx solid $color-border; border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
+.gomoku__chat-item { display: flex; align-items: baseline; font-size: 22rpx; }
+.gomoku__chat-name { color: $color-text-secondary; flex-shrink: 0; }
+.gomoku__chat-text { color: $color-text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gomoku__chat-text--emoji { font-size: 30rpx; }
+.gomoku__chat-trigger {
+  position: relative; display: flex; align-items: center; gap: 10rpx;
+  height: 60rpx; padding: 0 26rpx; background: $color-card; border: 2rpx solid $color-border; border-radius: 30rpx;
+}
+.gomoku__chat-trigger-icon { font-size: 26rpx; }
+.gomoku__chat-trigger-hint { font-size: 24rpx; color: $color-text-secondary; }
 .gomoku__chat-unread {
-  position: absolute; top: -6rpx; right: -6rpx; background: #e85d4a; color: #fff; font-size: 18rpx;
-  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx;
+  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: #e85d4a; color: #fff; font-size: 18rpx;
+  border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx; text-align: center;
 }
 </style>
