@@ -1,0 +1,66 @@
+/**
+ * 时光纪念卡 · 场景色系统（工具私有，不进 uni.scss 全局注入）
+ * 每种场景一个主题色：hero 渐变、日期徽章、列表色条、天数彩字、筛选彩点、编辑页场景格。
+ * 颜色取自已确认的改版原型（pen.dev「时光纪念卡 · 改版方案」）。
+ */
+
+$ann-scenes: (
+  birthday: (#e58fb1, #c75f8c, #fbe9f1),
+  relationship: (#e06a5a, #b8402e, #fbeae5),
+  wedding: (#c9a2c0, #a87ca0, #f4eaf1),
+  travel: (#5b8fb9, #3d6e96, #e8f0f7),
+  deadline: (#8a6fa8, #6e5590, #eee8f5),
+  baby: (#e5a33e, #c5811e, #fbf0dc),
+  habit: (#6fa06b, #4e7d4a, #e8f2e7),
+  custom: (#c8956c, #a8744b, #f6ede2),
+);
+
+@each $scene, $colors in $ann-scenes {
+  $color: nth($colors, 1);
+  $deep: nth($colors, 2);
+  $tint: nth($colors, 3);
+
+  // hero 满幅渐变（亮端混白 18% → 主色 → 深色）
+  .anniversary__hero--#{$scene} {
+    background: linear-gradient(165deg, mix(#ffffff, $color, 18%), $color 55%, $deep);
+  }
+
+  // 列表日期徽章：浅彩底 + 深彩字
+  .anniversary__date-badge--#{$scene} {
+    background: $tint;
+    color: $deep;
+  }
+
+  // 列表左侧色条
+  .anniversary__event-bar--#{$scene} {
+    background: $color;
+  }
+
+  // 列表右侧天数
+  .anniversary__event-count--#{$scene} {
+    color: $deep;
+  }
+
+  // 筛选 chips 彩点
+  .anniversary__chip-dot--#{$scene} {
+    background: $color;
+  }
+
+  // 筛选 chip 选中态跟随场景色
+  .anniversary__scene-chip--c-#{$scene}.anniversary__scene-chip--active {
+    border-color: $color;
+    background: $tint;
+    color: $deep;
+  }
+
+  // 编辑页场景格选中：彩描边 + 浅彩底
+  .anniversary__scene-cell--c-#{$scene}.anniversary__scene-cell--active {
+    border-color: $color;
+    background: $tint;
+
+    .anniversary__scene-cell-name {
+      color: $deep;
+      font-weight: 700;
+    }
+  }
+}

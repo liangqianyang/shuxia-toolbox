@@ -48,6 +48,15 @@ Router::addGroup('/api', function (): void {
     Router::post('/anniversaries/{id}/calendar-added', [AnniversaryController::class, 'markCalendarAdded']);
     Router::post('/anniversaries/{id}/subscribe', [AnniversaryController::class, 'subscribe']);
 
+    // 时光纪念卡 · 共享协作：一次性 24h 邀请码 + 成员权限管理。
+    Router::post('/anniversaries/{id}/invite', [AnniversaryController::class, 'createInvite']);
+    Router::get('/anniversaries/invite/{code}', [AnniversaryController::class, 'previewInvite']);
+    Router::post('/anniversaries/invite/{code}/accept', [AnniversaryController::class, 'acceptInvite']);
+    Router::get('/anniversaries/{id}/members', [AnniversaryController::class, 'members']);
+    Router::post('/anniversaries/{id}/member-role', [AnniversaryController::class, 'updateMemberRole']);
+    Router::post('/anniversaries/{id}/member-remove', [AnniversaryController::class, 'removeMember']);
+    Router::post('/anniversaries/{id}/leave', [AnniversaryController::class, 'leaveEvent']);
+
     // 全局功能开关：公开只读（前端决定 AI 入口展示）+ 运营台读写。
     Router::get('/config/features', [FeatureController::class, 'index']);
     Router::get('/admin/features', [AdminFeatureController::class, 'index']);

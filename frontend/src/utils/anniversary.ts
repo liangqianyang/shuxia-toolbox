@@ -67,6 +67,7 @@ export function emptyAnniversaryDraft(sceneType: AnniversarySceneType = 'birthda
     repeatType,
     countMode,
     remindDaysBefore: sceneType === 'deadline' ? 7 : 1,
+    remindTime: DEFAULT_REMIND_TIME,
     coverImage: '',
     cardTemplate: recommendedTemplateForScene(sceneType),
     cardTone: sceneType === 'deadline' ? 'classic' : 'warm',
@@ -87,9 +88,40 @@ export function draftFromEvent(event: AnniversaryEvent): AnniversaryDraft {
     repeatType: event.repeatType,
     countMode: event.countMode,
     remindDaysBefore: event.remindDaysBefore,
+    remindTime: event.remindTime || DEFAULT_REMIND_TIME,
     coverImage: event.coverImage,
     cardTemplate: event.cardTemplate,
     cardTone: event.cardTone,
+  }
+}
+
+/** 日历提醒时刻：三个快捷档 + picker 自定义 */
+export const REMINDER_TIME_PRESETS = ['09:00', '12:00', '20:00'] as const
+export const DEFAULT_REMIND_TIME = '09:00'
+
+export interface CalendarEventTimes {
+  /** 发生日当天的提醒时刻起的开始时间（秒级时间戳） */
+  startTime: number
+  endTime: number
+  /** 相对 startTime 的提醒提前量（秒） */
+  alarmOffset: number
+}
+
+/** 按提醒偏好计算写入手机日历的日程时间：非全天、落在所选时刻（消除系统对全天事件的默认 9:00）。 */
+export function buildCalendarEventTimes(
+  remindDaysBefore: number,
+  remindTime: string,
+  occurrenceDate: string,
+): CalendarEventTimes {
+  const safeTime = /^\d{2}:\d{2}$/.test(remindTime) ? remindTime : DEFAULT_REMIND_TIME
+  const [hour, minute] = safeTime.split(':').map(Number)
+  const [year, month, day] = occurrenceDate.split('-').map(Number)
+  const start = new Date(year, month - 1, day, hour, minute, 0, 0)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  return {
+    startTime: Math.floor(start.getTime() / 1000),
+    endTime: Math.floor(end.getTime() / 1000),
+    alarmOffset: remindDaysBefore * 86400,
   }
 }
 

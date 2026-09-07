@@ -76,6 +76,69 @@ final class AnniversaryController extends AbstractController
         return $this->ok(['subscribed' => true]);
     }
 
+    #[RateLimit(create: 6, capacity: 12, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function createInvite(RequestInterface $request, string $id): array
+    {
+        return $this->ok([
+            'invite' => $this->anniversaries->createInvite(
+                $this->requireUserId($request),
+                (int) $id,
+                (string) $request->input('role', 'viewer'),
+            ),
+        ]);
+    }
+
+    #[RateLimit(create: 10, capacity: 20, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function previewInvite(RequestInterface $request, string $code): array
+    {
+        $this->requireUserId($request);
+        return $this->ok($this->anniversaries->previewInvite($code));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function acceptInvite(RequestInterface $request, string $code): array
+    {
+        return $this->ok($this->anniversaries->acceptInvite($this->requireUserId($request), $code));
+    }
+
+    #[RateLimit(create: 10, capacity: 20, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function members(RequestInterface $request, string $id): array
+    {
+        return $this->ok($this->anniversaries->members($this->requireUserId($request), (int) $id));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function updateMemberRole(RequestInterface $request, string $id): array
+    {
+        $userId = (int) $request->input('userId', 0);
+        if ($userId <= 0) {
+            throw new BizException(422, 'userId 不能为空');
+        }
+        return $this->ok($this->anniversaries->updateMemberRole(
+            $this->requireUserId($request),
+            (int) $id,
+            $userId,
+            (string) $request->input('role', 'viewer'),
+        ));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function removeMember(RequestInterface $request, string $id): array
+    {
+        $userId = (int) $request->input('userId', 0);
+        if ($userId <= 0) {
+            throw new BizException(422, 'userId 不能为空');
+        }
+        return $this->ok($this->anniversaries->removeMember($this->requireUserId($request), (int) $id, $userId));
+    }
+
+    #[RateLimit(create: 6, capacity: 16, key: [ApiKeyMiddleware::class, 'bucketKey'])]
+    public function leaveEvent(RequestInterface $request, string $id): array
+    {
+        $this->anniversaries->leaveEvent($this->requireUserId($request), (int) $id);
+        return $this->ok(['left' => true]);
+    }
+
     private function requireUserId(RequestInterface $request): int
     {
         $userId = $this->users->userIdByToken((string) $request->header('X-User-Token', ''));

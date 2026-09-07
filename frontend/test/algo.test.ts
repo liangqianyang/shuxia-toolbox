@@ -1248,3 +1248,50 @@ function testAdventure() {
   assert(Object.keys(adventureChat.ADVENTURE_STICKERS).length === 10, '10 张贴纸')
   assert(adventureChat.adventurePhraseText('duel_me') === '就决定是你了', '快捷句 id 反查')
 }
+
+// ---- 时光纪念卡：日历时刻纯函数 + 偏好拆分 round-trip ----
+{
+  const ann = require('@/utils/anniversary') as typeof import('@/utils/anniversary')
+
+  // buildCalendarEventTimes：非全天日程落在所选时刻，offset 相对 startTime
+  {
+    const t = ann.buildCalendarEventTimes(7, '20:30', '2026-10-07')
+    const start = new Date(t.startTime * 1000)
+    const end = new Date(t.endTime * 1000)
+    assert(start.getFullYear() === 2026 && start.getMonth() === 9 && start.getDate() === 7, '提醒日期落在发生日')
+    assert(start.getHours() === 20 && start.getMinutes() === 30, '提醒时刻 = 所选 20:30')
+    assert(t.endTime - t.startTime === 3600, '日程时长 1 小时')
+    assert(t.alarmOffset === 7 * 86400, '提前 7 天 = 604800 秒')
+  }
+  {
+    const t = ann.buildCalendarEventTimes(0, 'bad-time', '2026-10-07')
+    const start = new Date(t.startTime * 1000)
+    assert(start.getHours() === 9 && start.getMinutes() === 0, '非法时刻回退 09:00')
+    assert(t.alarmOffset === 0, '当天提醒 offset 0')
+  }
+
+  // remindTime 默认值 + draftFromEvent round-trip
+  {
+    const draft = ann.emptyAnniversaryDraft('relationship')
+    assert(draft.remindTime === '09:00', '新建 draft 默认提醒时刻 09:00')
+    assert(draft.remindTime === ann.DEFAULT_REMIND_TIME, '与常量一致')
+    assert(ann.REMINDER_TIME_PRESETS.length === 3, '3 个快捷时刻档')
+    const event = {
+      ...ann.emptyAnniversaryDraft('travel'),
+      id: 1,
+      remindTime: '20:00',
+      calendarAddedAt: '',
+      calendarRepeatType: '' as const,
+      sortOrder: 0,
+      role: 'editor' as const,
+      ownerId: 9,
+      shared: true,
+      memberCount: 2,
+      createdAt: '',
+      updatedAt: '',
+    }
+    const round = ann.draftFromEvent(event)
+    assert(round.remindTime === '20:00', 'draftFromEvent 保留提醒时刻')
+    assert(round.id === 1 && round.title === event.title, 'draftFromEvent round-trip 基本字段')
+  }
+}

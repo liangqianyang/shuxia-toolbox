@@ -11,6 +11,32 @@
     <view v-if="loading" class="anniversary__loading">正在读取重要日子…</view>
 
     <template v-else>
+      <!-- ===== 共享邀请接受面板 ===== -->
+      <view v-if="panel === 'invite' && invitePreview" class="anniversary__invite card">
+        <text class="anniversary__invite-eyebrow">收到共享邀请</text>
+        <image
+          v-if="invitePreview.inviter.avatarUrl"
+          class="anniversary__invite-avatar"
+          :src="invitePreview.inviter.avatarUrl"
+          mode="aspectFill"
+        />
+        <view v-else class="anniversary__invite-avatar anniversary__invite-avatar--placeholder">🍁</view>
+        <text class="anniversary__invite-title">{{ invitePreview.event.title }}</text>
+        <text class="caption">{{ invitePreview.inviter.nickname || '好友' }} 邀你一起记住 {{ invitePreview.event.eventDate.replace(/-/g, '.') }} 的这个日子</text>
+        <view class="anniversary__invite-role" :class="'anniversary__invite-role--' + invitePreview.role">
+          <text class="anniversary__invite-role-title">{{ invitePreview.role === 'editor' ? '✏️ 可以一起编辑' : '👀 仅查看' }}</text>
+          <text class="caption">{{ invitePreview.role === 'editor' ? '能改名称和日期，不能删除或邀请别人' : '只能查看，提醒和卡片偏好仍归你自己' }}</text>
+        </view>
+        <view class="anniversary__invite-actions">
+          <view class="btn-ghost anniversary__invite-btn" @tap="declineInvite">暂不</view>
+          <view class="btn-primary anniversary__invite-btn" :class="{ disabled: inviteAccepting }" @tap="acceptInvite">
+            {{ inviteAccepting ? '接受中…' : '接受邀请' }}
+          </view>
+        </view>
+        <text class="caption anniversary__invite-expire">邀请码一次性有效 · 24 小时内有效</text>
+      </view>
+
+      <!-- ===== 列表页 ===== -->
       <template v-if="panel === 'home'">
         <view v-if="events.length === 0" class="anniversary__empty card">
           <text class="anniversary__empty-title">还没有记录重要日子</text>
@@ -21,24 +47,31 @@
         <template v-else>
           <view
             v-if="summary.nextEvent"
-            class="anniversary__hero card"
-            :class="{ 'anniversary__hero--today': heroIsToday }"
+            class="anniversary__hero"
+            :class="['anniversary__hero--' + summary.nextEvent.sceneType, { 'anniversary__hero--today': heroIsToday }]"
           >
             <view class="anniversary__hero-top">
-              <view>
-                <text class="caption">{{ heroIsToday ? '就是今天' : '下一个重要日子' }}</text>
-                <text class="anniversary__hero-title">{{ summary.nextEvent.title }}</text>
-              </view>
-              <view class="anniversary__hero-tag">{{ heroIsToday ? '🎉' : '' }}{{ sceneName(summary.nextEvent.sceneType) }}</view>
+              <view class="anniversary__hero-scene">{{ heroIsToday ? '🎉 ' : '' }}{{ sceneName(summary.nextEvent.sceneType) }}</view>
+              <text class="anniversary__hero-kicker">{{ heroIsToday ? '就是今天' : '下一个重要日子' }}</text>
             </view>
+            <view class="anniversary__hero-title">{{ summary.nextEvent.title }}</view>
             <view class="anniversary__hero-number">
-              <text class="anniversary__hero-days">{{ heroIsToday ? '今天' : computeOccurrence(summary.nextEvent).label }}</text>
+              <text class="anniversary__hero-days">{{ heroDaysText }}</text>
+              <text v-if="heroUnit" class="anniversary__hero-unit">{{ heroUnit }}</text>
             </view>
             <text class="anniversary__hero-detail">{{ computeOccurrence(summary.nextEvent).detail }}</text>
+            <view v-if="heroMilestone" class="anniversary__hero-milestone">
+              <view class="anniversary__hero-milestone-head">
+                <text>{{ heroMilestone.label }}里程碑</text>
+                <text class="anniversary__hero-milestone-pct">{{ heroMilestonePercent }}%</text>
+              </view>
+              <view class="anniversary__hero-milestone-track">
+                <view class="anniversary__hero-milestone-bar" :style="{ width: heroMilestonePercent + '%' }" />
+              </view>
+            </view>
             <view class="anniversary__hero-actions">
-              <view class="btn-ghost anniversary__small-btn" @tap="addToCalendar(summary.nextEvent)">加手机日历</view>
-              <view class="btn-ghost anniversary__small-btn" @tap="enableWechatReminder(summary.nextEvent)">微信提醒</view>
-              <view class="btn-primary anniversary__small-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '马上纪念' : '生成卡片' }}</view>
+              <view class="anniversary__hero-btn" @tap="addToCalendar(summary.nextEvent)">📅 写入日历</view>
+              <view class="anniversary__hero-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '✨ 马上纪念' : '✨ 生成卡片' }}</view>
             </view>
           </view>
 
@@ -62,16 +95,26 @@
               <text class="section-title">今天</text>
               <text class="caption">{{ summary.today.length }} 个</text>
             </view>
-            <view v-for="event in summary.today" :key="`today-${event.id}`" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">
+            <view
+              v-for="event in summary.today"
+              :key="`today-${event.id}`"
+              class="anniversary__event card"
+              @tap="openCard(event)"
+            >
+              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
                 <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
                 <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
               </view>
               <view class="anniversary__event-body">
-                <text class="anniversary__event-title">{{ event.title }}</text>
+                <view class="anniversary__event-title-row">
+                  <text class="anniversary__event-title">{{ event.title }}</text>
+                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
               </view>
-              <text class="anniversary__event-count">今天</text>
+              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">今天</text>
             </view>
           </view>
 
@@ -80,16 +123,26 @@
               <text class="section-title">即将到来</text>
               <text class="caption">7 天内</text>
             </view>
-            <view v-for="event in summary.upcoming" :key="`upcoming-${event.id}`" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">
+            <view
+              v-for="event in summary.upcoming"
+              :key="`upcoming-${event.id}`"
+              class="anniversary__event card"
+              @tap="openCard(event)"
+            >
+              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
                 <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
                 <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
               </view>
               <view class="anniversary__event-body">
-                <text class="anniversary__event-title">{{ event.title }}</text>
+                <view class="anniversary__event-title-row">
+                  <text class="anniversary__event-title">{{ event.title }}</text>
+                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
               </view>
-              <text class="anniversary__event-count">{{ computeOccurrence(event).daysUntil }} 天</text>
+              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ computeOccurrence(event).daysUntil }} 天</text>
             </view>
           </view>
 
@@ -118,27 +171,40 @@
                   v-for="scene in filterSceneOptions"
                   :key="scene.key"
                   class="anniversary__scene-chip"
-                  :class="{ 'anniversary__scene-chip--active': filterScene === scene.key }"
+                  :class="[
+                    filterScene === scene.key ? 'anniversary__scene-chip--active' : '',
+                    scene.key ? 'anniversary__scene-chip--c-' + scene.key : '',
+                  ]"
                   @tap="filterScene = filterScene === scene.key ? '' : scene.key"
                 >
+                  <view v-if="scene.key" class="anniversary__chip-dot" :class="'anniversary__chip-dot--' + scene.key" />
                   {{ scene.name }}
                 </view>
               </scroll-view>
             </view>
 
-            <view v-for="event in filteredEvents" :key="event.id" class="anniversary__event card" @tap="openCard(event)">
-              <view class="anniversary__date-badge">
+            <view
+              v-for="event in filteredEvents"
+              :key="event.id"
+              class="anniversary__event card"
+              @tap="openCard(event)"
+            >
+              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
                 <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
                 <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
               </view>
               <view class="anniversary__event-body">
                 <view class="anniversary__event-title-row">
                   <text class="anniversary__event-title">{{ event.title }}</text>
-                  <text v-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
                 </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).label }}</text>
               </view>
-              <text class="anniversary__event-count">{{ computeOccurrence(event).daysUntil >= 0 ? computeOccurrence(event).daysUntil + ' 天' : '已过' }}</text>
+              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">
+                {{ computeOccurrence(event).daysUntil >= 0 ? computeOccurrence(event).daysUntil + ' 天' : '已过' }}
+              </text>
             </view>
 
             <view v-if="filteredEvents.length === 0 && searchQuery" class="anniversary__empty">
@@ -148,17 +214,21 @@
         </template>
       </template>
 
+      <!-- ===== 编辑页 ===== -->
       <template v-else-if="panel === 'form'">
-        <view class="anniversary__tabs">
+        <view class="anniversary__scene-grid">
           <view
             v-for="scene in SCENE_OPTIONS"
             :key="scene.key"
-            class="anniversary__scene"
-            :class="{ 'anniversary__scene--active': form.sceneType === scene.key }"
+            class="anniversary__scene-cell"
+            :class="[
+              { 'anniversary__scene-cell--active': form.sceneType === scene.key },
+              'anniversary__scene-cell--c-' + scene.key,
+            ]"
             @tap="selectScene(scene.key)"
           >
-            <text>{{ scene.name }}</text>
-            <text class="caption">{{ scene.hint }}</text>
+            <text class="anniversary__scene-cell-icon">{{ SCENE_ICONS[scene.key] }}</text>
+            <text class="anniversary__scene-cell-name">{{ scene.name }}</text>
           </view>
         </view>
 
@@ -224,6 +294,29 @@
           </view>
 
           <view class="anniversary__field">
+            <text class="caption">提醒时刻 · 写入日历的具体时间</text>
+            <view class="anniversary__time-row">
+              <view
+                v-for="preset in REMINDER_TIME_PRESETS"
+                :key="preset"
+                class="anniversary__time-chip"
+                :class="{ 'anniversary__time-chip--active': form.remindTime === preset }"
+                @tap="form.remindTime = preset"
+              >
+                {{ preset }}
+              </view>
+              <picker mode="time" :value="form.remindTime" @change="onRemindTimeChange">
+                <view
+                  class="anniversary__time-chip anniversary__time-chip--custom"
+                  :class="{ 'anniversary__time-chip--active': !REMINDER_TIME_PRESETS.includes(form.remindTime as never) }"
+                >
+                  {{ REMINDER_TIME_PRESETS.includes(form.remindTime as never) ? '自定义' : form.remindTime }}
+                </view>
+              </picker>
+            </view>
+          </view>
+
+          <view class="anniversary__field">
             <text class="caption">默认模板</text>
             <picker mode="selector" :range="templateLabels" :value="templateIndex" @change="onTemplateChange">
               <view class="anniversary__picker">{{ templateLabels[templateIndex] }}</view>
@@ -255,49 +348,32 @@
         </view>
       </template>
 
+      <!-- ===== 卡片页 ===== -->
       <template v-else-if="panel === 'card' && cardEvent">
-        <view
-          v-if="previewImage"
-          :key="previewCardKey + '-rendered'"
-          class="anniversary__canvas-preview card"
-        >
+        <view v-if="previewImage" class="anniversary__canvas-preview card">
           <image class="anniversary__canvas-preview-image" :src="previewImage" mode="widthFix" />
-          <text v-if="previewRendering" class="caption anniversary__canvas-preview-state">正在更新预览…</text>
+          <view v-if="previewRendering" class="anniversary__canvas-preview-state caption">正在更新预览…</view>
         </view>
 
         <view
           v-else
-          :key="previewCardKey"
-          class="anniversary__card-preview card"
+          class="anniversary__card-preview"
           :class="[
-            `anniversary__card-preview--${cardTemplate}`,
-            `anniversary__card-preview--${cardTone}`,
-            {
-              'anniversary__card-preview--has-cover': hasCoverBackground,
-              'anniversary__card-preview--photo-bg': usesPhotoBackground,
-            },
+            'anniversary__card-preview--' + cardTone,
+            'anniversary__card-preview--' + cardTemplate,
+            { 'anniversary__card-preview--has-cover': hasCoverBackground, 'anniversary__card-preview--photo-bg': usesPhotoBackground },
           ]"
+          :key="previewCardKey"
         >
-          <image v-if="hasCoverBackground" class="anniversary__preview-bg" :src="cardCoverImage" mode="aspectFill" />
-          <view v-if="hasCoverBackground" class="anniversary__preview-overlay" />
-
-          <!-- 证书印章 -->
-          <view v-if="cardTemplate === 'certificate'" class="anniversary__preview-stamp">纪</view>
-
-          <!-- 进度环 -->
-          <view v-if="cardTemplate === 'progress'" class="anniversary__preview-ring-wrap">
-            <view class="anniversary__preview-ring" />
-            <text class="anniversary__preview-ring-text">{{ cardEvent.countMode === 'countup' ? '...' : Math.max(0, computeOccurrence(cardEvent).daysUntil) + '天' }}</text>
+          <view v-if="cardCoverImage" class="anniversary__preview-bg-wrap">
+            <image class="anniversary__preview-bg" :src="cardCoverImage" mode="aspectFill" />
+            <view class="anniversary__preview-overlay" />
           </view>
-
-          <!-- 节日星星 -->
-          <template v-if="cardTemplate === 'festival'">
-            <view class="anniversary__preview-ribbon">今天值得被记住</view>
-            <view class="anniversary__preview-spark" style="top: 236rpx; left: 92rpx;" />
-            <view class="anniversary__preview-spark" style="top: 322rpx; right: 84rpx;" />
-            <view class="anniversary__preview-dot" style="top: 286rpx; right: 168rpx;" />
-            <view class="anniversary__preview-dot" style="top: 380rpx; left: 148rpx;" />
-          </template>
+          <view v-if="cardTemplate === 'photo'" class="anniversary__preview-media">
+            <image v-if="cardCoverImage" :src="cardCoverImage" mode="aspectFill" />
+            <text v-else>📷</text>
+          </view>
+          <view v-if="cardTemplate === 'festival'" class="anniversary__preview-ribbon">今天值得被记住</view>
 
           <view class="anniversary__preview-labels">
             <text class="anniversary__preview-label">{{ templateName(cardTemplate) }}</text>
@@ -310,11 +386,30 @@
           <text class="anniversary__preview-title">{{ cardEvent.title }}</text>
           <text class="anniversary__preview-copy">{{ defaultCopyForEvent(cardEvent) }}</text>
           <text class="anniversary__preview-date">{{ eventDateLabel(cardEvent) }}</text>
+
+          <view v-if="cardTemplate === 'certificate'" class="anniversary__preview-stamp">纪</view>
+          <view v-if="cardTemplate === 'progress'" class="anniversary__preview-ring-wrap">
+            <view class="anniversary__preview-ring" />
+            <text class="anniversary__preview-ring-text">{{ previewNumber }}</text>
+          </view>
+          <template v-if="cardTemplate === 'festival'">
+            <view class="anniversary__preview-spark" style="top: 150rpx; right: 120rpx;" />
+            <view class="anniversary__preview-spark" style="top: 240rpx; right: 220rpx; opacity: 0.3;" />
+            <view class="anniversary__preview-dot" style="top: 190rpx; right: 90rpx;" />
+            <view class="anniversary__preview-dot" style="top: 300rpx; right: 300rpx;" />
+          </template>
         </view>
 
         <view v-if="cardEvent.calendarAddedAt" class="anniversary__reminder-status card">
           <text>📅 已写入手机日历</text>
-          <text class="caption">{{ cardEvent.remindDaysBefore > 0 ? `提前 ${cardEvent.remindDaysBefore} 天提醒` : '当天提醒' }}</text>
+          <text class="caption">
+            {{ cardEvent.remindDaysBefore > 0 ? `提前 ${cardEvent.remindDaysBefore} 天` : '当天' }} {{ cardEvent.remindTime || '09:00' }} 提醒
+          </text>
+        </view>
+
+        <view v-if="cardEvent.shared" class="anniversary__shared-bar card">
+          <text class="anniversary__shared-bar-main">👥 {{ cardEvent.memberCount }} 人一起记录这个日子</text>
+          <text class="caption">{{ cardEvent.role === 'owner' ? '你是创建者' : cardEvent.role === 'editor' ? '你有编辑权限' : '你只有查看权限' }}</text>
         </view>
 
         <view class="anniversary__section">
@@ -322,16 +417,21 @@
             <text class="section-title">模板</text>
             <text class="caption">保存图片时使用</text>
           </view>
-          <view class="anniversary__chip-grid">
+          <view class="anniversary__tpl-grid">
             <view
               v-for="template in TEMPLATE_OPTIONS"
               :key="template.key"
-              class="anniversary__chip"
-              :class="{ 'anniversary__chip--active': cardTemplate === template.key }"
+              class="anniversary__tpl"
+              :class="[
+                { 'anniversary__tpl--active': cardTemplate === template.key },
+                'anniversary__tpl-thumb--' + template.key,
+              ]"
               @tap="selectCardTemplate(template.key)"
             >
-              <text>{{ template.name }}</text>
-              <text class="caption">{{ template.hint }}</text>
+              <view class="anniversary__tpl-thumb">
+                <view class="anniversary__tpl-thumb-num">30</view>
+                <text class="anniversary__tpl-thumb-name">{{ template.name }}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -346,26 +446,68 @@
               v-for="tone in TONE_OPTIONS"
               :key="tone.key"
               class="anniversary__tone"
-              :class="{ 'anniversary__tone--active': cardTone === tone.key }"
+              :class="[
+                { 'anniversary__tone--active': cardTone === tone.key },
+                'anniversary__tone-swatch--' + tone.key,
+              ]"
               @tap="selectCardTone(tone.key)"
             >
+              <view class="anniversary__tone-swatch" :class="'anniversary__tone-swatch--' + tone.key" />
               <text>{{ tone.name }}</text>
-              <text class="caption">{{ tone.hint }}</text>
             </view>
           </view>
         </view>
 
-        <view class="anniversary__actions anniversary__actions--wrap">
-          <view class="btn-ghost anniversary__action" @tap="panel = 'home'">返回</view>
-          <view class="btn-ghost anniversary__action" @tap="openEdit(cardEvent)">编辑</view>
-          <view class="btn-ghost anniversary__action" @tap="chooseCoverForCard">换图</view>
-          <view class="btn-ghost anniversary__action" @tap="addToCalendar(cardEvent)">加手机日历</view>
-          <view class="btn-ghost anniversary__action" @tap="enableWechatReminder(cardEvent)">微信提醒</view>
-          <view class="btn-ghost anniversary__action" @tap="shareCard">分享</view>
-          <view class="btn-primary anniversary__action" :class="{ disabled: exporting }" @tap="exportCard">保存图片</view>
+        <view class="anniversary__bottom-space" />
+
+        <!-- 底部固定操作条：更多 / 分享 / 保存图片 -->
+        <view class="anniversary__bottom-bar">
+          <view class="anniversary__bottom-btn" @tap="moreSheetOpen = true">⋯</view>
+          <view class="anniversary__bottom-btn" @tap="shareCard">↗</view>
+          <view class="anniversary__bottom-cta" :class="{ disabled: exporting }" @tap="exportCard">
+            {{ exporting ? '生成中…' : '保存图片' }}
+          </view>
         </view>
 
-        <view class="anniversary__delete" @tap="removeCurrent">删除这个日子</view>
+        <!-- 「更多」底部面板 -->
+        <view v-if="moreSheetOpen" class="anniversary__sheet-mask" @tap="moreSheetOpen = false">
+          <view class="anniversary__sheet" @tap.stop>
+            <view class="anniversary__sheet-grabber" />
+            <text class="anniversary__sheet-title">更多操作</text>
+            <view
+              v-for="action in moreActions"
+              :key="action.key"
+              class="anniversary__sheet-item"
+              :class="{ 'anniversary__sheet-item--danger': action.danger }"
+              @tap="handleMoreAction(action.key)"
+            >
+              <view class="anniversary__sheet-icon">{{ action.icon }}</view>
+              <view class="anniversary__sheet-texts">
+                <text class="anniversary__sheet-item-title">{{ action.title }}</text>
+                <text class="caption">{{ action.sub }}</text>
+              </view>
+              <text class="anniversary__sheet-chevron">›</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 邀请面板 -->
+        <AnniversaryInviteSheet
+          v-if="inviteSheetOpen && selectedEvent"
+          :event-id="selectedEvent.id"
+          :event-title="selectedEvent.title"
+          @close="inviteSheetOpen = false"
+          @created="onInviteCreated"
+        />
+
+        <!-- 成员管理面板 -->
+        <AnniversaryMembersPanel
+          v-if="membersPanelOpen && selectedEvent"
+          :event-id="selectedEvent.id"
+          @close="membersPanelOpen = false"
+          @changed="loadEvents"
+          @left="onLeftSharedEvent"
+        />
       </template>
     </template>
 
@@ -375,20 +517,32 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref } from 'vue'
-import { onShareAppMessage, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import type {
   AnniversaryCalendarType,
   AnniversaryCardTemplate,
   AnniversaryCardTone,
   AnniversaryDraft,
   AnniversaryEvent,
+  AnniversaryInvitePreview,
   AnniversarySceneType,
 } from '@/types/anniversary'
-import { deleteAnniversary, fetchAnniversaries, markAnniversaryCalendarAdded, saveAnniversary, subscribeAnniversaryReminder } from '@/services/anniversary'
 import {
+  acceptAnniversaryInvite,
+  deleteAnniversary,
+  fetchAnniversaries,
+  markAnniversaryCalendarAdded,
+  previewAnniversaryInvite,
+  saveAnniversary,
+  saveAnniversaryMyPrefs,
+  subscribeAnniversaryReminder,
+} from '@/services/anniversary'
+import {
+  REMINDER_TIME_PRESETS,
   SCENE_OPTIONS,
   TEMPLATE_OPTIONS,
   TONE_OPTIONS,
+  buildCalendarEventTimes,
   computeOccurrence,
   dateFromString,
   defaultCopyForEvent,
@@ -396,6 +550,7 @@ import {
   emptyAnniversaryDraft,
   eventDateLabel,
   formatDate,
+  nextMilestoneForEvent,
   recommendedTemplateForScene,
   sceneName,
   summarizeAnniversaries,
@@ -403,8 +558,21 @@ import {
 import { lunarDayLabel, lunarLeapDays, lunarLeapMonth, lunarMonthDays, lunarMonthLabel, lunarToSolar, solarToLunar } from '@/utils/lunar'
 import { canvasToFile, chooseImage, getCanvasNode, openAuthSetting, saveImageToAlbum } from '@/utils/canvasAdapter'
 import { renderAnniversaryCard } from '@/utils/anniversaryCard'
+import AnniversaryInviteSheet from '@/components/AnniversaryInviteSheet.vue'
+import AnniversaryMembersPanel from '@/components/AnniversaryMembersPanel.vue'
 
-type Panel = 'home' | 'form' | 'card'
+type Panel = 'home' | 'form' | 'card' | 'invite'
+
+const SCENE_ICONS: Record<AnniversarySceneType, string> = {
+  birthday: '🎂',
+  relationship: '❤️',
+  wedding: '💍',
+  travel: '✈️',
+  deadline: '📝',
+  baby: '🍼',
+  habit: '💪',
+  custom: '✏️',
+}
 
 const instance = getCurrentInstance()?.proxy
 const events = ref<AnniversaryEvent[]>([])
@@ -421,6 +589,14 @@ const previewImage = ref('')
 const previewRendering = ref(false)
 let previewRenderSeq = 0
 
+// 共享协作状态
+const moreSheetOpen = ref(false)
+const inviteSheetOpen = ref(false)
+const membersPanelOpen = ref(false)
+const invitePreview = ref<AnniversaryInvitePreview | null>(null)
+const inviteAccepting = ref(false)
+const activeInvite = ref<{ code: string, role: 'editor' | 'viewer' } | null>(null)
+
 const remindValues = [0, 1, 3, 7, 14, 30]
 const remindLabels = ['当天提醒', '提前 1 天', '提前 3 天', '提前 7 天', '提前 14 天', '提前 30 天']
 const lunarYears = Array.from({ length: 201 }, (_, index) => 1900 + index)
@@ -430,6 +606,29 @@ const summary = computed(() => summarizeAnniversaries(events.value))
 const heroIsToday = computed(() => {
   if (!summary.value.nextEvent) return false
   return computeOccurrence(summary.value.nextEvent).daysUntil === 0
+})
+const heroOccurrence = computed(() => summary.value.nextEvent ? computeOccurrence(summary.value.nextEvent) : null)
+const heroDaysText = computed(() => {
+  const occurrence = heroOccurrence.value
+  if (!occurrence || !summary.value.nextEvent) return ''
+  if (summary.value.nextEvent.countMode === 'countup') {
+    return occurrence.elapsedDays > 0 ? String(occurrence.elapsedDays) : '还没开始'
+  }
+  return occurrence.daysUntil === 0 ? '今天' : String(occurrence.daysUntil)
+})
+const heroUnit = computed(() => {
+  const occurrence = heroOccurrence.value
+  if (!occurrence || !summary.value.nextEvent) return ''
+  if (summary.value.nextEvent.countMode === 'countup') return occurrence.elapsedDays > 0 ? '天' : ''
+  return occurrence.daysUntil === 0 ? '' : '天'
+})
+const heroMilestone = computed(() => summary.value.nextEvent ? nextMilestoneForEvent(summary.value.nextEvent) : null)
+const heroMilestonePercent = computed(() => {
+  const occurrence = heroOccurrence.value
+  const milestone = heroMilestone.value
+  if (!occurrence || !milestone) return 0
+  if (milestone.targetDays <= 0) return 0
+  return Math.min(100, Math.round((occurrence.elapsedDays / milestone.targetDays) * 100))
 })
 
 const previewOccurrence = computed(() => cardEvent.value ? computeOccurrence(cardEvent.value) : null)
@@ -450,7 +649,7 @@ const previewUnit = computed(() => {
 const sortedEvents = computed(() => [...events.value].sort((a, b) => b.id - a.id))
 const searchQuery = ref('')
 const filterScene = ref('')
-const filterSceneOptions = computed(() => [{ key: '', name: '全部' }, ...SCENE_OPTIONS])
+const filterSceneOptions = computed(() => [{ key: '' as '', name: '全部' }, ...SCENE_OPTIONS])
 const filteredEvents = computed(() => {
   let list = sortedEvents.value
   if (filterScene.value) {
@@ -462,7 +661,12 @@ const filteredEvents = computed(() => {
   }
   return list
 })
-const headerTitle = computed(() => panel.value === 'form' ? '记录重要日子' : panel.value === 'card' ? '生成纪念卡' : '重要日子')
+const headerTitle = computed(() => {
+  if (panel.value === 'form') return '记录重要日子'
+  if (panel.value === 'card') return '生成纪念卡'
+  if (panel.value === 'invite') return '共享邀请'
+  return '重要日子'
+})
 const selectedEvent = computed(() => events.value.find((event) => event.id === selectedId.value) ?? summary.value.nextEvent ?? events.value[0] ?? null)
 const cardEvent = computed<AnniversaryEvent | null>(() => selectedEvent.value ? {
   ...selectedEvent.value,
@@ -505,11 +709,59 @@ const lunarDayIndex = computed(() => Math.max(0, lunarDayOptions.value.indexOf(f
 const currentLunarMonthLabel = computed(() => lunarMonthLabel(form.value.lunarMonth || 1, form.value.isLunarLeapMonth))
 const currentLunarDayLabel = computed(() => lunarDayLabel(form.value.lunarDay || 1))
 
+interface MoreAction {
+  key: 'edit' | 'cover' | 'calendar' | 'wechat' | 'invite' | 'members' | 'delete'
+  icon: string
+  title: string
+  sub: string
+  danger?: boolean
+}
+
+const moreActions = computed<MoreAction[]>(() => {
+  const event = selectedEvent.value
+  if (!event) return []
+  const actions: MoreAction[] = []
+  if (event.role !== 'viewer') {
+    actions.push({ key: 'edit', icon: '✏️', title: '编辑这个日子', sub: '名称、日期、场景' })
+  }
+  actions.push({ key: 'cover', icon: '🖼', title: '换封面图', sub: '只影响你自己的卡片' })
+  actions.push({
+    key: 'calendar',
+    icon: '📅',
+    title: '加手机日历',
+    sub: `${event.remindDaysBefore > 0 ? `提前 ${event.remindDaysBefore} 天` : '当天'} ${event.remindTime || '09:00'} 提醒`,
+  })
+  actions.push({ key: 'wechat', icon: '🔔', title: '微信提醒', sub: '到期前推送一次' })
+  if (event.role === 'owner') {
+    actions.push({ key: 'invite', icon: '👥', title: '邀请共享', sub: '发给微信好友 · 一次性 · 24 小时有效' })
+  }
+  if (event.shared) {
+    actions.push({ key: 'members', icon: '☰', title: '共享成员', sub: `${event.memberCount} 人正在一起记录` })
+  }
+  if (event.role === 'owner') {
+    actions.push({ key: 'delete', icon: '🗑', title: '删除这个日子', sub: '所有成员将不再看到', danger: true })
+  }
+  return actions
+})
+
+onLoad((query) => {
+  const code = typeof query?.invite === 'string' ? query.invite.trim().toLowerCase() : ''
+  if (/^[a-f0-9]{8}$/.test(code)) {
+    void handleInviteEntry(code)
+  }
+})
+
 onShow(() => {
   void loadEvents()
 })
 
 onShareAppMessage(() => {
+  if (activeInvite.value) {
+    return {
+      title: `邀请你一起记录「${selectedEvent.value?.title ?? '这个日子'}」`,
+      path: '/pages/anniversary/index?invite=' + activeInvite.value.code,
+    }
+  }
   if (selectedEvent.value) {
     return {
       title: `${selectedEvent.value.title} · 时光纪念卡`,
@@ -534,29 +786,67 @@ async function loadEvents() {
   }
 }
 
+async function handleInviteEntry(code: string) {
+  pendingInviteCode = code
+  try {
+    invitePreview.value = await previewAnniversaryInvite(code)
+    panel.value = 'invite'
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '邀请已失效或过期', icon: 'none' })
+  }
+}
+
+function declineInvite() {
+  invitePreview.value = null
+  panel.value = 'home'
+}
+
+async function acceptInvite() {
+  const preview = invitePreview.value
+  if (!preview || inviteAccepting.value) return
+  inviteAccepting.value = true
+  try {
+    // 从 onShareAppMessage path 的 query 里拿不到 code，这里保存进入时解析到的码
+    const code = pendingInviteCode
+    const result = await acceptAnniversaryInvite(code)
+    upsertEvent(result.event)
+    invitePreview.value = null
+    panel.value = 'home'
+    uni.showToast({ title: result.alreadyMember ? '你已在这个日子的协作列表中' : '已加入共享', icon: 'success' })
+    void loadEvents()
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '接受邀请失败', icon: 'none' })
+  } finally {
+    inviteAccepting.value = false
+  }
+}
+
+let pendingInviteCode = ''
+
 function openCreate(sceneType: AnniversarySceneType = 'birthday') {
   form.value = emptyAnniversaryDraft(sceneType)
-  syncLunarFromSolar()
+  selectedId.value = null
   panel.value = 'form'
 }
 
 function openEdit(event: AnniversaryEvent) {
+  if (event.role === 'viewer') {
+    uni.showToast({ title: '你只有查看权限，不能编辑这个日子', icon: 'none' })
+    return
+  }
   form.value = draftFromEvent(event)
+  selectedId.value = event.id
   panel.value = 'form'
 }
 
 function goHome() {
-  if (panel.value === 'form' && form.value.title.trim()) {
+  if (form.value.title.trim() && form.value.title.trim() !== selectedEvent.value?.title) {
     uni.showModal({
       title: '放弃编辑？',
-      content: '当前填写的内容尚未保存，确定离开吗？',
-      confirmText: '离开',
-      confirmColor: '#e06a5a',
+      content: '已填写的内容还没有保存',
+      confirmText: '放弃',
       success: (result) => {
-        if (result.confirm) {
-          form.value = emptyAnniversaryDraft()
-          panel.value = 'home'
-        }
+        if (result.confirm) panel.value = 'home'
       },
     })
     return
@@ -565,25 +855,16 @@ function goHome() {
 }
 
 function selectScene(sceneType: AnniversarySceneType) {
-  const next = emptyAnniversaryDraft(sceneType)
-  form.value = {
-    ...next,
-    id: form.value.id,
-    title: form.value.title && form.value.title !== '生日' ? form.value.title : next.title,
-    eventDate: form.value.eventDate,
-    calendarType: form.value.calendarType,
-    lunarYear: form.value.lunarYear,
-    lunarMonth: form.value.lunarMonth,
-    lunarDay: form.value.lunarDay,
-    isLunarLeapMonth: form.value.isLunarLeapMonth,
-    coverImage: form.value.coverImage,
-  }
+  form.value.sceneType = sceneType
 }
 
 function setCalendarType(type: AnniversaryCalendarType) {
+  if (form.value.calendarType === type) return
   form.value.calendarType = type
   if (type === 'lunar') {
     syncLunarFromSolar()
+  } else {
+    applyLunarToSolar()
   }
 }
 
@@ -592,35 +873,25 @@ function onSolarDateChange(event: { detail: { value: string } }) {
   if (form.value.calendarType === 'lunar') syncLunarFromSolar()
 }
 
-function onLunarYearChange(event: { detail: { value: number | string } }) {
-  form.value.lunarYear = lunarYears[Number(event.detail.value)] ?? new Date().getFullYear()
+function onLunarYearChange(event: { detail: { value: number } }) {
+  form.value.lunarYear = lunarYears[event.detail.value] ?? new Date().getFullYear()
   normalizeLunarMonth()
+  normalizeLunarDay()
   applyLunarToSolar()
 }
 
-function onLunarMonthChange(event: { detail: { value: number | string } }) {
-  const option = lunarMonthOptions.value[Number(event.detail.value)] ?? lunarMonthOptions.value[0]
+function onLunarMonthChange(event: { detail: { value: number } }) {
+  const option = lunarMonthOptions.value[event.detail.value]
+  if (!option) return
   form.value.lunarMonth = option.month
   form.value.isLunarLeapMonth = option.isLeap
   normalizeLunarDay()
   applyLunarToSolar()
 }
 
-function onLunarDayChange(event: { detail: { value: number | string } }) {
-  form.value.lunarDay = lunarDayOptions.value[Number(event.detail.value)] ?? 1
+function onLunarDayChange(event: { detail: { value: number } }) {
+  form.value.lunarDay = lunarDayOptions.value[event.detail.value] ?? 1
   applyLunarToSolar()
-}
-
-function onRemindChange(event: { detail: { value: number | string } }) {
-  form.value.remindDaysBefore = remindValues[Number(event.detail.value)] ?? 1
-}
-
-function onTemplateChange(event: { detail: { value: number | string } }) {
-  form.value.cardTemplate = TEMPLATE_OPTIONS[Number(event.detail.value)]?.key ?? 'minimal'
-}
-
-function onToneChange(event: { detail: { value: number | string } }) {
-  form.value.cardTone = TONE_OPTIONS[Number(event.detail.value)]?.key ?? 'warm'
 }
 
 function syncLunarFromSolar() {
@@ -633,29 +904,40 @@ function syncLunarFromSolar() {
 }
 
 function applyLunarToSolar() {
-  const solar = lunarToSolar(
-    form.value.lunarYear || new Date().getFullYear(),
-    form.value.lunarMonth || 1,
-    form.value.lunarDay || 1,
-    form.value.isLunarLeapMonth,
-  )
-  if (solar) {
-    form.value.eventDate = formatDate(solar)
-  }
+  if (!form.value.lunarYear || !form.value.lunarMonth || !form.value.lunarDay) return
+  const solar = lunarToSolar(form.value.lunarYear, form.value.lunarMonth, form.value.lunarDay, form.value.isLunarLeapMonth)
+  if (!solar) return
+  form.value.eventDate = formatDate(solar)
 }
 
 function normalizeLunarMonth() {
-  const matched = lunarMonthOptions.value.find((item) => item.month === form.value.lunarMonth && item.isLeap === form.value.isLunarLeapMonth)
-  if (!matched) {
-    const first = lunarMonthOptions.value[0]
-    form.value.lunarMonth = first.month
-    form.value.isLunarLeapMonth = first.isLeap
-  }
+  if (!form.value.lunarMonth || form.value.lunarMonth < 1) form.value.lunarMonth = 1
+  if (form.value.lunarMonth > 12) form.value.lunarMonth = 12
 }
 
 function normalizeLunarDay() {
   const max = lunarDayOptions.value[lunarDayOptions.value.length - 1] ?? 30
   if (!form.value.lunarDay || form.value.lunarDay > max) form.value.lunarDay = max
+}
+
+function onRemindChange(event: { detail: { value: number } }) {
+  form.value.remindDaysBefore = remindValues[event.detail.value] ?? 1
+}
+
+function onRemindTimeChange(event: { detail: { value: string } }) {
+  if (/^\d{2}:\d{2}$/.test(event.detail.value)) {
+    form.value.remindTime = event.detail.value
+  }
+}
+
+function onTemplateChange(event: { detail: { value: number } }) {
+  const option = TEMPLATE_OPTIONS[event.detail.value]
+  if (option) form.value.cardTemplate = option.key
+}
+
+function onToneChange(event: { detail: { value: number } }) {
+  const option = TONE_OPTIONS[event.detail.value]
+  if (option) form.value.cardTone = option.key
 }
 
 async function chooseCoverForForm() {
@@ -712,6 +994,10 @@ function openCard(event: AnniversaryEvent) {
   cardTone.value = event.cardTone || 'warm'
   cardCoverImage.value = event.coverImage || ''
   panel.value = 'card'
+  moreSheetOpen.value = false
+  inviteSheetOpen.value = false
+  membersPanelOpen.value = false
+  activeInvite.value = null
   previewImage.value = ''
   void renderPreviewCard()
 }
@@ -734,12 +1020,21 @@ function selectCardTone(tone: AnniversaryCardTone) {
 
 async function saveCardPreference(showToast = true) {
   if (!selectedEvent.value) return
-  const event = await saveAnniversary({
-    ...draftFromEvent(selectedEvent.value),
-    cardTemplate: cardTemplate.value,
-    cardTone: cardTone.value,
-    coverImage: cardCoverImage.value,
-  })
+  const base = selectedEvent.value
+  // 偏好是每人一份：viewer 只发 myPrefs（走新后端的偏好分支）；
+  // 非 viewer 发全量 draft——旧后端（未部署新版时）也能正常保存，避免 422
+  const event = base.role === 'viewer'
+    ? await saveAnniversaryMyPrefs(base.id, {
+        cardTemplate: cardTemplate.value,
+        cardTone: cardTone.value,
+        coverImage: cardCoverImage.value,
+      })
+    : await saveAnniversary({
+        ...draftFromEvent(base),
+        cardTemplate: cardTemplate.value,
+        cardTone: cardTone.value,
+        coverImage: cardCoverImage.value,
+      })
   upsertEvent(event)
   selectedId.value = event.id
   if (showToast) uni.showToast({ title: '卡片偏好已保存', icon: 'success' })
@@ -864,14 +1159,15 @@ async function requestSubscribeReminder(event: AnniversaryEvent): Promise<Subscr
 
 function writePhoneCalendar(event: AnniversaryEvent): Promise<void> {
   const occurrence = computeOccurrence(event)
-  const [year, month, day] = occurrence.date.split('-').map(Number)
-  const start = new Date(year, month - 1, day)
+  // 非全天日程 + 明确时刻：消除系统对全天事件默认 9:00 的提醒时间
+  const times = buildCalendarEventTimes(event.remindDaysBefore, event.remindTime || '09:00', occurrence.date)
   const payload = {
     title: event.title,
-    startTime: Math.floor(start.getTime() / 1000),
-    allDay: true,
+    startTime: times.startTime,
+    endTime: times.endTime,
+    allDay: false,
     alarm: true,
-    alarmOffset: event.remindDaysBefore * 86400,
+    alarmOffset: times.alarmOffset,
     description: `来自枫叶小屋 · 时光纪念卡\n${defaultCopyForEvent(event, occurrence)}`,
   }
   return new Promise((resolve, reject) => {
@@ -915,14 +1211,7 @@ async function exportCard() {
     uni.hideLoading()
     const message = error instanceof Error ? error.message : '保存失败'
     if (/auth|deny|denied/i.test(message)) {
-      uni.showModal({
-        title: '需要相册权限',
-        content: '保存纪念卡需要相册权限，请在设置中开启。',
-        confirmText: '去设置',
-        success: (result) => {
-          if (result.confirm) openAuthSetting()
-        },
-      })
+      openAuthSetting()
     } else if (!/cancel/i.test(message)) {
       uni.showToast({ title: message, icon: 'none' })
     }
@@ -980,7 +1269,7 @@ function removeCurrent() {
   if (!selectedEvent.value) return
   uni.showModal({
     title: '删除纪念日',
-    content: `确定删除「${selectedEvent.value.title}」吗？`,
+    content: `确定删除「${selectedEvent.value.title}」吗？共享成员将不再看到这个日子。`,
     confirmText: '删除',
     confirmColor: '#e06a5a',
     success: (result) => {
@@ -993,6 +1282,54 @@ function removeCurrent() {
       })
     },
   })
+}
+
+function handleMoreAction(key: MoreAction['key']) {
+  const event = selectedEvent.value
+  if (!event) return
+  switch (key) {
+    case 'edit':
+      moreSheetOpen.value = false
+      openEdit(event)
+      break
+    case 'cover':
+      moreSheetOpen.value = false
+      void chooseCoverForCard()
+      break
+    case 'calendar':
+      moreSheetOpen.value = false
+      void addToCalendar(event)
+      break
+    case 'wechat':
+      moreSheetOpen.value = false
+      void enableWechatReminder(event)
+      break
+    case 'invite':
+      moreSheetOpen.value = false
+      inviteSheetOpen.value = true
+      break
+    case 'members':
+      moreSheetOpen.value = false
+      membersPanelOpen.value = true
+      break
+    case 'delete':
+      moreSheetOpen.value = false
+      removeCurrent()
+      break
+  }
+}
+
+function onInviteCreated(invite: { code: string, role: 'editor' | 'viewer' }) {
+  activeInvite.value = invite
+}
+
+function onLeftSharedEvent() {
+  const event = selectedEvent.value
+  if (!event) return
+  events.value = events.value.filter((item) => item.id !== event.id)
+  selectedId.value = null
+  panel.value = 'home'
+  uni.showToast({ title: '已退出共享', icon: 'success' })
 }
 
 function upsertEvent(event: AnniversaryEvent) {
@@ -1026,6 +1363,8 @@ function toneHint(tone: AnniversaryCardTone): string {
 </script>
 
 <style lang="scss" scoped>
+@import '@/styles/anniversary-scene.scss';
+
 .anniversary {
   min-height: 100vh;
   padding: 48rpx 32rpx 180rpx;
@@ -1090,92 +1429,139 @@ function toneHint(tone: AnniversaryCardTone): string {
     margin-top: 18rpx;
   }
 
+  /* ---- hero：满幅场景渐变 ---- */
+
   &__hero {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 18rpx;
-    margin-bottom: 24rpx;
-    background: linear-gradient(135deg, #fff, #fff7ef);
+    gap: 14rpx;
+    margin: 0 -32rpx 28rpx;
+    padding: 36rpx 36rpx 30rpx;
+    overflow: hidden;
+    color: #ffffff;
+    box-shadow: 0 16rpx 40rpx rgba(74, 63, 53, 0.18);
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: -120rpx;
+      right: -80rpx;
+      width: 340rpx;
+      height: 340rpx;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
   }
 
-  &__hero--today {
-    background: linear-gradient(135deg, #fff5f0, #ffe8d6);
-    border-color: #f0c8a0;
-  }
-
-  &__hero--today &__hero-days {
-    color: #d4855e;
-  }
-
-  &__hero--today &__hero-tag {
-    background: #fde8d0;
-    color: #c07040;
-  }
-
-  &__hero-top,
-  &__section-head {
+  &__hero-top {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 20rpx;
   }
 
-  &__hero-title {
-    display: block;
-    margin-top: 8rpx;
-    color: $color-text;
-    font-size: 36rpx;
-    font-weight: 700;
+  &__hero-scene {
+    padding: 8rpx 20rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.2);
+    border: 2rpx solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    font-size: 22rpx;
+    font-weight: 600;
+    flex-shrink: 0;
   }
 
-  &__hero-tag {
-    padding: 8rpx 14rpx;
-    border-radius: $radius-sm;
-    background: $color-primary-light;
-    color: $color-primary-dark;
+  &__hero-kicker {
+    color: rgba(255, 255, 255, 0.75);
     font-size: 22rpx;
-    flex-shrink: 0;
+    letter-spacing: 4rpx;
+  }
+
+  &__hero-title {
+    font-size: 38rpx;
+    font-weight: 700;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__hero-number {
     display: flex;
     align-items: baseline;
+    gap: 10rpx;
   }
 
   &__hero-days {
-    color: $color-text;
-    font-size: 74rpx;
+    font-size: 140rpx;
     font-weight: 700;
+    line-height: 0.95;
+    color: #ffffff;
+  }
+
+  &__hero-unit {
+    font-size: 36rpx;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
   }
 
   &__hero-detail {
-    color: $color-text-secondary;
+    color: rgba(255, 255, 255, 0.88);
     font-size: 26rpx;
   }
 
-  &__hero-actions,
-  &__actions {
+  &__hero-milestone {
     display: flex;
-    gap: 18rpx;
+    flex-direction: column;
+    gap: 10rpx;
+    margin-top: 6rpx;
   }
 
-  &__small-btn,
-  &__action {
+  &__hero-milestone-head {
+    display: flex;
+    justify-content: space-between;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 22rpx;
+  }
+
+  &__hero-milestone-pct {
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  &__hero-milestone-track {
+    height: 8rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+  }
+
+  &__hero-milestone-bar {
+    height: 8rpx;
+    border-radius: 999rpx;
+    background: #ffffff;
+  }
+
+  &__hero-actions {
+    display: flex;
+    gap: 16rpx;
+    margin-top: 10rpx;
+  }
+
+  &__hero-btn {
     flex: 1;
+    height: 72rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.18);
+    border: 2rpx solid rgba(255, 255, 255, 0.32);
+    color: #ffffff;
     font-size: 26rpx;
-    padding: 18rpx 0;
-  }
-
-  &__actions {
-    margin-top: 24rpx;
-  }
-
-  &__actions--wrap {
-    flex-wrap: wrap;
-  }
-
-  &__actions--wrap &__action {
-    min-width: 200rpx;
+    font-weight: 600;
   }
 
   &__stats {
@@ -1222,8 +1608,10 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__scene-chip {
-    display: inline-block;
-    padding: 10rpx 20rpx;
+    display: inline-flex;
+    align-items: center;
+    gap: 10rpx;
+    padding: 10rpx 22rpx;
     margin-right: 12rpx;
     border: 2rpx solid $color-border;
     border-radius: 999rpx;
@@ -1232,44 +1620,14 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 24rpx;
   }
 
-  &__scene-chip--active {
-    border-color: $color-primary;
-    background: $color-primary-light;
-    color: $color-primary-dark;
-    font-weight: 600;
-  }
-
-  /* ---- reminder badge ---- */
-
-  &__event-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10rpx;
-    min-width: 0;
-  }
-
-  &__event-reminder-badge {
-    padding: 2rpx 10rpx;
-    border-radius: 999rpx;
-    background: $color-primary-light;
-    color: $color-primary-dark;
-    font-size: 20rpx;
-    font-weight: 500;
-    white-space: nowrap;
+  &__chip-dot {
+    width: 14rpx;
+    height: 14rpx;
+    border-radius: 50%;
     flex-shrink: 0;
   }
 
-  &__reminder-status {
-    display: flex;
-    flex-direction: column;
-    gap: 6rpx;
-    margin-bottom: 8rpx;
-    padding: 18rpx 24rpx;
-    color: $color-text;
-    font-size: 26rpx;
-    background: #f0f7f0;
-    border-color: #c8dcc8;
-  }
+  /* ---- event rows ---- */
 
   &__section {
     display: flex;
@@ -1278,20 +1636,33 @@ function toneHint(tone: AnniversaryCardTone): string {
     margin-bottom: 32rpx;
   }
 
-  &__event {
-    display: grid;
-    grid-template-columns: 76rpx 1fr auto;
-    align-items: center;
+  &__section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
     gap: 20rpx;
-    padding: 24rpx;
+  }
+
+  &__event {
+    position: relative;
+    display: grid;
+    grid-template-columns: 8rpx 76rpx 1fr auto;
+    align-items: center;
+    gap: 18rpx;
+    padding: 20rpx 24rpx 20rpx 20rpx;
+    overflow: hidden;
+  }
+
+  &__event-bar {
+    width: 8rpx;
+    height: 72rpx;
+    border-radius: 999rpx;
   }
 
   &__date-badge {
     width: 76rpx;
     height: 76rpx;
     border-radius: $radius-md;
-    background: $color-primary-light;
-    color: $color-primary-dark;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1302,6 +1673,7 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__date-badge-month {
     font-size: 18rpx;
     line-height: 1.1;
+    opacity: 0.75;
   }
 
   &__date-badge-day {
@@ -1317,6 +1689,13 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 6rpx;
   }
 
+  &__event-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    min-width: 0;
+  }
+
   &__event-title {
     color: $color-text;
     font-size: 30rpx;
@@ -1326,9 +1705,30 @@ function toneHint(tone: AnniversaryCardTone): string {
     white-space: nowrap;
   }
 
-  &__event-count {
+  &__event-reminder-badge {
+    padding: 2rpx 10rpx;
+    border-radius: 999rpx;
+    background: $color-primary-light;
     color: $color-primary-dark;
-    font-size: 24rpx;
+    font-size: 20rpx;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  &__event-shared-badge {
+    padding: 2rpx 12rpx;
+    border-radius: 999rpx;
+    background: #eef1f7;
+    color: #5e6f9a;
+    font-size: 20rpx;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  &__event-count {
+    font-size: 26rpx;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -1351,35 +1751,103 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-weight: 700;
   }
 
-  &__tabs,
-  &__chip-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* ---- 邀请接受面板 ---- */
+
+  &__invite {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     gap: 16rpx;
-    margin-bottom: 24rpx;
+    padding: 56rpx 40rpx;
+    text-align: center;
   }
 
-  &__scene,
-  &__chip {
-    min-height: 118rpx;
-    padding: 20rpx;
-    border: 2rpx solid $color-border;
-    border-radius: $radius-md;
-    background: $color-card;
+  &__invite-eyebrow {
+    color: $color-primary-dark;
+    font-size: 24rpx;
+    letter-spacing: 6rpx;
+  }
+
+  &__invite-avatar {
+    width: 108rpx;
+    height: 108rpx;
+    border-radius: 50%;
+    background: $color-primary-light;
+  }
+
+  &__invite-avatar--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48rpx;
+  }
+
+  &__invite-title {
+    color: $color-text;
+    font-size: 40rpx;
+    font-weight: 700;
+  }
+
+  &__invite-role {
     display: flex;
     flex-direction: column;
     gap: 8rpx;
-    color: $color-text;
-    font-size: 28rpx;
-    font-weight: 600;
+    width: 100%;
+    padding: 20rpx 24rpx;
+    border-radius: $radius-md;
+    background: #f6efe7;
   }
 
-  &__scene--active,
-  &__chip--active {
-    border-color: $color-primary;
-    background: $color-primary;
-    color: #ffffff;
-    font-weight: 600;
+  &__invite-role-title {
+    font-size: 28rpx;
+    font-weight: 700;
+    color: $color-text;
+  }
+
+  &__invite-actions {
+    display: flex;
+    gap: 18rpx;
+    width: 100%;
+    margin-top: 12rpx;
+  }
+
+  &__invite-btn {
+    flex: 1;
+  }
+
+  &__invite-expire {
+    margin-top: 4rpx;
+  }
+
+  /* ---- 编辑页：场景格子 ---- */
+
+  &__scene-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14rpx;
+    margin-bottom: 24rpx;
+  }
+
+  &__scene-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+    padding: 20rpx 0 16rpx;
+    border: 2rpx solid $color-border;
+    border-radius: $radius-md;
+    background: $color-card;
+  }
+
+  &__scene-cell-icon {
+    font-size: 40rpx;
+    line-height: 1;
+  }
+
+  &__scene-cell-name {
+    color: $color-text;
+    font-size: 22rpx;
+    font-weight: 500;
   }
 
   &__form {
@@ -1442,6 +1910,38 @@ function toneHint(tone: AnniversaryCardTone): string {
     grid-column: 1 / -1;
   }
 
+  /* ---- 提醒时刻 ---- */
+
+  &__time-row {
+    display: flex;
+    gap: 12rpx;
+    flex-wrap: wrap;
+  }
+
+  &__time-chip {
+    min-width: 128rpx;
+    height: 68rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-md;
+    background: #f6efe7;
+    color: $color-text-secondary;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+
+  &__time-chip--active {
+    background: #fbeae5;
+    border: 2rpx solid #e06a5a;
+    color: #b8402e;
+    font-weight: 700;
+  }
+
+  &__time-chip--custom {
+    border: 2rpx dashed $color-border;
+  }
+
   &__cover {
     min-height: 220rpx;
     border: 2rpx dashed $color-border;
@@ -1486,6 +1986,20 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 10rpx;
     color: $color-primary-dark;
   }
+
+  &__actions {
+    display: flex;
+    gap: 18rpx;
+    margin-top: 8rpx;
+  }
+
+  &__action {
+    flex: 1;
+    font-size: 26rpx;
+    padding: 18rpx 0;
+  }
+
+  /* ---- 卡片页 ---- */
 
   &__card-preview {
     min-height: 760rpx;
@@ -1558,6 +2072,12 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__preview-media image {
     width: 100%;
     height: 100%;
+  }
+
+  &__preview-bg-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
   }
 
   &__preview-bg {
@@ -1781,6 +2301,102 @@ function toneHint(tone: AnniversaryCardTone): string {
     z-index: 2;
   }
 
+  &__reminder-status {
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+    margin-bottom: 8rpx;
+    padding: 18rpx 24rpx;
+    color: $color-text;
+    font-size: 26rpx;
+    background: #f0f7f0;
+    border-color: #c8dcc8;
+  }
+
+  &__shared-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+    margin-bottom: 8rpx;
+    padding: 18rpx 24rpx;
+    background: #eef1f7;
+    border-color: #d5dcea;
+  }
+
+  &__shared-bar-main {
+    color: #4a5878;
+    font-size: 26rpx;
+    font-weight: 600;
+  }
+
+  /* ---- 模板缩略图 / 风格色卡 ---- */
+
+  &__tpl-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14rpx;
+  }
+
+  &__tpl {
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+
+  &__tpl-thumb {
+    height: 104rpx;
+    border-radius: $radius-md;
+    border: 2rpx solid $color-border;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4rpx;
+    overflow: hidden;
+  }
+
+  &__tpl-thumb-num {
+    font-size: 34rpx;
+    font-weight: 700;
+    line-height: 1;
+    color: $color-text;
+  }
+
+  &__tpl-thumb-name {
+    font-size: 20rpx;
+    color: $color-text-secondary;
+  }
+
+  &__tpl--active &__tpl-thumb {
+    border: 3rpx solid $color-primary-dark;
+    background: $color-primary-light;
+  }
+
+  &__tpl-thumb--certificate &__tpl-thumb {
+    border: 4rpx double #b8925e;
+  }
+
+  &__tpl-thumb--progress &__tpl-thumb-num {
+    color: $color-primary;
+  }
+
+  &__tpl-thumb--calendar &__tpl-thumb-num {
+    color: #8a6fa8;
+  }
+
+  &__tpl-thumb--photo &__tpl-thumb {
+    background: repeating-linear-gradient(45deg, #f3ece2, #f3ece2 12rpx, #efe6d8 12rpx, #efe6d8 24rpx);
+  }
+
+  &__tpl-thumb--boarding &__tpl-thumb {
+    border-radius: 20rpx 20rpx 8rpx 8rpx;
+    background: #e8f0f7;
+  }
+
+  &__tpl-thumb--festival &__tpl-thumb {
+    background: #fdf0f2;
+  }
+
   &__tone-row {
     display: flex;
     gap: 14rpx;
@@ -1789,7 +2405,7 @@ function toneHint(tone: AnniversaryCardTone): string {
 
   &__tone {
     min-width: 104rpx;
-    padding: 14rpx 22rpx;
+    padding: 12rpx 22rpx;
     border: 2rpx solid $color-border;
     border-radius: 999rpx;
     background: $color-card;
@@ -1798,18 +2414,172 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 24rpx;
     display: flex;
     flex-direction: column;
-    gap: 2rpx;
+    align-items: center;
+    gap: 8rpx;
+  }
+
+  &__tone-swatch {
+    width: 44rpx;
+    height: 20rpx;
+    border-radius: 999rpx;
+  }
+
+  &__tone-swatch--warm {
+    background: linear-gradient(90deg, #fff8f0, #f0dcc0);
+  }
+
+  &__tone-swatch--fresh {
+    background: linear-gradient(90deg, #eef8f5, #cfe8de);
+  }
+
+  &__tone-swatch--classic {
+    background: linear-gradient(90deg, #f6f3ee, #ddd6ca);
+  }
+
+  &__tone-swatch--rose {
+    background: linear-gradient(90deg, #fff3f4, #f2d2d5);
+  }
+
+  &__tone-swatch--ink {
+    background: linear-gradient(90deg, #f7f7f4, #d9ded4);
   }
 
   &__tone--active {
     border-color: $color-primary;
-    background: $color-primary;
-    color: #ffffff;
+    color: $color-primary-dark;
     font-weight: 600;
   }
 
-  &__tone--active .caption {
-    color: rgba(255, 255, 255, 0.75);
+  /* ---- 底部固定条 + 更多面板 ---- */
+
+  &__bottom-space {
+    height: 140rpx;
+  }
+
+  &__bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    display: flex;
+    gap: 16rpx;
+    align-items: center;
+    padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
+    background: #fffdf9;
+    border-top: 2rpx solid $color-border;
+  }
+
+  &__bottom-btn {
+    width: 92rpx;
+    height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-md;
+    background: #f0e7da;
+    color: $color-text-secondary;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+
+  &__bottom-cta {
+    flex: 1;
+    height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-md;
+    background: linear-gradient(180deg, #d95440, #b8402e);
+    color: #ffffff;
+    font-size: 30rpx;
+    font-weight: 700;
+    box-shadow: 0 8rpx 24rpx rgba(184, 64, 46, 0.3);
+
+    &.disabled {
+      opacity: 0.6;
+    }
+  }
+
+  &__sheet-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(74, 63, 53, 0.55);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  &__sheet {
+    background: $color-card;
+    border-radius: 32rpx 32rpx 0 0;
+    padding: 16rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+  }
+
+  &__sheet-grabber {
+    width: 72rpx;
+    height: 8rpx;
+    border-radius: 999rpx;
+    background: #e0d5c5;
+    margin: 0 auto 12rpx;
+  }
+
+  &__sheet-title {
+    color: $color-text;
+    font-size: 30rpx;
+    font-weight: 700;
+    padding: 8rpx 4rpx 14rpx;
+  }
+
+  &__sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+    padding: 20rpx 8rpx;
+    border-top: 2rpx solid rgba(240, 228, 215, 0.6);
+  }
+
+  &__sheet-item--danger &__sheet-item-title {
+    color: $color-danger;
+  }
+
+  &__sheet-icon {
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: $radius-md;
+    background: #f6efe7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30rpx;
+    flex-shrink: 0;
+  }
+
+  &__sheet-item--danger &__sheet-icon {
+    background: #fbeae5;
+  }
+
+  &__sheet-texts {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+  }
+
+  &__sheet-item-title {
+    color: $color-text;
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+
+  &__sheet-chevron {
+    color: $color-text-secondary;
+    font-size: 28rpx;
   }
 
   &__delete {
