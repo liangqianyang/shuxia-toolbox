@@ -110,7 +110,7 @@
                 <view class="anniversary__event-title-row">
                   <text class="anniversary__event-title">{{ event.title }}</text>
                   <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
                 </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
               </view>
@@ -138,7 +138,7 @@
                 <view class="anniversary__event-title-row">
                   <text class="anniversary__event-title">{{ event.title }}</text>
                   <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
                 </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
               </view>
@@ -198,7 +198,7 @@
                 <view class="anniversary__event-title-row">
                   <text class="anniversary__event-title">{{ event.title }}</text>
                   <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已提醒</text>
+                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
                 </view>
                 <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).label }}</text>
               </view>
