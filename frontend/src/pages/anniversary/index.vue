@@ -553,6 +553,7 @@ import {
   nextMilestoneForEvent,
   recommendedTemplateForScene,
   sceneName,
+  sortAnniversaryEvents,
   summarizeAnniversaries,
 } from '@/utils/anniversary'
 import { lunarDayLabel, lunarLeapDays, lunarLeapMonth, lunarMonthDays, lunarMonthLabel, lunarToSolar, solarToLunar } from '@/utils/lunar'
@@ -646,18 +647,8 @@ const previewUnit = computed(() => {
   if (cardEvent.value?.countMode === 'countup') return '天'
   return daysUntil === 0 ? '今天' : '天'
 })
-// 全部日子：按离现在由近到远（今天的在前、已过的沉底且近的在前），同级按创建顺序稳定
-const sortedEvents = computed(() => {
-  return [...events.value]
-    .map((event) => ({ event, daysUntil: computeOccurrence(event).daysUntil }))
-    .sort((a, b) => {
-      const keyOf = (days: number) => (days >= 0 ? days : 1000000 - days)
-      return keyOf(a.daysUntil) - keyOf(b.daysUntil)
-        || a.event.sortOrder - b.event.sortOrder
-        || a.event.id - b.event.id
-    })
-    .map((item) => item.event)
-})
+// 全部日子：今年未到的由远到近，跨年的排在今年之后，已过沉底
+const sortedEvents = computed(() => sortAnniversaryEvents(events.value))
 const searchQuery = ref('')
 const filterScene = ref('')
 const filterSceneOptions = computed(() => [{ key: '' as '', name: '全部' }, ...SCENE_OPTIONS])

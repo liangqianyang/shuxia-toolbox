@@ -1294,4 +1294,40 @@ function testAdventure() {
     assert(round.remindTime === '20:00', 'draftFromEvent 保留提醒时刻')
     assert(round.id === 1 && round.title === event.title, 'draftFromEvent round-trip 基本字段')
   }
+
+  // 列表排序：今年未到的由远到近（10-05 在 10-01 前），跨年的排今年之后，已过沉底
+  {
+    const now = new Date(2026, 8, 8) // 2026-09-08，对齐截图场景
+    const eventOf = (id: number, title: string, eventDate: string, extras: Partial<ReturnType<typeof ann.emptyAnniversaryDraft>> = {}) => ({
+      ...ann.emptyAnniversaryDraft('custom'),
+      ...extras,
+      id,
+      title,
+      eventDate,
+      calendarAddedAt: '',
+      calendarRepeatType: '' as const,
+      sortOrder: 0,
+      role: 'owner' as const,
+      ownerId: 1,
+      shared: false,
+      memberCount: 1,
+      createdAt: '',
+      updatedAt: '',
+    })
+    const oct5 = eventOf(1, '熊友相识日', '2026-10-05')
+    const oct1 = eventOf(2, '十一旅行', '2026-10-01')
+    const sep19 = eventOf(3, '快闪店', '2026-09-19')
+    const birthday = eventOf(4, '老婆生日', '1995-04-18', { sceneType: 'birthday', repeatType: 'yearly', countMode: 'countdown' })
+    const pastJun = eventOf(5, '初访家日', '2026-06-06', { countMode: 'countup' })
+    const pastSep = eventOf(6, '打卡日', '2025-09-01', { countMode: 'countup' })
+    const titles = ann.sortAnniversaryEvents([sep19, oct1, birthday, pastSep, oct5, pastJun], now).map((item) => item.title)
+    assert(JSON.stringify(titles) === JSON.stringify([
+      '熊友相识日',
+      '十一旅行',
+      '快闪店',
+      '老婆生日',
+      '初访家日',
+      '打卡日',
+    ]), `今年由远到近：${titles.join(' / ')}`)
+  }
 }

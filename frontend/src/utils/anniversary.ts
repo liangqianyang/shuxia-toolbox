@@ -125,6 +125,36 @@ export function buildCalendarEventTimes(
   }
 }
 
+/**
+ * 全部日子列表排序：今年还未到的由远到近（日期晚的在前），
+ * 跨年的排在今年之后，已过的沉底且刚过去的在前。同级按 sortOrder / id 稳定。
+ */
+export function sortAnniversaryEvents(events: AnniversaryEvent[], now = new Date()): AnniversaryEvent[] {
+  const today = startOfDay(now)
+  const thisYear = today.getFullYear()
+  return [...events]
+    .map((event) => {
+      const occurrence = computeOccurrence(event, today)
+      return {
+        event,
+        daysUntil: occurrence.daysUntil,
+        year: Number(occurrence.date.slice(0, 4)),
+      }
+    })
+    .sort((a, b) => {
+      const bucketOf = (days: number, year: number) => {
+        if (days < 0) return 2
+        if (year > thisYear) return 1
+        return 0
+      }
+      return bucketOf(a.daysUntil, a.year) - bucketOf(b.daysUntil, b.year)
+        || b.daysUntil - a.daysUntil
+        || a.event.sortOrder - b.event.sortOrder
+        || a.event.id - b.event.id
+    })
+    .map((item) => item.event)
+}
+
 export function summarizeAnniversaries(events: AnniversaryEvent[], now = new Date()): AnniversarySummary {
   const today = startOfDay(now)
   const active = events

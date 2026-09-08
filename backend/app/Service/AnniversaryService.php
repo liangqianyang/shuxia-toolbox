@@ -52,11 +52,11 @@ final class AnniversaryService
             ->orderBy('id')
             ->get();
 
-        // 展示排序：离现在由近到远（今天的在前、已过的沉底且近的在前）。
+        // 展示排序：今年未到的由远到近，跨年的排在今年之后，已过沉底且近的在前。
         // 放在后端做，已发布小程序不发版即可调整顺序；农历年的下次发生日为估算，可能有少量偏差。
         $events = $events
             ->values()
-            ->sortBy(fn (AnniversaryEvent $event): int => $this->proximityKey($event), SORT_REGULAR)
+            ->sortBy(fn(AnniversaryEvent $event): array => $this->listSortKey($event), SORT_REGULAR)
             ->values();
 
         $counts = AnniversaryMember::query()
@@ -66,7 +66,7 @@ final class AnniversaryService
             ->pluck('c', 'anniversary_event_id');
 
         return $events
-            ->map(fn (AnniversaryEvent $event): array => $this->format(
+            ->map(fn(AnniversaryEvent $event): array => $this->format(
                 $event,
                 $members->get($event->id),
                 (int) ($counts[$event->id] ?? 1),
@@ -809,8 +809,13 @@ final class AnniversaryService
         return $this->nextReminderDate($event, $daysBefore);
     }
 
-    /** 列表排序键：非负 = 剩余天数（小者在前）；负 = 已过，映射到大数区间且最近的已过在前。 */
-    private function proximityKey(AnniversaryEvent $event): int
+    /**
+     * 列表排序键，与前端 sortAnniversaryEvents 对齐：
+     * 桶 0 今年未到、1 跨年、2 已过；同桶剩余天数大的在前（由远到近 / 刚过去的在前）。
+     *
+     * @return array{0: int, 1: int, 2: int, 3: int}
+     */
+    private function listSortKey(AnniversaryEvent $event): array
     {
         $today = Carbon::today();
         $date = Carbon::parse((string) $event->event_date)->startOfDay();
@@ -818,7 +823,9 @@ final class AnniversaryService
             ? $this->nextYearlyOccurrence($date, $today)
             : $date;
         $days = (int) $today->diffInDays($next, false);
-        return $days >= 0 ? $days : 1000000 - $days;
+        $bucket = $days < 0 ? 2 : ((int) $next->year > (int) $today->year ? 1 : 0);
+
+        return [$bucket, -$days, (int) $event->sort_order, (int) $event->id];
     }
 
     /** 下一次年度发生日（今年已过则取明年；2 月 29 日非闰年由 Carbon 滚动处理）。 */
