@@ -104,7 +104,7 @@ class TravelController extends AbstractController
         try {
             $plan = $this->travel->plan($input);
         } catch (Throwable $e) {
-            throw new BizException(500, 'AI 规划失败：' . $e->getMessage(), null, $e);
+            throw new BizException(500, '规划失败：' . $e->getMessage(), null, $e);
         }
 
         return $this->ok($plan);
@@ -152,7 +152,7 @@ class TravelController extends AbstractController
         try {
             $result = $this->travel->refineDay($input);
         } catch (Throwable $e) {
-            throw new BizException(500, 'AI 重写失败：' . $e->getMessage(), null, $e);
+            throw new BizException(500, '重写失败：' . $e->getMessage(), null, $e);
         }
 
         return $this->ok($result);
@@ -207,7 +207,7 @@ class TravelController extends AbstractController
         try {
             $result = $this->travel->replaceStop($input);
         } catch (Throwable $e) {
-            throw new BizException(500, 'AI 替换失败：' . $e->getMessage(), null, $e);
+            throw new BizException(500, '替换失败：' . $e->getMessage(), null, $e);
         }
 
         return $this->ok($result);

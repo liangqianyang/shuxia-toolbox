@@ -35,7 +35,7 @@ final class ZhipuProvider extends AbstractAiProvider
     {
         $key = getenv('ZHIPU_API_KEY') ?: '';
         if ($key === '') {
-            throw new RuntimeException('AI 服务未配置 ZHIPU_API_KEY');
+            throw new RuntimeException('服务未配置 ZHIPU_API_KEY');
         }
 
         $model = getenv('ZHIPU_MODEL') ?: 'glm-5.2';
@@ -63,7 +63,7 @@ final class ZhipuProvider extends AbstractAiProvider
             ]);
             $body = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
         } catch (Throwable $e) {
-            throw new RuntimeException('AI 服务请求失败: ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException('服务请求失败: ' . $e->getMessage(), 0, $e);
         }
 
         return (string) ($body['choices'][0]['message']['content'] ?? '');

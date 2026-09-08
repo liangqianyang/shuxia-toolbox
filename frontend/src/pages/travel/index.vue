@@ -3,8 +3,8 @@
     <!-- AI 规划行程（全局 AI 开关关闭时整卡隐藏，保留手动编辑/生成攻略图等基础能力，服务端同时硬拦截） -->
     <view v-if="aiEnabled" class="card travel__ai">
       <view class="travel__ai-head">
-        <text class="section-title">AI 规划行程</text>
-        <text class="caption">填出发地、目的地和出行方式，AI 联网生成路线 + 多张攻略图（约 10-30s）</text>
+        <text class="section-title">规划行程</text>
+        <text class="caption">填出发地、目的地和出行方式，联网生成路线 + 多张攻略图（约 10-30s）</text>
       </view>
 
       <view class="travel__ai-place">
@@ -171,7 +171,7 @@
         :class="{ disabled: planning || !aiDestination.trim() }"
         @tap="onPlan"
       >
-        {{ planning ? 'AI 联网规划中…' : 'AI 生成攻略' }}
+        {{ planning ? '联网规划中…' : '生成攻略' }}
       </view>
     </view>
 
@@ -235,7 +235,7 @@
     <view v-if="trip.intercity" class="card travel__intercity">
       <view class="travel__intercity-head">
         <text class="section-title">跨城交通</text>
-        <text class="caption">{{ aiEnabled ? 'AI 联网估算，不准可手动修正' : '估算不准可手动修正' }}</text>
+        <text class="caption">{{ aiEnabled ? '联网估算，不准可手动修正' : '估算不准可手动修正' }}</text>
       </view>
       <view class="travel__intercity-od">
         <input
@@ -299,7 +299,7 @@
           class="travel__day-ai"
           :class="{ 'travel__day-ai--disabled': refiningDayId === day.id }"
           @tap="onRefineDay(day.id)"
-          >{{ refiningDayId === day.id ? '重写中' : 'AI重写' }}</text
+          >{{ refiningDayId === day.id ? '重写中' : '重写' }}</text
         >
         <text class="travel__day-sort" @tap="onReorderDay(day.id)">重排</text>
         <text v-if="trip.days.length > 1" class="travel__day-del" @tap="removeDay(day.id)">删除</text>
@@ -1255,16 +1255,16 @@ function showPlanFailed(detail?: string): void {
   let reason: string
   if (isRateLimit) {
     planError.value = '操作太频繁'
-    reason = '刚才点得太快啦，接口被限流了，稍等几秒再点「AI 生成攻略」。'
+    reason = '刚才点得太快啦，接口被限流了，稍等几秒再点「联网规划」。'
   } else if (isAuth) {
     planError.value = '接口鉴权失败'
     reason = '接口鉴权失败（API Key 缺失或无效），请检查小程序配置。'
   } else if (isTimeout) {
     planError.value = 'AI 规划超时，请重试'
-    reason = 'AI 规划超时了——联网搜索偶有波动，再点一次「AI 生成攻略」通常就好。'
+    reason = 'AI 规划超时了——联网搜索偶有波动，再点一次「联网规划」通常就好。'
   } else {
     planError.value = d || '规划失败'
-    reason = '可能是网络不稳定或 AI 当前繁忙，请稍后点「AI 生成攻略」重试。'
+    reason = '可能是网络不稳定或 AI 当前繁忙，请稍后点「联网规划」重试。'
   }
   uni.hideLoading()
   uni.showModal({
