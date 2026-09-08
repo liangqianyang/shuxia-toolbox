@@ -71,8 +71,13 @@ final class LudoController extends AbstractController
     public function chat(string $code, RequestInterface $request): array
     {
         $kind = (string) $request->input('kind', '');
-        return $this->ok($this->rooms->chat($code, $this->requireUserId($request), $kind,
-            $request->input('id'), $request->input('text')));
+        return $this->ok($this->rooms->chat(
+            $code,
+            $this->requireUserId($request),
+            $kind,
+            $request->input('id'),
+            $request->input('text')
+        ));
     }
 
     #[RateLimit(create: 2, capacity: 6, key: [ApiKeyMiddleware::class, 'bucketKey'])]

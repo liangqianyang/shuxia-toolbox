@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 240px; height: 240px; font-family: "PingFang SC", "Hiragino Sans GB", sans-serif; }
+  .icon {
+    width: 240px; height: 240px;
+    background: #FFF8ED;
+    border: 8px solid #A8744B;
+    border-radius: 52px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* 背景点阵（呼应棋盘格） */
+  .dots {
+    position: absolute; inset: 0;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; padding: 24px;
+    opacity: 0.16;
+  }
+  .dots i { border-radius: 6px; background: #A8744B; }
+  /* 方块堆（经典四色 + 斜面质感） */
+  .stack {
+    position: absolute; left: 34px; bottom: 66px;
+    display: grid; grid-template-columns: repeat(5, 34px); grid-auto-rows: 34px; gap: 4px;
+  }
+  .b { border-radius: 7px; }
+  .c-I { background: #3ec6e0; }
+  .c-O { background: #f2c14e; }
+  .c-T { background: #a86ee8; }
+  .c-S { background: #5cc26a; }
+  .c-Z { background: #e05f5f; }
+  .c-J { background: #5a7de0; }
+  .c-L { background: #e8974e; }
+  .stack .b, .fall .b {
+    box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.38), inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+  }
+  /* 下落中的 T 块（旋转 12° 增加动感） */
+  .fall {
+    position: absolute; right: 34px; top: 26px;
+    display: grid; grid-template-columns: repeat(3, 32px); grid-auto-rows: 32px; gap: 4px;
+    transform: rotate(12deg);
+    filter: drop-shadow(3px 5px 0 rgba(168, 116, 75, 0.28));
+  }
+  .title {
+    position: absolute; left: 0; right: 0; bottom: 14px;
+    text-align: center;
+    font-size: 30px; font-weight: 900; color: #A8744B;
+    letter-spacing: 3px;
+    text-shadow: 0 2px 0 #FFFFFF;
+  }
+</style>
+</head>
+<body>
+  <div class="icon">
+    <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <!-- 底部方块堆：一行满 + 错落的第二三行 -->
+    <div class="stack">
+      <i class="b c-J"></i><i class="b c-Z"></i><i class="b c-O"></i><i class="b c-S"></i><i class="b c-L"></i>
+      <i class="b c-S"></i><i class="b c-I"></i><i class="b c-T"></i><i class="b c-J"></i><i class="b c-O"></i>
+      <i class="b c-L"></i><i class="b c-Z"></i><i class="b c-I"></i><i class="b c-T"></i><i class="b c-Z"></i>
+    </div>
+    <!-- 下落 T 块（T 形：上横 3 + 下中 1） -->
+    <div class="fall">
+      <i class="b c-T"></i><i class="b c-T"></i><i class="b c-T"></i>
+      <i></i><i class="b c-T"></i><i></i>
+    </div>
+    <div class="title">俄罗斯方块</div>
+  </div>
+</body>
+</html>

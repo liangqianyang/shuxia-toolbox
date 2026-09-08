@@ -1,0 +1,53 @@
+/** 俄罗斯方块音效：CDN wav（gen_tetris_sounds.py 程序合成的短提示音,无外部资产）,
+ *  模块级 InnerAudioContext 缓存 + stop/play 立即重触发（照 unoSound.ts 家法）。
+ *  开关持久化到 storage（默认开）,页面可切换。
+ */
+
+import { cdnUrl } from './cdn'
+const SOUND_KEY = 'shuxia-tetris-sound-enabled'
+
+export type TetrisSoundName =
+  | 'move'
+  | 'rotate'
+  | 'lock'
+  | 'harddrop'
+  | 'clear'
+  | 'tetris'
+  | 'hold'
+  | 'levelup'
+  | 'gameover'
+
+const players = new Map<TetrisSoundName, UniApp.InnerAudioContext>()
+let enabled = true
+let loaded = false
+
+function ensureLoaded() {
+  if (loaded) return
+  loaded = true
+  enabled = uni.getStorageSync(SOUND_KEY) !== 'off'
+}
+
+export function tetrisSoundEnabled(): boolean {
+  ensureLoaded()
+  return enabled
+}
+
+export function setTetrisSoundEnabled(on: boolean): void {
+  ensureLoaded()
+  enabled = on
+  uni.setStorageSync(SOUND_KEY, on ? 'on' : 'off')
+}
+
+export function playTetrisSound(name: TetrisSoundName): void {
+  ensureLoaded()
+  if (!enabled) return
+  let player = players.get(name)
+  if (!player) {
+    player = uni.createInnerAudioContext()
+    player.src = cdnUrl(`/static/sounds-tetris/${name}.wav`)
+    player.onError(() => {}) // 资源缺失时静默
+    players.set(name, player)
+  }
+  player.stop()
+  player.play()
+}

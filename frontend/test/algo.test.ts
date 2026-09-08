@@ -37,6 +37,23 @@ import {
 } from '@/utils/gomoku'
 import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/utils/uno'
 import {
+  BOARD_W,
+  CLEAR_FLASH_MS,
+  applyAction,
+  collides,
+  createGame,
+  emptyBoard,
+  gravityIntervalMs,
+  levelFrom,
+  pieceCells,
+  shuffledBag,
+  type ActivePiece,
+  type PieceId,
+  type TetrisState,
+} from '@/utils/tetris'
+import { computeTetrisLayout } from '@/utils/tetrisRender'
+import { createDragController, defaultDragConfig } from '@/utils/touchGestures'
+import {
   CRUSH_CELL,
   FLY_FROM,
   FLY_TO,
@@ -1158,6 +1175,7 @@ async function main() {
   testUno()
   testLudo()
   testAdventure()
+  testTetris()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)
@@ -1373,4 +1391,240 @@ function testAdventure() {
     assert(ann.timeStatusOf(todayBirthday, now) === 'soon', 'timeStatusOf：周年未到 → soon')
     assert(ann.daysSinceLastOccurrence(ann.computeOccurrence(pastBirthday, now), now) === 143, '今年已过：距今年发生日 143 天')
   }
+}
+
+// ══════════════════════════════ 俄罗斯方块 ══════════════════════════════
+
+function testTetris() {
+  console.log('俄罗斯方块引擎（utils/tetris.ts）')
+
+  // 种子随机（线性同余），让 7-bag / 出生序列可复现
+  let seed = 42
+  const rng = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+
+  /** 以 createGame 为底板拼一个指定局面的状态（board/active/queue 可覆盖）。 */
+  function craft(partials: Partial<TetrisState> & { active: ActivePiece }): TetrisState {
+    return { ...createGame(1, rng), ...partials, events: [] }
+  }
+
+  // 7-bag：一袋 7 种各一次；出生序列按袋对齐分块,每块恰为完整一袋
+  const bag = shuffledBag(rng)
+  assert(bag.length === 7 && new Set(bag).size === 7, '7-bag：一袋恰好 7 种各一次')
+  // 出生序列取每局前 7 块（一整袋；原地硬降堆太高会顶出,不宜连取 14 块）
+  for (let round = 0; round < 2; round++) {
+    const firstBag: PieceId[] = []
+    let seq = createGame(1, rng)
+    for (let i = 0; i < 7; i++) {
+      firstBag.push((seq.active as ActivePiece).id)
+      seq = applyAction(seq, { t: 'hardDrop' })
+      if (seq.phase === 'clearing') seq = applyAction(seq, { t: 'tick', dtMs: CLEAR_FLASH_MS })
+    }
+    assert(new Set(firstBag).size === 7, `7-bag：第 ${round + 1} 局前 7 块 7 种各一次`)
+  }
+
+  // 速度曲线（Guideline）
+  assert(gravityIntervalMs(1) === 1000, '速度：1 级 1000ms/行')
+  assert(Math.abs(gravityIntervalMs(2) - 793) < 1, '速度：2 级 ≈793ms')
+  assert(gravityIntervalMs(15) < 10, '速度：15 级个位数 ms')
+  let monotone = true
+  for (let lv = 1; lv < 15; lv++) {
+    if (gravityIntervalMs(lv) < gravityIntervalMs(lv + 1)) monotone = false
+  }
+  assert(monotone, '速度：1→15 单调不增')
+
+  // 等级 = 起始 + floor(消行/10)
+  assert(levelFrom(1, 0) === 1 && levelFrom(1, 9) === 1 && levelFrom(1, 10) === 2, '升级：每 10 行 +1 级')
+  assert(levelFrom(5, 29) === 7 && levelFrom(15, 0) === 15, '升级：起始等级参与')
+
+  // 边界 / 碰撞
+  assert(!collides(emptyBoard(), 'T', 3, 0, 0), '碰撞：空盘出生位不碰撞')
+  assert(collides(emptyBoard(), 'T', -1, 0, 0), '碰撞：出左墙')
+  assert(collides(emptyBoard(), 'T', 3, 19, 0), '碰撞：穿底')
+  const occupied = emptyBoard()
+  occupied[5 * BOARD_W + 4] = 'I'
+  assert(collides(occupied, 'T', 3, 4, 0), '碰撞：撞已占格')
+  assert(JSON.stringify(pieceCells('O', 0)) === JSON.stringify(pieceCells('O', 1))
+    && JSON.stringify(pieceCells('O', 1)) === JSON.stringify(pieceCells('O', 3)), 'O 块：四旋转态同形')
+
+  // 移动：被挡返回原引用（composable 跳过重绘的依据）
+  const atLeftWall = craft({ active: { id: 'T', x: 0, y: 15, rot: 0 } })
+  assert(applyAction(atLeftWall, { t: 'move', dx: -1 }) === atLeftWall, '移动：左墙被挡返回原引用')
+
+  // 重力 tick
+  let falling = craft({ active: { id: 'T', x: 4, y: 0, rot: 0 } })
+  falling = applyAction(falling, { t: 'tick', dtMs: 999 })
+  assert(falling.active?.y === 0, '重力：999ms 不足一秒不下落')
+  falling = applyAction(falling, { t: 'tick', dtMs: 1 })
+  assert(falling.active?.y === 1, '重力：满 1000ms 落一格')
+  falling = applyAction(falling, { t: 'tick', dtMs: 30000 })
+  assert(falling.active?.y === 18 && falling.gravityMs === 0, '重力：大 dt 直落到底、接地清零累计')
+
+  // SRS 踢墙（y-down 表）——T 地板旋转取 (-1,-1)
+  const tOnFloor = craft({ active: { id: 'T', x: 4, y: 18, rot: 0 } })
+  const tKicked = applyAction(tOnFloor, { t: 'rotate', dir: 1 })
+  assert(tKicked.active?.x === 3 && tKicked.active?.y === 17 && tKicked.active?.rot === 1, '踢墙：T 地板 0→1 用 (-1,-1) 上移一格')
+
+  // 踢墙穷尽 → 旋转 no-op（返回原引用）
+  const blocked = emptyBoard()
+  blocked[15 * BOARD_W + 4] = 'J'
+  blocked[16 * BOARD_W + 4] = 'J'
+  blocked[18 * BOARD_W + 5] = 'J'
+  const tPinned = craft({ board: blocked, active: { id: 'T', x: 4, y: 16, rot: 0 } })
+  assert(applyAction(tPinned, { t: 'rotate', dir: 1 }) === tPinned, '踢墙：五个偏移全被堵 → no-op 原引用')
+
+  // SRS 踢墙 I——地板 0→1 只能走 I 表特有偏移 (+1,-2)
+  const iOnFloor = craft({ active: { id: 'I', x: 3, y: 18, rot: 0 } })
+  const iKicked = applyAction(iOnFloor, { t: 'rotate', dir: 1 })
+  assert(iKicked.active?.x === 4 && iKicked.active?.y === 16 && iKicked.active?.rot === 1, '踢墙：I 地板 0→1 用 (1,-2)（I 表专有）')
+
+  // 消行：行 19 缺 (9,19)，竖 I 补格 → clearing 白闪 → 塌行
+  const oneHoleBoard = emptyBoard()
+  for (let x = 0; x < 9; x++) oneHoleBoard[19 * BOARD_W + x] = 'J'
+  let clearing = craft({ board: oneHoleBoard.slice(), active: { id: 'I', x: 7, y: 0, rot: 1 } })
+  clearing = applyAction(clearing, { t: 'hardDrop' })
+  assert(clearing.phase === 'clearing' && clearing.clearingRows.join() === '19', '消行：补上缺格 → clearing 相位')
+  assert(clearing.events.some((e) => e.t === 'cleared' && e.rows === 1 && e.points === 100), '消行：1 行 100×lv')
+  assert(clearing.board[19 * BOARD_W + 9] === 'I', '消行：闪烁期间棋盘已盖章（塌行只删满行）')
+  clearing = applyAction(clearing, { t: 'tick', dtMs: CLEAR_FLASH_MS })
+  assert(clearing.phase === 'playing', '消行：闪烁计时到 → 回 playing 出生下一块')
+  assert(clearing.board[19 * BOARD_W + 9] === 'I' && clearing.board[16 * BOARD_W + 9] === null, '消行：塌行后上方内容整体下移一行')
+
+  // 消行计分 1/2/3/4 行
+  for (const [rows, points] of [[1, 100], [2, 300], [3, 500], [4, 800]] as const) {
+    const stacked = emptyBoard()
+    for (let y = 20 - rows; y < 20; y++) {
+      for (let x = 0; x < 9; x++) stacked[y * BOARD_W + x] = 'J'
+    }
+    let s = craft({ board: stacked, active: { id: 'I', x: 7, y: 0, rot: 1 } })
+    s = applyAction(s, { t: 'hardDrop' })
+    assert(s.events.some((e) => e.t === 'cleared' && e.rows === rows && e.points === points), `消行计分：${rows} 行 = ${points}×lv`)
+    if (rows === 4) {
+      s = applyAction(s, { t: 'tick', dtMs: CLEAR_FLASH_MS })
+      assert(s.lines === 4 && s.board.every((c) => c === null), 'Tetris：塌行后四行清空')
+    }
+  }
+
+  // 升级事件：9 行存量 + 1 行 → levelUp 2
+  const levelBoard = emptyBoard()
+  for (let x = 0; x < 9; x++) levelBoard[19 * BOARD_W + x] = 'J'
+  let leveling = craft({ board: levelBoard, lines: 9, active: { id: 'I', x: 7, y: 0, rot: 1 } })
+  leveling = applyAction(leveling, { t: 'hardDrop' })
+  assert(leveling.lines === 10 && leveling.level === 2 && leveling.events.some((e) => e.t === 'levelUp' && e.level === 2), '升级：满 10 行发 levelUp')
+
+  // 锁定延迟：499 不锁 / 500 锁 / 接地移动重置 / 重置上限 15
+  let locking = craft({ active: { id: 'T', x: 4, y: 18, rot: 0 } })
+  locking = applyAction(locking, { t: 'tick', dtMs: 499 })
+  assert(locking.active !== null, '锁定延迟：499ms 不锁')
+  locking = applyAction(locking, { t: 'tick', dtMs: 1 })
+  assert(locking.events.some((e) => e.t === 'locked' && e.piece === 'T'), '锁定延迟：满 500ms 固化（盖章并出生下一块）')
+
+  let resetting = craft({ active: { id: 'T', x: 4, y: 18, rot: 0 } })
+  resetting = applyAction(resetting, { t: 'tick', dtMs: 400 })
+  resetting = applyAction(resetting, { t: 'move', dx: 1 })
+  assert(resetting.lockResets === 1 && resetting.lockMs === 0, '锁定延迟：接地移动重置计时')
+  resetting = applyAction(resetting, { t: 'tick', dtMs: 400 })
+  assert(resetting.active !== null, '锁定延迟：重置后 400ms 仍不锁')
+
+  let capped = craft({ active: { id: 'T', x: 0, y: 18, rot: 0 } })
+  for (let i = 0; i < 16; i++) {
+    capped = applyAction(capped, { t: 'move', dx: i % 2 === 0 ? 1 : -1 })
+  }
+  assert(capped.lockResets === 15, `锁定延迟：重置上限 15（实际 ${capped.lockResets}）`)
+  capped = applyAction(capped, { t: 'tick', dtMs: 500 })
+  assert(capped.events.some((e) => e.t === 'locked'), '锁定延迟：达上限后不再重置，500ms 固化')
+
+  // HOLD：存/出生、每块一次、锁定后恢复、换回暂存块
+  let holding = craft({ active: { id: 'T', x: 3, y: 0, rot: 0 }, queue: ['I', 'J', 'L', 'S', 'Z', 'O'] })
+  holding = applyAction(holding, { t: 'hold' })
+  assert(holding.hold === 'T' && holding.active?.id === 'I', 'HOLD：存当前块、出生队列下一块')
+  holding = applyAction(holding, { t: 'hold' })
+  assert(holding.events.some((e) => e.t === 'holdBlocked') && holding.hold === 'T' && holding.active?.id === 'I', 'HOLD：同块第二次被拒')
+  holding = applyAction(holding, { t: 'hardDrop' })
+  assert(holding.holdUsed === false && holding.active?.id === 'J', 'HOLD：锁定后恢复可用')
+  holding = applyAction(holding, { t: 'hold' })
+  assert(holding.hold === 'J' && holding.active?.id === 'T', 'HOLD：换回暂存块')
+
+  // 硬降：+2/格 并立即锁定（跳过 500ms）
+  const dropping = craft({ active: { id: 'I', x: 3, y: 5, rot: 0 } })
+  const dropped = applyAction(dropping, { t: 'hardDrop' })
+  assert(dropped.score === (18 - 5) * 2, '硬降：+2/格')
+  assert(dropped.events.some((e) => e.t === 'hardDropped' && e.cells === 13) && dropped.events.some((e) => e.t === 'locked'), '硬降：立即锁定并盖章（事件链 hardDropped→locked）')
+  assert(dropped.board[19 * BOARD_W + 3] === 'I' && dropped.board[19 * BOARD_W + 6] === 'I', '硬降：I 落底占满 cols 3-6')
+
+  // 软降：+1/行
+  const soft = craft({ active: { id: 'T', x: 4, y: 5, rot: 0 } })
+  const softed = applyAction(soft, { t: 'softDrop' })
+  assert(softed.active?.y === 6 && softed.score === 1, '软降：下一行 +1 分')
+
+  // 顶出：出生区被占 → 游戏结束
+  const topped = emptyBoard()
+  for (let x = 3; x <= 6; x++) topped[x] = 'I'
+  let topping = craft({ board: topped, queue: ['T', 'J', 'L', 'S', 'Z', 'O'], active: { id: 'I', x: 3, y: 17, rot: 0 } })
+  topping = applyAction(topping, { t: 'hardDrop' })
+  assert(topping.phase === 'over' && topping.events.some((e) => e.t === 'gameOver'), '顶出：出生碰撞 → 游戏结束')
+
+  // 纯度：applyAction 不改入参
+  const purity = craft({ active: { id: 'T', x: 4, y: 0, rot: 0 } })
+  const snapshot = purity.board.slice()
+  const mutated = applyAction(purity, { t: 'hardDrop' })
+  assert(purity.board.every((c, i) => c === snapshot[i]) && purity.active?.y === 0, '纯度：applyAction 不改入参')
+  assert(mutated !== purity, '纯度：返回新引用')
+
+  // 布局：棋盘适配可用高度、右栏不与棋盘重叠、整体不超可用宽
+  const layout = computeTetrisLayout(343, 500)
+  assert(layout.cell * 20 <= 500 && layout.cell * 10 <= 343, '布局：棋盘适配可用空间')
+  assert(layout.holdX >= layout.cell * 10 + 1, '布局：右栏在棋盘右侧不重叠')
+  assert(layout.totalW <= 343 && layout.totalH <= 500, '布局：整体不超可用区域')
+  assert(layout.holdCell * 4 <= layout.totalW - layout.holdX, '布局：I 块预览放得进右栏')
+
+  // 手势识别器（纯逻辑,注入时钟的合成触摸序列）
+  const gestures = { moves: [] as number[], softs: 0, taps: 0, hards: 0, ups: 0 }
+  let clock = 0
+  const ctrl = createDragController(
+    { ...defaultDragConfig(20), now: () => clock },
+    {
+      onMove: (dx) => { gestures.moves.push(dx) },
+      onSoftDrop: () => { gestures.softs++ },
+      onTap: () => { gestures.taps++ },
+      onHardDrop: () => { gestures.hards++ },
+      onSwipeUp: () => { gestures.ups++ },
+    },
+  )
+  const touch = (x: number, y: number) => ({ changedTouches: [{ clientX: x, clientY: y }] })
+  ctrl.onTouchStart(touch(100, 100))
+  ctrl.onTouchMove(touch(120, 102))
+  ctrl.onTouchMove(touch(140, 103))
+  ctrl.onTouchMove(touch(161, 104))
+  clock = 400
+  ctrl.onTouchEnd(touch(161, 104))
+  assert(gestures.moves.join() === '1,1,1' && gestures.taps === 0, '手势：水平每 stepPx 一格（长拖不判 tap）')
+
+  clock = 1000
+  ctrl.onTouchStart(touch(100, 200))
+  clock = 1150
+  ctrl.onTouchEnd(touch(100, 320))
+  assert(gestures.hards === 1, '手势：150ms/120px 快滑 → 硬降')
+
+  clock = 2000
+  ctrl.onTouchStart(touch(50, 50))
+  clock = 2060
+  ctrl.onTouchEnd(touch(58, 53))
+  assert(gestures.taps === 1, '手势：60ms/8px → tap')
+
+  clock = 3000
+  ctrl.onTouchStart(touch(100, 300))
+  clock = 3350
+  ctrl.onTouchEnd(touch(98, 255))
+  assert(gestures.ups === 1, '手势：40px+ 上滑 → 上滑手势')
+
+  clock = 4000
+  ctrl.onTouchStart(touch(100, 100))
+  ctrl.onTouchMove(touch(105, 130))
+  ctrl.onTouchMove(touch(90, 152))
+  clock = 4500
+  ctrl.onTouchEnd(touch(90, 152))
+  assert(gestures.softs === 2 && gestures.moves.length === 3, '手势：竖直主导 → 软降且不再横移')
 }

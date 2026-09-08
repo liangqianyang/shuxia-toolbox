@@ -63,6 +63,15 @@
       }
     },
     {
+      "path": "pages/tetris/index",
+      "style": {
+        "navigationBarTitleText": "俄罗斯方块",
+        "navigationBarBackgroundColor": "#FFF8F0",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FFF8F0"
+      }
+    },
+    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"
