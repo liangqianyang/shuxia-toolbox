@@ -20,9 +20,11 @@ $ann-scenes: (
   $deep: nth($colors, 2);
   $tint: nth($colors, 3);
 
-  // hero 满幅渐变（亮端混白 18% → 主色 → 深色）
+  // hero 满幅渐变：去掉混白亮端（浅色场景上白字对比不足），顶部叠深色压暗层兜底小字可读性
   .anniversary__hero--#{$scene} {
-    background: linear-gradient(165deg, mix(#ffffff, $color, 18%), $color 55%, $deep);
+    background:
+      linear-gradient(180deg, rgba(74, 63, 53, 0.24), rgba(74, 63, 53, 0) 46%),
+      linear-gradient(165deg, $color, $deep 62%);
   }
 
   // 列表日期徽章：浅彩底 + 深彩字

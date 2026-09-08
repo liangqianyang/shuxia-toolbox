@@ -175,7 +175,7 @@
           <!-- 即将到来：今天 / 7 天内 / 更晚 / 正计时 -->
           <template v-else-if="activeTab === 'soon'">
             <view v-if="groups.counts.soon === 0" class="anniversary__empty anniversary__empty--inline">
-              <text>近期没有待到来的日子</text>
+              <text>近期没有待到来的日子 🍁</text>
             </view>
             <template v-else>
               <view v-if="groups.today.length" class="anniversary__section">
@@ -261,13 +261,13 @@
                   <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ occOf(event).daysUntil }} 天</text>
                 </view>
                 <view v-if="groups.later.length > laterShown.length" class="anniversary__loadmore">
-                  <text>上拉加载更多 · 已显示 {{ laterShown.length }} / {{ groups.later.length }}</text>
+                  <text>已显示 {{ laterShown.length }} / {{ groups.later.length }} · 继续下滑自动加载</text>
                 </view>
               </view>
 
               <view v-if="groups.counting.length" class="anniversary__section">
                 <view class="anniversary__section-head">
-                  <text class="section-title">正计时</text>
+                  <text class="section-title">在一起的日子</text>
                   <text class="caption">{{ groups.counting.length }} 个</text>
                 </view>
                 <view
@@ -327,7 +327,7 @@
                 <text class="anniversary__event-count anniversary__event-count--muted">{{ passedDaysText(event) }}</text>
               </view>
               <view v-if="groups.past.length > pastShown.length" class="anniversary__loadmore">
-                <text>上拉加载更多 · 已显示 {{ pastShown.length }} / {{ groups.past.length }}</text>
+                <text>已显示 {{ pastShown.length }} / {{ groups.past.length }} · 继续下滑自动加载</text>
               </view>
             </view>
           </template>
@@ -335,7 +335,7 @@
           <!-- 不重复：倒数中 / 已完成 -->
           <template v-else>
             <view v-if="groups.counts.once === 0" class="anniversary__empty anniversary__empty--inline">
-              <text>还没有一次性事件</text>
+              <text>还没有一次性事件 ✏️</text>
             </view>
             <template v-else>
               <view v-if="groups.onceActive.length" class="anniversary__section">
@@ -367,7 +367,7 @@
                   </text>
                 </view>
                 <view v-if="groups.onceActive.length > onceActiveShown.length" class="anniversary__loadmore">
-                  <text>上拉加载更多 · 已显示 {{ onceActiveShown.length }} / {{ groups.onceActive.length }}</text>
+                  <text>已显示 {{ onceActiveShown.length }} / {{ groups.onceActive.length }} · 继续下滑自动加载</text>
                 </view>
               </view>
 
@@ -397,7 +397,7 @@
                   <text class="anniversary__event-count anniversary__event-count--muted">{{ passedDaysText(event) }}</text>
                 </view>
                 <view v-if="groups.onceDone.length > onceDoneShown.length" class="anniversary__loadmore">
-                  <text>上拉加载更多 · 已显示 {{ onceDoneShown.length }} / {{ groups.onceDone.length }}</text>
+                  <text>已显示 {{ onceDoneShown.length }} / {{ groups.onceDone.length }} · 继续下滑自动加载</text>
                 </view>
               </view>
             </template>
@@ -1757,8 +1757,8 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__hero-scene {
     padding: 8rpx 20rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.2);
-    border: 2rpx solid rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.16);
+    border: 2rpx solid rgba(255, 255, 255, 0.24);
     color: #ffffff;
     font-size: 22rpx;
     font-weight: 600;
@@ -1766,8 +1766,9 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__hero-kicker {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.92);
     font-size: 22rpx;
+    font-weight: 500;
     letter-spacing: 4rpx;
   }
 
@@ -1814,7 +1815,7 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__hero-milestone-head {
     display: flex;
     justify-content: space-between;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.92);
     font-size: 22rpx;
   }
 
@@ -1902,8 +1903,8 @@ function toneHint(tone: AnniversaryCardTone): string {
 
   &__search-clear {
     flex-shrink: 0;
-    width: 44rpx;
-    height: 44rpx;
+    width: 56rpx;
+    height: 56rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1923,7 +1924,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     display: inline-flex;
     align-items: center;
     gap: 10rpx;
-    padding: 10rpx 22rpx;
+    padding: 12rpx 24rpx;
     margin-right: 12rpx;
     border: 2rpx solid $color-border;
     border-radius: 999rpx;
@@ -1951,6 +1952,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     margin-bottom: 20rpx;
     padding: 16rpx 0 12rpx;
     background: $color-card;
+    box-shadow: 0 6rpx 16rpx rgba(74, 63, 53, 0.06);
   }
 
   &__tabs {
