@@ -646,7 +646,18 @@ const previewUnit = computed(() => {
   if (cardEvent.value?.countMode === 'countup') return '天'
   return daysUntil === 0 ? '今天' : '天'
 })
-const sortedEvents = computed(() => [...events.value].sort((a, b) => b.id - a.id))
+// 全部日子：按离现在由近到远（今天的在前、已过的沉底且近的在前），同级按创建顺序稳定
+const sortedEvents = computed(() => {
+  return [...events.value]
+    .map((event) => ({ event, daysUntil: computeOccurrence(event).daysUntil }))
+    .sort((a, b) => {
+      const keyOf = (days: number) => (days >= 0 ? days : 1000000 - days)
+      return keyOf(a.daysUntil) - keyOf(b.daysUntil)
+        || a.event.sortOrder - b.event.sortOrder
+        || a.event.id - b.event.id
+    })
+    .map((item) => item.event)
+})
 const searchQuery = ref('')
 const filterScene = ref('')
 const filterSceneOptions = computed(() => [{ key: '' as '', name: '全部' }, ...SCENE_OPTIONS])

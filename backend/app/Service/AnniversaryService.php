@@ -52,6 +52,13 @@ final class AnniversaryService
             ->orderBy('id')
             ->get();
 
+        // 展示排序：离现在由近到远（今天的在前、已过的沉底且近的在前）。
+        // 放在后端做，已发布小程序不发版即可调整顺序；农历年的下次发生日为估算，可能有少量偏差。
+        $events = $events
+            ->values()
+            ->sortBy(fn (AnniversaryEvent $event): int => $this->proximityKey($event), SORT_REGULAR)
+            ->values();
+
         $counts = AnniversaryMember::query()
             ->whereIn('anniversary_event_id', $eventIds)
             ->selectRaw('anniversary_event_id, COUNT(*) AS c')
@@ -802,6 +809,28 @@ final class AnniversaryService
         return $this->nextReminderDate($event, $daysBefore);
     }
 
+    /** 列表排序键：非负 = 剩余天数（小者在前）；负 = 已过，映射到大数区间且最近的已过在前。 */
+    private function proximityKey(AnniversaryEvent $event): int
+    {
+        $today = Carbon::today();
+        $date = Carbon::parse((string) $event->event_date)->startOfDay();
+        $next = $event->repeat_type === 'yearly'
+            ? $this->nextYearlyOccurrence($date, $today)
+            : $date;
+        $days = (int) $today->diffInDays($next, false);
+        return $days >= 0 ? $days : 1000000 - $days;
+    }
+
+    /** 下一次年度发生日（今年已过则取明年；2 月 29 日非闰年由 Carbon 滚动处理）。 */
+    private function nextYearlyOccurrence(Carbon $date, Carbon $today): Carbon
+    {
+        $thisYear = Carbon::create($today->year, $date->month, $date->day)->startOfDay();
+        if ($thisYear->lt($today)) {
+            $thisYear = Carbon::create($today->year + 1, $date->month, $date->day)->startOfDay();
+        }
+        return $thisYear;
+    }
+
     /** 计算纪念日下一次提醒日期（考虑提前提醒天数）。非农历事件可用，农历会偏差。 */
     private function nextReminderDate(AnniversaryEvent $event, int $daysBefore): ?Carbon
     {
@@ -809,12 +838,7 @@ final class AnniversaryService
         $today = Carbon::today();
 
         if ($event->repeat_type === 'yearly') {
-            // 今年的纪念日
-            $thisYear = Carbon::create($today->year, $eventDate->month, $eventDate->day)->startOfDay();
-            if ($thisYear->lt($today)) {
-                $thisYear = Carbon::create($today->year + 1, $eventDate->month, $eventDate->day)->startOfDay();
-            }
-            return $thisYear->subDays($daysBefore)->startOfDay();
+            return $this->nextYearlyOccurrence($eventDate, $today)->subDays($daysBefore)->startOfDay();
         }
 
         // 不重复：如果 eventDate 已过就不再提醒
