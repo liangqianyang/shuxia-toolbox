@@ -155,6 +155,103 @@ export function sortAnniversaryEvents(events: AnniversaryEvent[], now = new Date
     .map((item) => item.event)
 }
 
+/** 列表按时间状态分组：即将到来 / 今年已过 / 不重复 */
+export type AnniversaryTimeStatus = 'soon' | 'past' | 'once'
+
+export interface AnniversaryTimeGroups {
+  /** 「即将到来」tab 的分段：今天 / 7 天内 / 更晚 / 正计时 */
+  today: AnniversaryEvent[]
+  week: AnniversaryEvent[]
+  later: AnniversaryEvent[]
+  counting: AnniversaryEvent[]
+  /** 「今年已过」tab：周年事件今年过完（下次发生日在明年） */
+  past: AnniversaryEvent[]
+  /** 「不重复」tab：一次性事件，倒数中 / 已完成（置灰） */
+  onceActive: AnniversaryEvent[]
+  onceDone: AnniversaryEvent[]
+  counts: { soon: number; past: number; once: number }
+}
+
+/** 单个事件属于哪个时间状态分组（搜索结果的来源标记也用它）。 */
+export function timeStatusOf(event: AnniversaryEvent, now = new Date()): AnniversaryTimeStatus {
+  const occurrence = computeOccurrence(event, now)
+  if (event.repeatType === 'yearly') {
+    return Number(occurrence.date.slice(0, 4)) > startOfDay(now).getFullYear() ? 'past' : 'soon'
+  }
+  return 'once'
+}
+
+/**
+ * 时间状态分组：
+ * - 周年事件（yearly）今年未到 → 即将到来的今天/7天内/更晚；今年过完（下次在明年）→ 今年已过；
+ * - 一次性倒数（none+countdown）未到 → 不重复·倒数中（同时也出现在即将到来的分段里），过了 → 不重复·已完成；
+ * - 正计时（none+countup）已开始 → 即将到来·正计时；未开始按剩余天数进即将到来的分段。
+ * 段内排序沿用既有规则：7 天内近的在前（原「即将到来」段行为）；更晚/倒数中/正计时由远到近、
+ * 今年已过/已完成刚过的在前（原 sortAnniversaryEvents 主规则，daysUntil 降序）。
+ */
+export function groupAnniversaryEvents(events: AnniversaryEvent[], now = new Date()): AnniversaryTimeGroups {
+  const today = startOfDay(now)
+  const year = today.getFullYear()
+  const pairs = { today: [], week: [], later: [], counting: [], past: [], onceActive: [], onceDone: [] } as Record<string, Array<{ event: AnniversaryEvent, occurrence: AnniversaryOccurrence }>>
+
+  const toUpcoming = (event: AnniversaryEvent, occurrence: AnniversaryOccurrence) => {
+    if (occurrence.daysUntil === 0) pairs.today.push({ event, occurrence })
+    else if (occurrence.daysUntil > 0 && occurrence.daysUntil <= 7) pairs.week.push({ event, occurrence })
+    else if (occurrence.daysUntil > 7) pairs.later.push({ event, occurrence })
+  }
+
+  for (const event of events) {
+    const occurrence = computeOccurrence(event, today)
+    if (event.repeatType === 'yearly') {
+      if (Number(occurrence.date.slice(0, 4)) > year) pairs.past.push({ event, occurrence })
+      else toUpcoming(event, occurrence)
+      continue
+    }
+    if (event.countMode === 'countup') {
+      if (occurrence.elapsedDays > 0) pairs.counting.push({ event, occurrence })
+      else toUpcoming(event, occurrence)
+      continue
+    }
+    if (occurrence.daysUntil < 0) pairs.onceDone.push({ event, occurrence })
+    else {
+      pairs.onceActive.push({ event, occurrence })
+      toUpcoming(event, occurrence)
+    }
+  }
+
+  const stable = (a: { event: AnniversaryEvent }, b: { event: AnniversaryEvent }) => a.event.sortOrder - b.event.sortOrder || a.event.id - b.event.id
+  type OccurrencePair = { event: AnniversaryEvent, occurrence: AnniversaryOccurrence }
+  const byDays = (dir: 1 | -1) => (a: OccurrencePair, b: OccurrencePair) =>
+    dir * (a.occurrence.daysUntil - b.occurrence.daysUntil) || stable(a, b)
+
+  const strip = (list: Array<{ event: AnniversaryEvent }>) => list.map((item) => item.event)
+  const sorted = {
+    today: strip([...pairs.today].sort(stable)),
+    week: strip([...pairs.week].sort(byDays(1))),
+    later: strip([...pairs.later].sort(byDays(-1))),
+    counting: strip([...pairs.counting].sort(byDays(-1))),
+    past: strip([...pairs.past].sort(byDays(-1))),
+    onceActive: strip([...pairs.onceActive].sort(byDays(-1))),
+    onceDone: strip([...pairs.onceDone].sort(byDays(-1))),
+  }
+
+  return {
+    ...sorted,
+    counts: {
+      soon: sorted.today.length + sorted.week.length + sorted.later.length + sorted.counting.length,
+      past: sorted.past.length,
+      once: sorted.onceActive.length + sorted.onceDone.length,
+    },
+  }
+}
+
+/** 周年事件今年已过：距今年那次发生日过了多少天（下次发生日回退一年估算，农历有 ±1 天误差）。 */
+export function daysSinceLastOccurrence(occurrence: AnniversaryOccurrence, now = new Date()): number {
+  const next = dateFromString(occurrence.date)
+  const last = new Date(next.getFullYear() - 1, next.getMonth(), next.getDate())
+  return Math.max(0, daysBetween(last, startOfDay(now)))
+}
+
 export function summarizeAnniversaries(events: AnniversaryEvent[], now = new Date()): AnniversarySummary {
   const today = startOfDay(now)
   const active = events

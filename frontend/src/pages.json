@@ -33,7 +33,9 @@
     {
       "path": "pages/anniversary/index",
       "style": {
-        "navigationBarTitleText": "时光纪念卡"
+        "navigationBarTitleText": "时光纪念卡",
+        "navigationStyle": "custom",
+        "disableSwipeBack": true
       }
     },
     {

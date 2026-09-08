@@ -1330,4 +1330,47 @@ function testAdventure() {
       '打卡日',
     ]), `今年由远到近：${titles.join(' / ')}`)
   }
+
+  // 时间状态分组（tab 归类 + 段内排序 + 计数 + 来源标记）
+  {
+    const now = new Date(2026, 8, 8) // 2026-09-08
+    const eventOf = (id: number, title: string, eventDate: string, extras: Partial<ReturnType<typeof ann.emptyAnniversaryDraft>> = {}) => ({
+      ...ann.emptyAnniversaryDraft('custom'),
+      ...extras,
+      id,
+      title,
+      eventDate,
+      calendarAddedAt: '',
+      calendarRepeatType: '' as const,
+      sortOrder: 0,
+      role: 'owner' as const,
+      ownerId: 1,
+      shared: false,
+      memberCount: 1,
+      createdAt: '',
+      updatedAt: '',
+    })
+    const todayBirthday = eventOf(1, '妈妈生日', '1990-09-08', { sceneType: 'birthday', repeatType: 'yearly', countMode: 'countdown' })
+    const weekMeeting = eventOf(2, '周会', '2026-09-12', { repeatType: 'yearly', countMode: 'countdown' })
+    const weekTrip = eventOf(3, '出发去大理', '2026-09-10', { sceneType: 'travel' })
+    const farExam = eventOf(4, '考研倒计时', '2026-12-20', { sceneType: 'deadline' })
+    const pastWedding = eventOf(5, '领证纪念日', '2020-06-06', { sceneType: 'wedding', repeatType: 'yearly' })
+    const pastBirthday = eventOf(6, '老婆生日', '1995-04-18', { sceneType: 'birthday', repeatType: 'yearly', countMode: 'countdown' })
+    const doneExam = eventOf(7, '毕业典礼', '2026-06-01')
+    const counting = eventOf(8, '在一起', '2026-01-01', { sceneType: 'relationship', countMode: 'countup' })
+    const g = ann.groupAnniversaryEvents([todayBirthday, weekMeeting, weekTrip, farExam, pastWedding, pastBirthday, doneExam, counting], now)
+
+    assert(g.today.map((e) => e.title).join() === '妈妈生日', `今天段：周年且 daysUntil=0，实际 ${g.today.map((e) => e.title).join()}`)
+    assert(g.week.map((e) => e.title).join() === '出发去大理,周会', `7 天内近的在前（沿用原段行为），实际 ${g.week.map((e) => e.title).join()}`)
+    assert(g.later.map((e) => e.title).join() === '考研倒计时', '更晚段：一次性倒数也进即将到来')
+    assert(g.counting.map((e) => e.title).join() === '在一起', '正计时段')
+    assert(g.past.map((e) => e.title).join() === '领证纪念日,老婆生日', `今年已过刚过的在前，实际 ${g.past.map((e) => e.title).join()}`)
+    assert(g.onceActive.map((e) => e.title).join() === '考研倒计时,出发去大理', `不重复·倒数中由远到近（沿用原列表规则），实际 ${g.onceActive.map((e) => e.title).join()}`)
+    assert(g.onceDone.map((e) => e.title).join() === '毕业典礼', '不重复·已完成：一次性过了不进即将到来')
+    assert(g.counts.soon === 5 && g.counts.past === 2 && g.counts.once === 3, `计数 soon/past/once = ${g.counts.soon}/${g.counts.past}/${g.counts.once}`)
+    assert(ann.timeStatusOf(pastWedding, now) === 'past', 'timeStatusOf：周年过完 → past')
+    assert(ann.timeStatusOf(doneExam, now) === 'once', 'timeStatusOf：一次性 → once')
+    assert(ann.timeStatusOf(todayBirthday, now) === 'soon', 'timeStatusOf：周年未到 → soon')
+    assert(ann.daysSinceLastOccurrence(ann.computeOccurrence(pastBirthday, now), now) === 143, '今年已过：距今年发生日 143 天')
+  }
 }

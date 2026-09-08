@@ -1,5 +1,15 @@
 <template>
   <view class="anniversary">
+    <!-- 自定义导航：非列表态（卡片/编辑/邀请）先回列表，列表态才退出页面 -->
+    <view class="anniversary__navbar">
+      <view class="anniversary__navbar-status" :style="{ height: statusBarHeight + 'px' }" />
+      <view class="anniversary__navbar-row">
+        <view class="anniversary__navbar-back" @tap="goBack">
+          <view class="anniversary__navbar-chevron" />
+        </view>
+      </view>
+    </view>
+
     <view class="anniversary__header">
       <view class="anniversary__header-copy">
         <text class="anniversary__eyebrow">时光纪念卡</text>
@@ -45,172 +55,353 @@
         </view>
 
         <template v-else>
-          <view
-            v-if="summary.nextEvent"
-            class="anniversary__hero"
-            :class="['anniversary__hero--' + summary.nextEvent.sceneType, { 'anniversary__hero--today': heroIsToday }]"
-          >
-            <view class="anniversary__hero-top">
-              <view class="anniversary__hero-scene">{{ heroIsToday ? '🎉 ' : '' }}{{ sceneName(summary.nextEvent.sceneType) }}</view>
-              <text class="anniversary__hero-kicker">{{ heroIsToday ? '就是今天' : '下一个重要日子' }}</text>
-            </view>
-            <view class="anniversary__hero-title">{{ summary.nextEvent.title }}</view>
-            <view class="anniversary__hero-number">
-              <text class="anniversary__hero-days">{{ heroDaysText }}</text>
-              <text v-if="heroUnit" class="anniversary__hero-unit">{{ heroUnit }}</text>
-            </view>
-            <text class="anniversary__hero-detail">{{ computeOccurrence(summary.nextEvent).detail }}</text>
-            <view v-if="heroMilestone" class="anniversary__hero-milestone">
-              <view class="anniversary__hero-milestone-head">
-                <text>{{ heroMilestone.label }}里程碑</text>
-                <text class="anniversary__hero-milestone-pct">{{ heroMilestonePercent }}%</text>
-              </view>
-              <view class="anniversary__hero-milestone-track">
-                <view class="anniversary__hero-milestone-bar" :style="{ width: heroMilestonePercent + '%' }" />
-              </view>
-            </view>
-            <view class="anniversary__hero-actions">
-              <view class="anniversary__hero-btn" @tap="addToCalendar(summary.nextEvent)">📅 写入日历</view>
-              <view class="anniversary__hero-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '✨ 马上纪念' : '✨ 生成卡片' }}</view>
-            </view>
-          </view>
-
-          <view class="anniversary__stats">
-            <view class="anniversary__stat card">
-              <text class="anniversary__stat-value">{{ summary.todayCount }}</text>
-              <text class="caption">今天</text>
-            </view>
-            <view class="anniversary__stat card">
-              <text class="anniversary__stat-value">{{ summary.upcomingCount }}</text>
-              <text class="caption">7 天内</text>
-            </view>
-            <view class="anniversary__stat card">
-              <text class="anniversary__stat-value">{{ summary.nextMilestone?.remainingDays ?? '-' }}</text>
-              <text class="caption">天到里程碑</text>
-            </view>
-          </view>
-
-          <view v-if="summary.today.length" class="anniversary__section">
-            <view class="anniversary__section-head">
-              <text class="section-title">今天</text>
-              <text class="caption">{{ summary.today.length }} 个</text>
-            </view>
+          <!-- hero + 统计：全局仪表盘（三个 tab 常驻），搜索时收起 -->
+          <template v-if="!searching">
             <view
-              v-for="event in summary.today"
-              :key="`today-${event.id}`"
-              class="anniversary__event card"
-              @tap="openCard(event)"
+              v-if="summary.nextEvent"
+              class="anniversary__hero"
+              :class="['anniversary__hero--' + summary.nextEvent.sceneType, { 'anniversary__hero--today': heroIsToday }]"
             >
-              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
-              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
-                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
-                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+              <view class="anniversary__hero-top">
+                <view class="anniversary__hero-scene">{{ heroIsToday ? '🎉 ' : '' }}{{ sceneName(summary.nextEvent.sceneType) }}</view>
+                <text class="anniversary__hero-kicker">{{ heroIsToday ? '就是今天' : '下一个重要日子' }}</text>
               </view>
-              <view class="anniversary__event-body">
-                <view class="anniversary__event-title-row">
-                  <text class="anniversary__event-title">{{ event.title }}</text>
-                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+              <view class="anniversary__hero-title">{{ summary.nextEvent.title }}</view>
+              <view class="anniversary__hero-number">
+                <text class="anniversary__hero-days">{{ heroDaysText }}</text>
+                <text v-if="heroUnit" class="anniversary__hero-unit">{{ heroUnit }}</text>
+              </view>
+              <text class="anniversary__hero-detail">{{ computeOccurrence(summary.nextEvent).detail }}</text>
+              <view v-if="heroMilestone" class="anniversary__hero-milestone">
+                <view class="anniversary__hero-milestone-head">
+                  <text>{{ heroMilestone.label }}里程碑</text>
+                  <text class="anniversary__hero-milestone-pct">{{ heroMilestonePercent }}%</text>
                 </view>
-                <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
-              </view>
-              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">今天</text>
-            </view>
-          </view>
-
-          <view v-if="summary.upcoming.length" class="anniversary__section">
-            <view class="anniversary__section-head">
-              <text class="section-title">即将到来</text>
-              <text class="caption">7 天内</text>
-            </view>
-            <view
-              v-for="event in summary.upcoming"
-              :key="`upcoming-${event.id}`"
-              class="anniversary__event card"
-              @tap="openCard(event)"
-            >
-              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
-              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
-                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
-                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
-              </view>
-              <view class="anniversary__event-body">
-                <view class="anniversary__event-title-row">
-                  <text class="anniversary__event-title">{{ event.title }}</text>
-                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                <view class="anniversary__hero-milestone-track">
+                  <view class="anniversary__hero-milestone-bar" :style="{ width: heroMilestonePercent + '%' }" />
                 </view>
-                <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).detail }}</text>
               </view>
-              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ computeOccurrence(event).daysUntil }} 天</text>
-            </view>
-          </view>
-
-          <view v-if="summary.nextMilestone" class="anniversary__section">
-            <view class="anniversary__section-head">
-              <text class="section-title">下一个里程碑</text>
-              <text class="caption">{{ summary.nextMilestone.date.replace(/-/g, '.') }}</text>
-            </view>
-            <view class="anniversary__milestone card" @tap="openCard(summary.nextMilestone.event)">
-              <text class="anniversary__milestone-title">{{ summary.nextMilestone.event.title }}</text>
-              <text class="anniversary__milestone-main">还有 {{ summary.nextMilestone.remainingDays }} 天，就是 {{ summary.nextMilestone.label }}</text>
-            </view>
-          </view>
-
-          <view class="anniversary__section">
-            <view class="anniversary__section-head">
-              <text class="section-title">全部日子</text>
-              <text class="caption">{{ events.length }} 个</text>
+              <view class="anniversary__hero-actions">
+                <view class="anniversary__hero-btn" @tap="addToCalendar(summary.nextEvent)">📅 写入日历</view>
+                <view class="anniversary__hero-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '✨ 马上纪念' : '✨ 生成卡片' }}</view>
+              </view>
             </view>
 
-            <!-- 搜索与场景筛选 -->
-            <view class="anniversary__filter">
+            <view class="anniversary__stats">
+              <view class="anniversary__stat card">
+                <text class="anniversary__stat-value">{{ summary.todayCount }}</text>
+                <text class="caption">今天</text>
+              </view>
+              <view class="anniversary__stat card">
+                <text class="anniversary__stat-value">{{ summary.upcomingCount }}</text>
+                <text class="caption">7 天内</text>
+              </view>
+              <view class="anniversary__stat card">
+                <text class="anniversary__stat-value">{{ summary.nextMilestone?.remainingDays ?? '-' }}</text>
+                <text class="caption">天到里程碑</text>
+              </view>
+            </view>
+          </template>
+
+          <!-- 吸顶组：tab + 搜索（搜索时 tab 让位给结果条；场景 chips 不吸顶） -->
+          <view class="anniversary__sticky">
+            <view v-if="!searching" class="anniversary__tabs">
+              <view
+                v-for="tab in timeTabs"
+                :key="tab.key"
+                class="anniversary__tab"
+                :class="{ 'anniversary__tab--active': activeTab === tab.key }"
+                @tap="switchTab(tab.key)"
+              >
+                <text class="anniversary__tab-label">{{ tab.name }}</text>
+                <text class="anniversary__tab-count">{{ tab.count }}</text>
+              </view>
+            </view>
+            <view class="anniversary__search-row" :class="{ 'anniversary__search-row--active': searching }">
               <input v-model="searchQuery" class="anniversary__search" placeholder="搜索纪念日…" maxlength="40" />
-              <scroll-view scroll-x class="anniversary__scene-filter">
-                <view
-                  v-for="scene in filterSceneOptions"
-                  :key="scene.key"
-                  class="anniversary__scene-chip"
-                  :class="[
-                    filterScene === scene.key ? 'anniversary__scene-chip--active' : '',
-                    scene.key ? 'anniversary__scene-chip--c-' + scene.key : '',
-                  ]"
-                  @tap="filterScene = filterScene === scene.key ? '' : scene.key"
-                >
-                  <view v-if="scene.key" class="anniversary__chip-dot" :class="'anniversary__chip-dot--' + scene.key" />
-                  {{ scene.name }}
-                </view>
-              </scroll-view>
+              <view v-if="searchQuery" class="anniversary__search-clear" @tap="searchQuery = ''">×</view>
             </view>
+          </view>
 
+          <!-- 场景筛选：tab 内二级筛选 -->
+          <scroll-view v-if="!searching" scroll-x class="anniversary__scene-filter">
             <view
-              v-for="event in filteredEvents"
-              :key="event.id"
-              class="anniversary__event card"
-              @tap="openCard(event)"
+              v-for="scene in filterSceneOptions"
+              :key="scene.key"
+              class="anniversary__scene-chip"
+              :class="[
+                filterScene === scene.key ? 'anniversary__scene-chip--active' : '',
+                scene.key ? 'anniversary__scene-chip--c-' + scene.key : '',
+              ]"
+              @tap="filterScene = filterScene === scene.key ? '' : scene.key"
             >
-              <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
-              <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
-                <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
-                <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
-              </view>
-              <view class="anniversary__event-body">
-                <view class="anniversary__event-title-row">
-                  <text class="anniversary__event-title">{{ event.title }}</text>
-                  <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                  <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
-                </view>
-                <text class="caption">{{ eventDateLabel(event) }} · {{ computeOccurrence(event).label }}</text>
-              </view>
-              <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">
-                {{ computeOccurrence(event).daysUntil >= 0 ? computeOccurrence(event).daysUntil + ' 天' : '已过' }}
-              </text>
+              <view v-if="scene.key" class="anniversary__chip-dot" :class="'anniversary__chip-dot--' + scene.key" />
+              {{ scene.name }}
             </view>
+          </scroll-view>
 
-            <view v-if="filteredEvents.length === 0 && searchQuery" class="anniversary__empty">
+          <!-- 搜索模式：跨全部分组，结果带来源 -->
+          <template v-if="searching">
+            <view class="anniversary__resultbar">
+              <text class="anniversary__resultbar-text">搜索结果 {{ searchResults.length }} · 跨全部分组</text>
+            </view>
+            <view v-if="searchResults.length" class="anniversary__section">
+              <view
+                v-for="item in searchResults"
+                :key="`sr-${item.event.id}`"
+                class="anniversary__event card"
+                @tap="openCard(item.event)"
+              >
+                <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + item.event.sceneType" />
+                <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + item.event.sceneType">
+                  <text class="anniversary__date-badge-month">{{ badgeMonth(item.event) }}</text>
+                  <text class="anniversary__date-badge-day">{{ badgeDay(item.event) }}</text>
+                </view>
+                <view class="anniversary__event-body">
+                  <view class="anniversary__event-title-row">
+                    <text class="anniversary__event-title">{{ item.event.title }}</text>
+                    <text v-if="item.event.shared" class="anniversary__event-shared-badge">👥 {{ item.event.memberCount }}</text>
+                  </view>
+                  <text class="caption">{{ eventDateLabel(item.event) }} · {{ occOf(item.event).label }}</text>
+                </view>
+                <text class="anniversary__src-pill">{{ item.sourceName }} ›</text>
+              </view>
+            </view>
+            <view v-else class="anniversary__empty anniversary__empty--inline">
               <text>没有找到匹配的纪念日</text>
             </view>
-          </view>
+          </template>
+
+          <!-- 即将到来：今天 / 7 天内 / 更晚 / 正计时 -->
+          <template v-else-if="activeTab === 'soon'">
+            <view v-if="groups.counts.soon === 0" class="anniversary__empty anniversary__empty--inline">
+              <text>近期没有待到来的日子</text>
+            </view>
+            <template v-else>
+              <view v-if="groups.today.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">今天</text>
+                  <text class="caption">{{ groups.today.length }} 个</text>
+                </view>
+                <view
+                  v-for="event in groups.today"
+                  :key="`today-${event.id}`"
+                  class="anniversary__event card"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).detail }}</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">今天</text>
+                </view>
+              </view>
+
+              <view v-if="groups.week.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">7 天内</text>
+                  <text class="caption">{{ groups.week.length }} 个</text>
+                </view>
+                <view
+                  v-for="event in groups.week"
+                  :key="`week-${event.id}`"
+                  class="anniversary__event card"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).detail }}</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ occOf(event).daysUntil }} 天</text>
+                </view>
+              </view>
+
+              <view v-if="groups.later.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">更晚</text>
+                  <text class="caption">{{ groups.later.length }} 个</text>
+                </view>
+                <view
+                  v-for="event in laterShown"
+                  :key="`later-${event.id}`"
+                  class="anniversary__event card"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).detail }}</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ occOf(event).daysUntil }} 天</text>
+                </view>
+                <view v-if="groups.later.length > laterShown.length" class="anniversary__loadmore">
+                  <text>上拉加载更多 · 已显示 {{ laterShown.length }} / {{ groups.later.length }}</text>
+                </view>
+              </view>
+
+              <view v-if="groups.counting.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">正计时</text>
+                  <text class="caption">{{ groups.counting.length }} 个</text>
+                </view>
+                <view
+                  v-for="event in groups.counting"
+                  :key="`counting-${event.id}`"
+                  class="anniversary__event card"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).label }}</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">第 {{ occOf(event).elapsedDays }} 天</text>
+                </view>
+              </view>
+            </template>
+          </template>
+
+          <!-- 今年已过：周年事件等明年，附明年日期 -->
+          <template v-else-if="activeTab === 'past'">
+            <view v-if="groups.past.length === 0" class="anniversary__empty anniversary__empty--inline">
+              <text>今年还没有过完的日子 🍂</text>
+            </view>
+            <view v-else class="anniversary__section">
+              <view class="anniversary__section-head">
+                <text class="section-title">今年已过</text>
+                <text class="caption">{{ groups.past.length }} 个 · 刚过的在前</text>
+              </view>
+              <view
+                v-for="event in pastShown"
+                :key="`past-${event.id}`"
+                class="anniversary__event card"
+                @tap="openCard(event)"
+              >
+                <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                  <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                  <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                </view>
+                <view class="anniversary__event-body">
+                  <view class="anniversary__event-title-row">
+                    <text class="anniversary__event-title">{{ event.title }}</text>
+                    <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                    <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                  </view>
+                  <text class="caption">{{ nextOccurrenceLabel(event) }}</text>
+                </view>
+                <text class="anniversary__event-count anniversary__event-count--muted">{{ passedDaysText(event) }}</text>
+              </view>
+              <view v-if="groups.past.length > pastShown.length" class="anniversary__loadmore">
+                <text>上拉加载更多 · 已显示 {{ pastShown.length }} / {{ groups.past.length }}</text>
+              </view>
+            </view>
+          </template>
+
+          <!-- 不重复：倒数中 / 已完成 -->
+          <template v-else>
+            <view v-if="groups.counts.once === 0" class="anniversary__empty anniversary__empty--inline">
+              <text>还没有一次性事件</text>
+            </view>
+            <template v-else>
+              <view v-if="groups.onceActive.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">倒数中</text>
+                  <text class="caption">{{ groups.onceActive.length }} 个</text>
+                </view>
+                <view
+                  v-for="event in onceActiveShown"
+                  :key="`once-${event.id}`"
+                  class="anniversary__event card"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · 一次性</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">
+                    {{ occOf(event).daysUntil === 0 ? '今天' : occOf(event).daysUntil + ' 天' }}
+                  </text>
+                </view>
+                <view v-if="groups.onceActive.length > onceActiveShown.length" class="anniversary__loadmore">
+                  <text>上拉加载更多 · 已显示 {{ onceActiveShown.length }} / {{ groups.onceActive.length }}</text>
+                </view>
+              </view>
+
+              <view v-if="groups.onceDone.length" class="anniversary__section">
+                <view class="anniversary__section-head">
+                  <text class="section-title">已完成</text>
+                  <text class="caption">{{ groups.onceDone.length }} 个 · 不再提醒</text>
+                </view>
+                <view
+                  v-for="event in onceDoneShown"
+                  :key="`done-${event.id}`"
+                  class="anniversary__event card anniversary__event--done"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · 一次性</text>
+                  </view>
+                  <text class="anniversary__event-count anniversary__event-count--muted">{{ passedDaysText(event) }}</text>
+                </view>
+                <view v-if="groups.onceDone.length > onceDoneShown.length" class="anniversary__loadmore">
+                  <text>上拉加载更多 · 已显示 {{ onceDoneShown.length }} / {{ groups.onceDone.length }}</text>
+                </view>
+              </view>
+            </template>
+          </template>
         </template>
       </template>
 
@@ -516,8 +707,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, ref } from 'vue'
-import { onLoad, onShareAppMessage, onShow } from '@dcloudio/uni-app'
+import { computed, getCurrentInstance, nextTick, reactive, ref } from 'vue'
+import { onLoad, onReachBottom, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import type {
   AnniversaryCalendarType,
   AnniversaryCardTemplate,
@@ -545,16 +736,18 @@ import {
   buildCalendarEventTimes,
   computeOccurrence,
   dateFromString,
+  daysSinceLastOccurrence,
   defaultCopyForEvent,
   draftFromEvent,
   emptyAnniversaryDraft,
   eventDateLabel,
   formatDate,
+  groupAnniversaryEvents,
   nextMilestoneForEvent,
   recommendedTemplateForScene,
   sceneName,
-  sortAnniversaryEvents,
   summarizeAnniversaries,
+  timeStatusOf,
 } from '@/utils/anniversary'
 import { lunarDayLabel, lunarLeapDays, lunarLeapMonth, lunarMonthDays, lunarMonthLabel, lunarToSolar, solarToLunar } from '@/utils/lunar'
 import { canvasToFile, chooseImage, getCanvasNode, openAuthSetting, saveImageToAlbum } from '@/utils/canvasAdapter'
@@ -576,6 +769,24 @@ const SCENE_ICONS: Record<AnniversarySceneType, string> = {
 }
 
 const instance = getCurrentInstance()?.proxy
+const statusBarHeight = (() => {
+  try {
+    return uni.getSystemInfoSync().statusBarHeight || 44
+  } catch {
+    return 44
+  }
+})()
+function goBack() {
+  if (panel.value !== 'home') {
+    panel.value = 'home'
+    return
+  }
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.reLaunch({ url: '/pages/home/index' })
+  }
+}
 const events = ref<AnniversaryEvent[]>([])
 const loading = ref(true)
 const saving = ref(false)
@@ -647,21 +858,69 @@ const previewUnit = computed(() => {
   if (cardEvent.value?.countMode === 'countup') return '天'
   return daysUntil === 0 ? '今天' : '天'
 })
-// 全部日子：今年未到的由远到近，跨年的排在今年之后，已过沉底
-const sortedEvents = computed(() => sortAnniversaryEvents(events.value))
+// 列表：时间状态 tab 分组（即将到来 / 今年已过 / 不重复）+ 搜索跨组
+type TimeTab = 'soon' | 'past' | 'once'
+const TIME_TAB_NAMES: Record<TimeTab, string> = { soon: '即将到来', past: '今年已过', once: '不重复' }
+const TAB_RENDER_BATCH = 30
+const activeTab = ref<TimeTab>('soon')
+const tabRenderLimit = reactive<Record<TimeTab, number>>({ soon: TAB_RENDER_BATCH, past: TAB_RENDER_BATCH, once: TAB_RENDER_BATCH })
 const searchQuery = ref('')
 const filterScene = ref('')
 const filterSceneOptions = computed(() => [{ key: '' as '', name: '全部' }, ...SCENE_OPTIONS])
-const filteredEvents = computed(() => {
-  let list = sortedEvents.value
-  if (filterScene.value) {
-    list = list.filter((event) => event.sceneType === filterScene.value)
-  }
+const searching = computed(() => searchQuery.value.trim() !== '')
+
+// occurrence 缓存：模板里每个事件多次取值（detail/label/daysUntil）只算一次，农历换算不随渲染重复
+const occurrenceById = computed(() => {
+  const today = new Date()
+  const map = new Map<number, ReturnType<typeof computeOccurrence>>()
+  for (const event of events.value) map.set(event.id, computeOccurrence(event, today))
+  return map
+})
+function occOf(event: AnniversaryEvent): ReturnType<typeof computeOccurrence> {
+  return occurrenceById.value.get(event.id) ?? computeOccurrence(event)
+}
+
+const groups = computed(() => {
+  const list = filterScene.value ? events.value.filter((event) => event.sceneType === filterScene.value) : events.value
+  return groupAnniversaryEvents(list)
+})
+const timeTabs = computed(() => [
+  { key: 'soon' as TimeTab, name: TIME_TAB_NAMES.soon, count: groups.value.counts.soon },
+  { key: 'past' as TimeTab, name: TIME_TAB_NAMES.past, count: groups.value.counts.past },
+  { key: 'once' as TimeTab, name: TIME_TAB_NAMES.once, count: groups.value.counts.once },
+])
+const laterShown = computed(() => groups.value.later.slice(0, tabRenderLimit.soon))
+const pastShown = computed(() => groups.value.past.slice(0, tabRenderLimit.past))
+const onceActiveShown = computed(() => groups.value.onceActive.slice(0, tabRenderLimit.once))
+const onceDoneShown = computed(() => groups.value.onceDone.slice(0, tabRenderLimit.once))
+const searchResults = computed(() => {
+  if (!searching.value) return []
   const query = searchQuery.value.trim().toLowerCase()
-  if (query) {
-    list = list.filter((event) => event.title.toLowerCase().includes(query))
+  return events.value
+    .filter((event) => event.title.toLowerCase().includes(query))
+    .map((event) => ({ event, sourceName: TIME_TAB_NAMES[timeStatusOf(event)] }))
+})
+function switchTab(key: TimeTab) {
+  activeTab.value = key
+}
+function nextOccurrenceLabel(event: AnniversaryEvent): string {
+  const suffix = event.calendarType === 'lunar' ? ' · 农历估算' : ''
+  return `${occOf(event).date.replace(/-/g, '.')} · 明年${suffix}`
+}
+function passedDaysText(event: AnniversaryEvent): string {
+  const occurrence = occOf(event)
+  if (event.repeatType === 'yearly') return `已过 ${daysSinceLastOccurrence(occurrence)} 天`
+  return `已过 ${Math.abs(occurrence.daysUntil)} 天`
+}
+onReachBottom(() => {
+  if (searching.value) return
+  const key = activeTab.value
+  const totals: Record<TimeTab, number> = {
+    soon: groups.value.later.length,
+    past: groups.value.past.length,
+    once: Math.max(groups.value.onceActive.length, groups.value.onceDone.length),
   }
-  return list
+  if (totals[key] > tabRenderLimit[key]) tabRenderLimit[key] += TAB_RENDER_BATCH
 })
 const headerTitle = computed(() => {
   if (panel.value === 'form') return '记录重要日子'
@@ -1369,7 +1628,38 @@ function toneHint(tone: AnniversaryCardTone): string {
 
 .anniversary {
   min-height: 100vh;
-  padding: 48rpx 32rpx 180rpx;
+  padding: 0 32rpx 180rpx;
+
+  &__navbar {
+    margin: 0 -32rpx;
+    background: transparent;
+  }
+
+  &__navbar-row {
+    height: 88rpx;
+    display: flex;
+    align-items: center;
+    padding: 0 16rpx;
+  }
+
+  &__navbar-back {
+    width: 64rpx;
+    height: 64rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: $color-primary-light;
+  }
+
+  &__navbar-chevron {
+    width: 18rpx;
+    height: 18rpx;
+    border-left: 4rpx solid $color-text;
+    border-bottom: 4rpx solid $color-text;
+    transform: rotate(45deg);
+    margin-left: 6rpx;
+  }
 
   &__header {
     display: flex;
@@ -1588,14 +1878,9 @@ function toneHint(tone: AnniversaryCardTone): string {
 
   /* ---- filter & search ---- */
 
-  &__filter {
-    display: flex;
-    flex-direction: column;
-    gap: 16rpx;
-    margin-bottom: 20rpx;
-  }
-
   &__search {
+    flex: 1;
+    min-width: 0;
     height: 76rpx;
     border: 2rpx solid $color-border;
     border-radius: $radius-md;
@@ -1605,8 +1890,33 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 26rpx;
   }
 
+  &__search-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+
+  &__search-row--active &__search {
+    border-color: $color-primary;
+  }
+
+  &__search-clear {
+    flex-shrink: 0;
+    width: 44rpx;
+    height: 44rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: $color-primary-light;
+    color: $color-primary-dark;
+    font-size: 28rpx;
+    line-height: 1;
+  }
+
   &__scene-filter {
     white-space: nowrap;
+    margin-bottom: 20rpx;
   }
 
   &__scene-chip {
@@ -1627,6 +1937,109 @@ function toneHint(tone: AnniversaryCardTone): string {
     height: 14rpx;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  /* ---- 时间状态 tab + 搜索结果 ---- */
+
+  &__sticky {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+    margin-bottom: 20rpx;
+    padding: 16rpx 0 12rpx;
+    background: $color-card;
+  }
+
+  &__tabs {
+    display: flex;
+    gap: 12rpx;
+  }
+
+  &__tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8rpx;
+    height: 68rpx;
+    border-radius: $radius-md;
+    background: $color-card;
+    border: 2rpx solid $color-border;
+  }
+
+  &__tab--active {
+    background: $color-primary;
+    border-color: $color-primary;
+  }
+
+  &__tab-label {
+    color: $color-text-secondary;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+
+  &__tab--active &__tab-label {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  &__tab-count {
+    color: $color-text-secondary;
+    font-size: 20rpx;
+  }
+
+  &__tab--active &__tab-count {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  &__resultbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8rpx;
+    height: 64rpx;
+    margin-bottom: 24rpx;
+    border-radius: $radius-md;
+    background: $color-primary-light;
+  }
+
+  &__resultbar-text {
+    color: $color-primary-dark;
+    font-size: 24rpx;
+    font-weight: 600;
+  }
+
+  &__src-pill {
+    padding: 4rpx 16rpx;
+    border-radius: 999rpx;
+    background: $color-primary-light;
+    color: $color-primary-dark;
+    font-size: 22rpx;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  &__loadmore {
+    padding: 8rpx 0 4rpx;
+    text-align: center;
+    color: $color-text-secondary;
+    font-size: 22rpx;
+  }
+
+  &__empty--inline {
+    min-height: 200rpx;
+  }
+
+  &__event--done {
+    opacity: 0.55;
+  }
+
+  &__event-count--muted {
+    color: $color-text-secondary;
   }
 
   /* ---- event rows ---- */
