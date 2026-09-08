@@ -12,9 +12,22 @@ $color-danger: #e06a5a;
 $radius-lg: 32rpx;
 $radius-md: 20rpx;
 $radius-sm: 12rpx;
+$radius-pill: 999rpx;
 
 $shadow-card: 0 8rpx 32rpx rgba(168, 116, 75, 0.08);
+$shadow-sticky: 0 6rpx 16rpx rgba(74, 63, 53, 0.06);
+$shadow-float: 0 16rpx 40rpx rgba(74, 63, 53, 0.18);
 
+$font-display: 44rpx;
 $font-title: 36rpx;
 $font-body: 28rpx;
 $font-caption: 24rpx;
+$font-micro: 22rpx;
+
+/* 间距刻度：页面 padding、区块间距、组内 gap 只从这里取，新页面禁止裸写 rpx 间距 */
+$space-1: 8rpx;
+$space-2: 16rpx;
+$space-3: 24rpx;
+$space-4: 32rpx;
+$space-5: 48rpx;
+$space-6: 64rpx;

@@ -1,14 +1,7 @@
 <template>
   <view class="anniversary">
     <!-- 自定义导航：非列表态（卡片/编辑/邀请）先回列表，列表态才退出页面 -->
-    <view class="anniversary__navbar">
-      <view class="anniversary__navbar-status" :style="{ height: statusBarHeight + 'px' }" />
-      <view class="anniversary__navbar-row">
-        <view class="anniversary__navbar-back" @tap="goBack">
-          <view class="anniversary__navbar-chevron" />
-        </view>
-      </view>
-    </view>
+    <AppNavBar :bleed="32" @back="goBack" />
 
     <view class="anniversary__header">
       <view class="anniversary__header-copy">
@@ -48,11 +41,9 @@
 
       <!-- ===== 列表页 ===== -->
       <template v-if="panel === 'home'">
-        <view v-if="events.length === 0" class="anniversary__empty card">
-          <text class="anniversary__empty-title">还没有记录重要日子</text>
-          <text class="caption">从生日、旅行、纪念日或坚持一件事开始。</text>
+        <AppEmpty v-if="events.length === 0" class="card" title="还没有记录重要日子" hint="从生日、旅行、纪念日或坚持一件事开始。">
           <view class="btn-primary anniversary__empty-action" @tap="openCreate()">记录第一个日子</view>
-        </view>
+        </AppEmpty>
 
         <template v-else>
           <!-- hero + 统计：全局仪表盘（三个 tab 常驻），搜索时收起 -->
@@ -145,7 +136,7 @@
             <view class="anniversary__resultbar">
               <text class="anniversary__resultbar-text">搜索结果 {{ searchResults.length }} · 跨全部分组</text>
             </view>
-            <view v-if="searchResults.length" class="anniversary__section">
+            <AppSection v-if="searchResults.length">
               <view
                 v-for="item in searchResults"
                 :key="`sr-${item.event.id}`"
@@ -166,23 +157,15 @@
                 </view>
                 <text class="anniversary__src-pill">{{ item.sourceName }} ›</text>
               </view>
-            </view>
-            <view v-else class="anniversary__empty anniversary__empty--inline">
-              <text>没有找到匹配的纪念日</text>
-            </view>
+            </AppSection>
+            <AppEmpty v-else inline title="没有找到匹配的纪念日" />
           </template>
 
           <!-- 即将到来：今天 / 7 天内 / 更晚 / 正计时 -->
           <template v-else-if="activeTab === 'soon'">
-            <view v-if="groups.counts.soon === 0" class="anniversary__empty anniversary__empty--inline">
-              <text>近期没有待到来的日子 🍁</text>
-            </view>
+            <AppEmpty v-if="groups.counts.soon === 0" inline icon="🍁" title="近期没有待到来的日子" />
             <template v-else>
-              <view v-if="groups.today.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">今天</text>
-                  <text class="caption">{{ groups.today.length }} 个</text>
-                </view>
+              <AppSection v-if="groups.today.length" title="今天" :count="groups.today.length + ' 个'">
                 <view
                   v-for="event in groups.today"
                   :key="`today-${event.id}`"
@@ -204,13 +187,9 @@
                   </view>
                   <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">今天</text>
                 </view>
-              </view>
+              </AppSection>
 
-              <view v-if="groups.week.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">7 天内</text>
-                  <text class="caption">{{ groups.week.length }} 个</text>
-                </view>
+              <AppSection v-if="groups.week.length" title="7 天内" :count="groups.week.length + ' 个'">
                 <view
                   v-for="event in groups.week"
                   :key="`week-${event.id}`"
@@ -232,13 +211,9 @@
                   </view>
                   <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">{{ occOf(event).daysUntil }} 天</text>
                 </view>
-              </view>
+              </AppSection>
 
-              <view v-if="groups.later.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">更晚</text>
-                  <text class="caption">{{ groups.later.length }} 个</text>
-                </view>
+              <AppSection v-if="groups.later.length" title="更晚" :count="groups.later.length + ' 个'">
                 <view
                   v-for="event in laterShown"
                   :key="`later-${event.id}`"
@@ -263,13 +238,9 @@
                 <view v-if="groups.later.length > laterShown.length" class="anniversary__loadmore">
                   <text>已显示 {{ laterShown.length }} / {{ groups.later.length }} · 继续下滑自动加载</text>
                 </view>
-              </view>
+              </AppSection>
 
-              <view v-if="groups.counting.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">在一起的日子</text>
-                  <text class="caption">{{ groups.counting.length }} 个</text>
-                </view>
+              <AppSection v-if="groups.counting.length" title="在一起的日子" :count="groups.counting.length + ' 个'">
                 <view
                   v-for="event in groups.counting"
                   :key="`counting-${event.id}`"
@@ -291,20 +262,14 @@
                   </view>
                   <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">第 {{ occOf(event).elapsedDays }} 天</text>
                 </view>
-              </view>
+              </AppSection>
             </template>
           </template>
 
           <!-- 今年已过：周年事件等明年，附明年日期 -->
           <template v-else-if="activeTab === 'past'">
-            <view v-if="groups.past.length === 0" class="anniversary__empty anniversary__empty--inline">
-              <text>今年还没有过完的日子 🍂</text>
-            </view>
-            <view v-else class="anniversary__section">
-              <view class="anniversary__section-head">
-                <text class="section-title">今年已过</text>
-                <text class="caption">{{ groups.past.length }} 个 · 刚过的在前</text>
-              </view>
+            <AppEmpty v-if="groups.past.length === 0" inline icon="🍂" title="今年还没有过完的日子" />
+            <AppSection v-else title="今年已过" :count="groups.past.length + ' 个 · 刚过的在前'">
               <view
                 v-for="event in pastShown"
                 :key="`past-${event.id}`"
@@ -329,20 +294,14 @@
               <view v-if="groups.past.length > pastShown.length" class="anniversary__loadmore">
                 <text>已显示 {{ pastShown.length }} / {{ groups.past.length }} · 继续下滑自动加载</text>
               </view>
-            </view>
+            </AppSection>
           </template>
 
           <!-- 不重复：倒数中 / 已完成 -->
           <template v-else>
-            <view v-if="groups.counts.once === 0" class="anniversary__empty anniversary__empty--inline">
-              <text>还没有一次性事件 ✏️</text>
-            </view>
+            <AppEmpty v-if="groups.counts.once === 0" inline icon="✏️" title="还没有一次性事件" />
             <template v-else>
-              <view v-if="groups.onceActive.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">倒数中</text>
-                  <text class="caption">{{ groups.onceActive.length }} 个</text>
-                </view>
+              <AppSection v-if="groups.onceActive.length" title="倒数中" :count="groups.onceActive.length + ' 个'">
                 <view
                   v-for="event in onceActiveShown"
                   :key="`once-${event.id}`"
@@ -369,13 +328,9 @@
                 <view v-if="groups.onceActive.length > onceActiveShown.length" class="anniversary__loadmore">
                   <text>已显示 {{ onceActiveShown.length }} / {{ groups.onceActive.length }} · 继续下滑自动加载</text>
                 </view>
-              </view>
+              </AppSection>
 
-              <view v-if="groups.onceDone.length" class="anniversary__section">
-                <view class="anniversary__section-head">
-                  <text class="section-title">已完成</text>
-                  <text class="caption">{{ groups.onceDone.length }} 个 · 不再提醒</text>
-                </view>
+              <AppSection v-if="groups.onceDone.length" title="已完成" :count="groups.onceDone.length + ' 个 · 不再提醒'">
                 <view
                   v-for="event in onceDoneShown"
                   :key="`done-${event.id}`"
@@ -399,7 +354,7 @@
                 <view v-if="groups.onceDone.length > onceDoneShown.length" class="anniversary__loadmore">
                   <text>已显示 {{ onceDoneShown.length }} / {{ groups.onceDone.length }} · 继续下滑自动加载</text>
                 </view>
-              </view>
+              </AppSection>
             </template>
           </template>
         </template>
@@ -603,11 +558,7 @@
           <text class="caption">{{ cardEvent.role === 'owner' ? '你是创建者' : cardEvent.role === 'editor' ? '你有编辑权限' : '你只有查看权限' }}</text>
         </view>
 
-        <view class="anniversary__section">
-          <view class="anniversary__section-head">
-            <text class="section-title">模板</text>
-            <text class="caption">保存图片时使用</text>
-          </view>
+        <AppSection title="模板" count="保存图片时使用">
           <view class="anniversary__tpl-grid">
             <view
               v-for="template in TEMPLATE_OPTIONS"
@@ -625,13 +576,9 @@
               </view>
             </view>
           </view>
-        </view>
+        </AppSection>
 
-        <view class="anniversary__section">
-          <view class="anniversary__section-head">
-            <text class="section-title">风格</text>
-            <text class="caption">{{ toneName(cardTone) }} · {{ toneHint(cardTone) }}</text>
-          </view>
+        <AppSection title="风格" :count="toneName(cardTone) + ' · ' + toneHint(cardTone)">
           <view class="anniversary__tone-row">
             <view
               v-for="tone in TONE_OPTIONS"
@@ -647,7 +594,7 @@
               <text>{{ tone.name }}</text>
             </view>
           </view>
-        </view>
+        </AppSection>
 
         <view class="anniversary__bottom-space" />
 
@@ -754,6 +701,9 @@ import { canvasToFile, chooseImage, getCanvasNode, openAuthSetting, saveImageToA
 import { renderAnniversaryCard } from '@/utils/anniversaryCard'
 import AnniversaryInviteSheet from '@/components/AnniversaryInviteSheet.vue'
 import AnniversaryMembersPanel from '@/components/AnniversaryMembersPanel.vue'
+import AppEmpty from '@/components/AppEmpty.vue'
+import AppNavBar from '@/components/AppNavBar.vue'
+import AppSection from '@/components/AppSection.vue'
 
 type Panel = 'home' | 'form' | 'card' | 'invite'
 
@@ -769,13 +719,6 @@ const SCENE_ICONS: Record<AnniversarySceneType, string> = {
 }
 
 const instance = getCurrentInstance()?.proxy
-const statusBarHeight = (() => {
-  try {
-    return uni.getSystemInfoSync().statusBarHeight || 44
-  } catch {
-    return 44
-  }
-})()
 function goBack() {
   if (panel.value !== 'home') {
     panel.value = 'home'
@@ -1630,37 +1573,6 @@ function toneHint(tone: AnniversaryCardTone): string {
   min-height: 100vh;
   padding: 0 32rpx 180rpx;
 
-  &__navbar {
-    margin: 0 -32rpx;
-    background: transparent;
-  }
-
-  &__navbar-row {
-    height: 88rpx;
-    display: flex;
-    align-items: center;
-    padding: 0 16rpx;
-  }
-
-  &__navbar-back {
-    width: 64rpx;
-    height: 64rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: $color-primary-light;
-  }
-
-  &__navbar-chevron {
-    width: 18rpx;
-    height: 18rpx;
-    border-left: 4rpx solid $color-text;
-    border-bottom: 4rpx solid $color-text;
-    transform: rotate(45deg);
-    margin-left: 6rpx;
-  }
-
   &__header {
     display: flex;
     justify-content: space-between;
@@ -1698,8 +1610,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     text-align: center;
   }
 
-  &__loading,
-  &__empty {
+  &__loading {
     min-height: 360rpx;
     display: flex;
     flex-direction: column;
@@ -1708,12 +1619,6 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 18rpx;
     color: $color-text-secondary;
     text-align: center;
-  }
-
-  &__empty-title {
-    color: $color-text;
-    font-size: 34rpx;
-    font-weight: 700;
   }
 
   &__empty-action {
@@ -2032,10 +1937,6 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 22rpx;
   }
 
-  &__empty--inline {
-    min-height: 200rpx;
-  }
-
   &__event--done {
     opacity: 0.55;
   }
@@ -2045,20 +1946,6 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   /* ---- event rows ---- */
-
-  &__section {
-    display: flex;
-    flex-direction: column;
-    gap: 16rpx;
-    margin-bottom: 32rpx;
-  }
-
-  &__section-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 20rpx;
-  }
 
   &__event {
     position: relative;
@@ -2148,24 +2035,6 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 26rpx;
     font-weight: 700;
     white-space: nowrap;
-  }
-
-  &__milestone {
-    display: flex;
-    flex-direction: column;
-    gap: 12rpx;
-  }
-
-  &__milestone-title {
-    color: $color-text;
-    font-size: 30rpx;
-    font-weight: 600;
-  }
-
-  &__milestone-main {
-    color: $color-primary-dark;
-    font-size: 30rpx;
-    font-weight: 700;
   }
 
   /* ---- 邀请接受面板 ---- */
