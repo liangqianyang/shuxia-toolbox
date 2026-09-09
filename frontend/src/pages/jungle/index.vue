@@ -104,7 +104,7 @@
         </view>
       </view>
 
-      <!-- 操作区：聊天 / 规则 / 认输 -->
+      <!-- 操作区：聊天 / 规则 / 认输 / 离开 -->
       <view class="jungle__actions">
         <view class="jungle__action" hover-class="press" @tap="openChat">
           <text class="jungle__action-icon">💬</text>
@@ -115,6 +115,9 @@
         </view>
         <view class="jungle__action" hover-class="press" @tap="onResign">
           <text class="jungle__action-icon">🚩</text>
+        </view>
+        <view class="jungle__action" hover-class="press" @tap="onBack">
+          <text class="jungle__action-icon">🚪</text>
         </view>
       </view>
       <text class="jungle__hint">{{ hintText }}</text>
@@ -465,8 +468,11 @@ const rpsHoldData = ref<{ winnerName: string; chosen: string; picks: { red: numb
 let rpsHoldTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
-  () => [state.value?.status, state.value?.rps?.phase] as const,
-  ([status, phase]) => {
+  () => `${state.value?.status ?? ''}|${state.value?.rps?.phase ?? ''}`,
+  (key, prevKey) => {
+    // 字符串 key 值比较：数组 getter 每次返回新引用，会让每个动作（走子/聊天/WS 推送）都重触发
+    // 回调，曾导致对局中每操作一次就重弹一次猜拳定格卡——必须按值比较。
+    const [status, phase] = key.split('|')
     if (status === 'rps' && phase === 'pick') {
       const rps = state.value?.rps
       if (rps?.myTurn) {
@@ -488,7 +494,8 @@ watch(
     if (status === 'playing') {
       if (rpsCountdownTimer) { clearInterval(rpsCountdownTimer); rpsCountdownTimer = null }
       const rps = state.value?.rps
-      if (rps && rps.phase === 'done' && rps.chosen && !rpsHold.value) {
+      // 只在 rps 选边 → 开局 的真实迁移时定格（重连/中途进房不弹）
+      if (prevKey === 'rps|choose' && rps && rps.phase === 'done' && rps.chosen && !rpsHold.value) {
         const st = state.value
         const winnerRole = rps.winner
         rpsHoldData.value = {
