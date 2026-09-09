@@ -35892,7 +35892,7 @@
           "type": "frame",
           "id": "OgvIT",
           "x": 0,
-          "y": 648,
+          "y": 668,
           "name": "按钮区",
           "width": 375,
           "height": 64,
@@ -35900,34 +35900,8 @@
           "children": [
             {
               "type": "frame",
-              "id": "w8cMN3",
-              "x": 92,
-              "y": 8,
-              "name": "聊天钮",
-              "width": 48,
-              "height": 48,
-              "fill": "$tet-panel-2",
-              "cornerRadius": 24,
-              "layout": "none",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "OnTpr",
-                  "x": 14,
-                  "y": 14,
-                  "name": "聊天钮图标",
-                  "width": 20,
-                  "height": 20,
-                  "icon": "message-circle",
-                  "library": "lucide",
-                  "fill": "$brand-text-secondary"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "cF3if",
-              "x": 164,
+              "x": 92,
               "y": 8,
               "name": "规则钮",
               "width": 48,
@@ -35953,7 +35927,7 @@
             {
               "type": "frame",
               "id": "QpGuV",
-              "x": 236,
+              "x": 164,
               "y": 8,
               "name": "认输钮",
               "width": 48,
@@ -35975,6 +35949,32 @@
                   "fill": "$brand-text-secondary"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "SfupQ",
+              "x": 236,
+              "y": 8,
+              "name": "离开钮",
+              "width": 48,
+              "height": 48,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 24,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "MBmzN",
+                  "x": 14,
+                  "y": 14,
+                  "name": "离开钮图标",
+                  "width": 20,
+                  "height": 20,
+                  "icon": "log-out",
+                  "library": "lucide",
+                  "fill": "$brand-text-secondary"
+                }
+              ]
             }
           ]
         },
@@ -35982,7 +35982,7 @@
           "type": "text",
           "id": "dqeVd",
           "x": 0,
-          "y": 726,
+          "y": 644,
           "name": "手势提示",
           "fill": "$brand-text-secondary",
           "textGrowth": "fixed-width",
@@ -35992,6 +35992,75 @@
           "fontFamily": "Noto Sans SC",
           "fontSize": 11,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "EUWGj",
+          "x": 16,
+          "y": 740,
+          "name": "聊天条",
+          "width": 343,
+          "height": 48,
+          "fill": "$tet-panel",
+          "cornerRadius": 24,
+          "stroke": "$brand-border",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "u9m3T",
+              "x": 128,
+              "y": 17,
+              "name": "聊天记录",
+              "fill": "$brand-text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 200,
+              "content": "对方的昵称：好棋！",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "ksKLp",
+              "x": 12,
+              "y": 8,
+              "name": "聊天触发",
+              "width": 56,
+              "height": 32,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 16,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "dSun9",
+                  "x": 0,
+                  "y": 0,
+                  "name": "聊天图标",
+                  "fill": "$brand-text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 56,
+                  "content": "💬",
+                  "textAlign": "center",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "ellipse",
+              "id": "EvOHA",
+              "x": 56,
+              "y": 10,
+              "name": "未读点",
+              "fill": "$dou-red",
+              "width": 8,
+              "height": 8
+            }
+          ]
         }
       ]
     },
@@ -38045,7 +38114,7 @@
           "type": "frame",
           "id": "euEpw",
           "x": 0,
-          "y": 648,
+          "y": 668,
           "name": "按钮区",
           "width": 375,
           "height": 64,
@@ -38053,34 +38122,8 @@
           "children": [
             {
               "type": "frame",
-              "id": "kgNPd",
-              "x": 92,
-              "y": 8,
-              "name": "聊天钮",
-              "width": 48,
-              "height": 48,
-              "fill": "$tet-panel-2",
-              "cornerRadius": 24,
-              "layout": "none",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "UKN0a",
-                  "x": 14,
-                  "y": 14,
-                  "name": "聊天钮图标",
-                  "width": 20,
-                  "height": 20,
-                  "icon": "message-circle",
-                  "library": "lucide",
-                  "fill": "$brand-text-secondary"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "HqKvr",
-              "x": 164,
+              "x": 92,
               "y": 8,
               "name": "规则钮",
               "width": 48,
@@ -38106,7 +38149,7 @@
             {
               "type": "frame",
               "id": "gtLLF",
-              "x": 236,
+              "x": 164,
               "y": 8,
               "name": "认输钮",
               "width": 48,
@@ -38128,6 +38171,32 @@
                   "fill": "$brand-text-secondary"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "C8N5GG",
+              "x": 236,
+              "y": 8,
+              "name": "离开钮",
+              "width": 48,
+              "height": 48,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 24,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "wyApn",
+                  "x": 14,
+                  "y": 14,
+                  "name": "离开钮图标",
+                  "width": 20,
+                  "height": 20,
+                  "icon": "log-out",
+                  "library": "lucide",
+                  "fill": "$brand-text-secondary"
+                }
+              ]
             }
           ]
         },
@@ -38135,7 +38204,7 @@
           "type": "text",
           "id": "t0rhyj",
           "x": 0,
-          "y": 726,
+          "y": 644,
           "name": "手势提示",
           "fill": "$brand-text-secondary",
           "textGrowth": "fixed-width",
@@ -38145,6 +38214,75 @@
           "fontFamily": "Noto Sans SC",
           "fontSize": 11,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "J6kIld",
+          "x": 16,
+          "y": 740,
+          "name": "聊天条",
+          "width": 343,
+          "height": 48,
+          "fill": "$tet-panel",
+          "cornerRadius": 24,
+          "stroke": "$brand-border",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "XHvCg",
+              "x": 128,
+              "y": 17,
+              "name": "聊天记录",
+              "fill": "$brand-text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 200,
+              "content": "对方的昵称：好棋！",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "P2B9C0",
+              "x": 12,
+              "y": 8,
+              "name": "聊天触发",
+              "width": 56,
+              "height": 32,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 16,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Gmf8c",
+                  "x": 0,
+                  "y": 0,
+                  "name": "聊天图标",
+                  "fill": "$brand-text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 56,
+                  "content": "💬",
+                  "textAlign": "center",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "ellipse",
+              "id": "jLRku",
+              "x": 56,
+              "y": 10,
+              "name": "未读点",
+              "fill": "$dou-red",
+              "width": 8,
+              "height": 8
+            }
+          ]
         }
       ]
     },
@@ -40054,7 +40192,7 @@
           "type": "frame",
           "id": "x53fEN",
           "x": 0,
-          "y": 648,
+          "y": 668,
           "name": "按钮区",
           "width": 375,
           "height": 64,
@@ -40062,34 +40200,8 @@
           "children": [
             {
               "type": "frame",
-              "id": "L87To",
-              "x": 92,
-              "y": 8,
-              "name": "聊天钮",
-              "width": 48,
-              "height": 48,
-              "fill": "$tet-panel-2",
-              "cornerRadius": 24,
-              "layout": "none",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "A3013",
-                  "x": 14,
-                  "y": 14,
-                  "name": "聊天钮图标",
-                  "width": 20,
-                  "height": 20,
-                  "icon": "message-circle",
-                  "library": "lucide",
-                  "fill": "$brand-text-secondary"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "UcjMV",
-              "x": 164,
+              "x": 92,
               "y": 8,
               "name": "规则钮",
               "width": 48,
@@ -40115,7 +40227,7 @@
             {
               "type": "frame",
               "id": "tVBAi",
-              "x": 236,
+              "x": 164,
               "y": 8,
               "name": "认输钮",
               "width": 48,
@@ -40137,6 +40249,32 @@
                   "fill": "$brand-text-secondary"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "EJRkY",
+              "x": 236,
+              "y": 8,
+              "name": "离开钮",
+              "width": 48,
+              "height": 48,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 24,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "kZ1wL",
+                  "x": 14,
+                  "y": 14,
+                  "name": "离开钮图标",
+                  "width": 20,
+                  "height": 20,
+                  "icon": "log-out",
+                  "library": "lucide",
+                  "fill": "$brand-text-secondary"
+                }
+              ]
             }
           ]
         },
@@ -40144,7 +40282,7 @@
           "type": "text",
           "id": "hTNTt",
           "x": 0,
-          "y": 726,
+          "y": 644,
           "name": "手势提示",
           "fill": "$brand-text-secondary",
           "textGrowth": "fixed-width",
@@ -40457,6 +40595,75 @@
                   ]
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ElZQx",
+          "x": 16,
+          "y": 740,
+          "name": "聊天条",
+          "width": 343,
+          "height": 48,
+          "fill": "$tet-panel",
+          "cornerRadius": 24,
+          "stroke": "$brand-border",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "S0Wz2R",
+              "x": 128,
+              "y": 17,
+              "name": "聊天记录",
+              "fill": "$brand-text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 200,
+              "content": "对方的昵称：好棋！",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "CNObQ",
+              "x": 12,
+              "y": 8,
+              "name": "聊天触发",
+              "width": 56,
+              "height": 32,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 16,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "E57BEn",
+                  "x": 0,
+                  "y": 0,
+                  "name": "聊天图标",
+                  "fill": "$brand-text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 56,
+                  "content": "💬",
+                  "textAlign": "center",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "ellipse",
+              "id": "TcxZh",
+              "x": 56,
+              "y": 10,
+              "name": "未读点",
+              "fill": "$dou-red",
+              "width": 8,
+              "height": 8
             }
           ]
         }
@@ -42353,7 +42560,7 @@
           "type": "frame",
           "id": "bCqY9",
           "x": 0,
-          "y": 648,
+          "y": 668,
           "name": "按钮区",
           "width": 375,
           "height": 64,
@@ -42361,34 +42568,8 @@
           "children": [
             {
               "type": "frame",
-              "id": "dc2zE",
-              "x": 92,
-              "y": 8,
-              "name": "聊天钮",
-              "width": 48,
-              "height": 48,
-              "fill": "$tet-panel-2",
-              "cornerRadius": 24,
-              "layout": "none",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "DDdzL",
-                  "x": 14,
-                  "y": 14,
-                  "name": "聊天钮图标",
-                  "width": 20,
-                  "height": 20,
-                  "icon": "message-circle",
-                  "library": "lucide",
-                  "fill": "$brand-text-secondary"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "qV3S9",
-              "x": 164,
+              "x": 92,
               "y": 8,
               "name": "规则钮",
               "width": 48,
@@ -42414,7 +42595,7 @@
             {
               "type": "frame",
               "id": "kmbJU",
-              "x": 236,
+              "x": 164,
               "y": 8,
               "name": "认输钮",
               "width": 48,
@@ -42436,6 +42617,32 @@
                   "fill": "$brand-text-secondary"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "RJUcy",
+              "x": 236,
+              "y": 8,
+              "name": "离开钮",
+              "width": 48,
+              "height": 48,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 24,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Y0UKa",
+                  "x": 14,
+                  "y": 14,
+                  "name": "离开钮图标",
+                  "width": 20,
+                  "height": 20,
+                  "icon": "log-out",
+                  "library": "lucide",
+                  "fill": "$brand-text-secondary"
+                }
+              ]
             }
           ]
         },
@@ -42443,7 +42650,7 @@
           "type": "text",
           "id": "oKvZu",
           "x": 0,
-          "y": 726,
+          "y": 644,
           "name": "手势提示",
           "fill": "$brand-text-secondary",
           "textGrowth": "fixed-width",
@@ -43513,6 +43720,75 @@
                   "fontWeight": "normal"
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "p8atg",
+          "x": 16,
+          "y": 740,
+          "name": "聊天条",
+          "width": 343,
+          "height": 48,
+          "fill": "$tet-panel",
+          "cornerRadius": 24,
+          "stroke": "$brand-border",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "hN4fk",
+              "x": 128,
+              "y": 17,
+              "name": "聊天记录",
+              "fill": "$brand-text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 200,
+              "content": "对方的昵称：好棋！",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "fS55l",
+              "x": 12,
+              "y": 8,
+              "name": "聊天触发",
+              "width": 56,
+              "height": 32,
+              "fill": "$tet-panel-2",
+              "cornerRadius": 16,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "A90Tf",
+                  "x": 0,
+                  "y": 0,
+                  "name": "聊天图标",
+                  "fill": "$brand-text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 56,
+                  "content": "💬",
+                  "textAlign": "center",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "ellipse",
+              "id": "mwXtI",
+              "x": 56,
+              "y": 10,
+              "name": "未读点",
+              "fill": "$dou-red",
+              "width": 8,
+              "height": 8
             }
           ]
         }

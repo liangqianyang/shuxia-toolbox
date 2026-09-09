@@ -17,6 +17,8 @@ use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
 use App\Controller\JungleController;
 use App\Controller\JungleWsController;
+use App\Controller\JunqiController;
+use App\Controller\JunqiWsController;
 use App\Controller\LudoController;
 use App\Controller\LudoWsController;
 use App\Controller\TravelController;
@@ -110,6 +112,20 @@ Router::addGroup('/api', function (): void {
     Router::post('/jungle/room/{code}/chat', [JungleController::class, 'chat']);
     Router::post('/jungle/room/{code}/leave', [JungleController::class, 'leave']);
 
+    // 联机军棋（两人暗棋）：房间创建/加入、布阵（服务端校验约束）、猜拳定先手、轮询同步
+    // （WS 降级通道）、走子（战斗服务端裁决）、再来一局与离开。
+    // 布阵 300s / 出拳 10s / 走子 45s 窗口超时由 Timer 清扫器 + 写路径懒检查推进（代走不判负）。
+    Router::post('/junqi/room', [JunqiController::class, 'create']);
+    Router::post('/junqi/room/{code}/join', [JunqiController::class, 'join']);
+    Router::post('/junqi/room/{code}/layout', [JunqiController::class, 'layout']);
+    Router::post('/junqi/room/{code}/rps', [JunqiController::class, 'rps']);
+    Router::get('/junqi/room/{code}', [JunqiController::class, 'state']);
+    Router::get('/junqi/my-rooms', [JunqiController::class, 'myRooms']);
+    Router::post('/junqi/room/{code}/move', [JunqiController::class, 'move']);
+    Router::post('/junqi/room/{code}/rematch', [JunqiController::class, 'rematch']);
+    Router::post('/junqi/room/{code}/chat', [JunqiController::class, 'chat']);
+    Router::post('/junqi/room/{code}/leave', [JunqiController::class, 'leave']);
+
     // UNO 联机：房间创建/加入/开局、轮询同步（WS 降级通道）、出牌/摸牌/不出、
     // +4 质疑、喊/举报 UNO、再来一局与离开。回合超时由 Timer 清扫器 + 写操作懒检查推进。
     Router::post('/uno/room', [UnoController::class, 'create']);
@@ -195,4 +211,5 @@ Router::addServer('ws', function (): void {
     Router::get('/ludo/ws', LudoWsController::class);
     Router::get('/adventure/ws', AdventureWsController::class);
     Router::get('/jungle/ws', JungleWsController::class);
+    Router::get('/junqi/ws', JunqiWsController::class);
 });

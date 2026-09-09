@@ -1877,3 +1877,128 @@ function testSokobanLevels() {
     assert(j.pointToCell(-1, 10, m) === null && j.pointToCell(316, 10, m) === null, '越界返回 null')
   }
 }
+
+/* ── 军棋规则镜像（与后端 app/Service/MountainChess/MountainChessRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
+{
+  const q = require('@/utils/junqi') as typeof import('@/utils/junqi')
+
+  type QP = import('@/types/junqi').JunqiPiece
+  const P = (side: 'red' | 'blue', rank: QP['rank']!, r: number, c: number): QP => ({ side, rank, r, c, alive: true, revealed: false })
+  const targetsOf = (pieces: QP[], r: number, c: number) => new Set(q.reachableTargets(pieces, r, c).map(([tr, tc]) => `${tr}:${tc}`))
+
+  // 地形
+  {
+    assert(q.isCamp(2, 1) && q.isCamp(9, 3) && q.isCamp(9, 1) && !q.isCamp(2, 0) && !q.isCamp(6, 2), '军棋行营位置')
+    assert(q.isHqOf('blue', 0, 1) && q.isHqOf('red', 11, 3) && !q.isHqOf('red', 0, 1), '大本营归属')
+    assert(q.isRail(1, 2) && q.isRail(10, 4) && q.isRail(6, 2) && !q.isRail(0, 0) && !q.isRail(3, 1) && q.isRail(7, 0), '铁路格：行1/5/6/10 + 列0/4行1..10')
+    assert(q.RANKS.si === 9 && q.RANKS.gong === 1, '军衔等级')
+  }
+
+  // 随机布阵 + 预设阵型全部合法
+  {
+    for (let i = 0; i < 20; i++) {
+      assert(q.validateLayout('red', q.randomLayout('red')) === null, '红方随机布阵合法')
+      assert(q.validateLayout('blue', q.randomLayout('blue')) === null, '蓝方随机布阵合法')
+    }
+    for (const preset of q.PRESETS) {
+      assert(q.validateLayout('red', preset.layout) === null, `预设阵型「${preset.name}」合法`)
+    }
+    assert(q.buildPieces(q.PRESETS[0].layout, q.PRESETS[1].layout).length === 50, 'buildPieces 50 子')
+    assert(q.validateLayout('red', [{ rank: 'qi', r: 11, c: 1 }] as import('@/types/junqi').JunqiLayoutPiece[]) === 'layout_count', '少于 25 枚被拒')
+    assert(q.validateLayout('red', [{ rank: 'qi', r: 11, c: 2 }] as never) !== null, '坏阵型被拒')
+  }
+
+  // 铁路直线滑行（非工兵）
+  {
+    const slide = [P('red', 'shi', 5, 0), P('blue', 'pai', 9, 4)]
+    const t = targetsOf(slide, 5, 0)
+    assert(t.has('5:4') && t.has('1:0') && t.has('10:0'), '师长铁路直线：横滑 + 纵滑跨山界')
+    assert(!t.has('0:0') && !t.has('5:0'), '直线不越铁路网、不含原格')
+    const block = [P('red', 'shi', 5, 0), P('blue', 'pai', 5, 2)]
+    const t2 = targetsOf(block, 5, 0)
+    assert(t2.has('5:1') && t2.has('5:2') && !t2.has('5:3') && !t2.has('5:4'), '铁路滑行撞上第一枚子为止')
+    const noTurn = targetsOf([P('red', 'shi', 1, 0)], 1, 0)
+    assert(noTurn.has('10:0') && noTurn.has('1:4') && !noTurn.has('10:4') && !noTurn.has('6:4'), '非工兵铁路不拐弯')
+  }
+
+  // 工兵 BFS 拐弯
+  {
+    const t = targetsOf([P('red', 'gong', 1, 0)], 1, 0)
+    assert(t.has('10:4') && t.has('10:0') && t.has('1:4') && t.has('6:2'), '工兵铁路 BFS 拐弯全网可达')
+    assert(!t.has('2:2'), '工兵不越出铁路网')
+  }
+
+  // 公路 + 山界通路 + 行营斜线
+  {
+    const t = targetsOf([P('red', 'pai', 5, 2)], 5, 2)
+    assert(t.has('6:2') && t.has('5:1') && t.has('4:2'), '公路一步 + 山界中路')
+    assert(!targetsOf([P('red', 'pai', 5, 1)], 5, 1).has('6:1'), '山界列 1 无公路通路')
+    const camp = targetsOf([P('red', 'pai', 7, 1)], 7, 1)
+    assert(camp.has('6:0') && camp.has('6:2') && camp.has('8:0') && camp.has('8:2') && camp.has('7:0'), '行营八方连通')
+    assert(!targetsOf([P('red', 'pai', 6, 0)], 6, 0).has('7:1'), '普通格不能斜走')
+  }
+
+  // 不可移动 / 大本营
+  {
+    assert(q.validateMove([P('red', 'lei', 10, 0)], 'red', 10, 0, 9, 0) === 'cannot_move', '地雷不能动')
+    assert(q.validateMove([P('red', 'qi', 11, 1)], 'red', 11, 1, 10, 1) === 'cannot_move', '军旗不能动')
+    assert(q.validateMove([P('red', 'si', 11, 1)], 'red', 11, 1, 10, 1) === 'locked_hq', '大本营内锁足')
+    assert(q.validateMove([P('red', 'pai', 10, 1)], 'red', 10, 1, 11, 1) === 'in_own_hq', '不能进自己大本营')
+    assert(q.validateMove([P('red', 'pai', 0, 0)], 'red', 0, 0, 0, 1) === null, '可进敌方大本营（空）')
+  }
+
+  // 行营免战
+  {
+    const guard = [P('red', 'pai', 6, 1), P('blue', 'pai', 7, 1)]
+    assert(q.validateMove(guard, 'red', 6, 1, 7, 1) === 'camp_protected', '行营内敌子免战')
+    assert(q.validateMove(guard, 'blue', 7, 1, 6, 1) === null, '营内子可正常出营攻击')
+  }
+
+  // 战斗裁决
+  {
+    const att = P('red', 'si', 6, 0)
+    assert(q.resolveBattle(att, P('blue', 'pai', 5, 0)) === 'win', '司令吃排长')
+    assert(q.resolveBattle(att, P('blue', 'jun', 5, 0)) === 'win', '司令吃军长（9>8）')
+    assert(q.resolveBattle(P('red', 'jun', 6, 0), P('blue', 'si', 5, 0)) === 'lose', '军长不敌司令')
+    assert(q.resolveBattle(att, P('blue', 'si', 5, 0)) === 'both', '同级同归于尽')
+    assert(q.resolveBattle(P('red', 'zha', 6, 0), P('blue', 'si', 5, 0)) === 'both', '炸弹与司令同归于尽')
+    assert(q.resolveBattle(P('red', 'gong', 6, 0), P('blue', 'lei', 5, 0)) === 'win', '工兵挖雷')
+    assert(q.resolveBattle(P('red', 'pai', 6, 0), P('blue', 'lei', 5, 0)) === 'both', '非工兵撞雷同归于尽')
+    assert(q.resolveBattle(att, P('blue', 'qi', 5, 0)) === 'flag', '撞军旗即夺旗')
+  }
+
+  // applyMove：吃子 + 交战暴露 + 阵亡公示 + 亮旗
+  {
+    const eat = q.applyMove([P('red', 'shi', 6, 0), P('blue', 'tuan', 5, 0)], 'red', 6, 0, 5, 0)
+    assert(eat.result === 'win' && eat.captured === 'tuan', 'applyMove 师长吃团长')
+    assert(eat.pieces[1].alive === false && eat.pieces[1].revealed === true, '阵亡子公示')
+    assert(eat.pieces[0].revealed === true && eat.pieces[0].r === 5, '存活方交战暴露并位移')
+    const both = q.applyMove([P('red', 'zha', 6, 0), P('blue', 'si', 5, 0)], 'red', 6, 0, 5, 0)
+    assert(both.result === 'both' && both.revealSide === 'blue', '炸弹与司令同归，亮蓝旗')
+    assert(both.pieces.filter((p) => p.alive).length === 0, '双亡盘面')
+    const dig = q.applyMove([P('red', 'gong', 6, 0), P('blue', 'lei', 5, 0), P('blue', 'pai', 0, 4)], 'red', 6, 0, 5, 0)
+    assert(dig.result === 'win' && dig.captured === 'lei' && dig.pieces[0].alive === true, '工兵挖雷只死雷')
+    assert(q.findWin(dig.pieces, 'red', 'win') === null, '普通吃子不终局')
+    const flagWin = q.applyMove([P('red', 'pai', 0, 0), P('blue', 'qi', 0, 1)], 'red', 0, 0, 0, 1)
+    assert(flagWin.result === 'flag' && q.findWin(flagWin.pieces, 'red', 'flag') === 'flag', '夺旗终局')
+  }
+
+  // hasAnyMove 困毙：只剩不能动的子
+  {
+    const stuck = [P('red', 'pai', 6, 0), P('blue', 'lei', 0, 0), P('blue', 'qi', 0, 3)]
+    assert(q.hasAnyMove(stuck, 'blue') === false, '蓝方只剩地雷军旗，无棋可走')
+    assert(q.hasAnyMove(stuck, 'red') === true, '红方仍有着法')
+  }
+
+  // 画布几何（原型：pitch 36 / 格面 33 / 山界带 14）
+  {
+    const geo = q.boardGeometry(36)
+    assert(geo.width === 180 && geo.height === 446 && geo.band === 14, '棋盘几何 180×446 / 山界 14')
+    const rect = q.cellRect(6, 2, geo)
+    assert(rect.y === 6 * 36 + 14 + 1.5, '山界下方行 y 偏移含带宽')
+    const hit = q.pointToCell(40, 6 * 36 + 7, geo)
+    assert(hit === null, '点中山界带返回 null')
+    const cell = q.pointToCell(40, 100, geo)
+    assert(cell?.r === 2 && cell?.c === 1, 'pointToCell 落格正确')
+  }
+}
