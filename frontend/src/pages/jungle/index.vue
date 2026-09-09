@@ -104,12 +104,8 @@
         </view>
       </view>
 
-      <!-- 操作区：聊天 / 规则 / 认输 / 离开 -->
+      <!-- 操作区：规则 / 认输 / 离开（聊天入口在底部聊天条） -->
       <view class="jungle__actions">
-        <view class="jungle__action" hover-class="press" @tap="openChat">
-          <text class="jungle__action-icon">💬</text>
-          <text v-if="roomChat.unreadChat.value" class="jungle__action-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
-        </view>
         <view class="jungle__action" hover-class="press" @tap="rulesOpen = true">
           <text class="jungle__action-icon">📖</text>
         </view>
@@ -121,6 +117,21 @@
         </view>
       </view>
       <text class="jungle__hint">{{ hintText }}</text>
+
+      <!-- 底部聊天条（照 UNO）：对局中常驻展示最近消息，点按展开完整面板；触发钮统一放左（跨游戏规则） -->
+      <view v-if="state.status === 'playing'" class="jungle__chatbar" hover-class="press" @tap="openChat">
+        <view class="jungle__chatbar-trigger" @tap.stop="openChat">
+          <text class="jungle__chatbar-icon">💬</text>
+          <text class="jungle__chatbar-hint">快捷嘴炮…</text>
+          <text v-if="roomChat.unreadChat.value" class="jungle__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+        </view>
+        <view v-if="feedChats.length" class="jungle__chatbar-feed">
+          <view v-for="m in feedChats" :key="m.seq" class="jungle__chatbar-item">
+            <text class="jungle__chatbar-name">{{ chatNameOf(m) }}：</text>
+            <text class="jungle__chatbar-text" :class="{ 'jungle__chatbar-text--emoji': m.kind === 'emoji' }">{{ chatBodyOf(m) }}</text>
+          </view>
+        </view>
+      </view>
     </view>
 
     <!-- 猜拳定选边（开局仪式：出拳 → 胜者选边 → 定格） -->
@@ -329,6 +340,7 @@ import type { JungleAnimal, JungleSide } from '@/types/jungle'
 import GameChatPanel from '@/components/GameChatPanel.vue'
 import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
+import { gamePhraseText } from '@/utils/gameChat'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 斗兽棋四帧，dou-* 变量实值） ----------
 const COLOR_LAND = '#F7EEDF'
@@ -382,6 +394,13 @@ const joinCode = ref('')
 const busy = ref(false)
 
 const avatarOf = (url: string) => resolveAvatarUrl(url)
+
+// ---------- 底部聊天条（照 UNO：关掉面板后消息常驻可见） ----------
+const feedChats = computed(() => roomChat.recentChats.value.slice(-3))
+const chatNameOf = (m: RoomChatMessage): string =>
+  m.role === 'red' ? (state.value?.red?.nickname ?? '红方') : (state.value?.blue?.nickname ?? '蓝方')
+const chatBodyOf = (m: RoomChatMessage): string =>
+  m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? (gamePhraseText(m.text) ?? m.text) : m.text
 
 // ---------- 派生数据 ----------
 const roundCount = computed(() => Math.ceil((state.value?.ply ?? 0) / 2))
@@ -742,6 +761,7 @@ async function onBoardTap(event: unknown) {
 // 状态变化即重画 + 播报（吃子 / 开局）
 let prevPly = 0
 let prevStatus = ''
+let prevTurn: string | null = null
 watch(
   state,
   (next) => {
@@ -750,6 +770,7 @@ watch(
     if (!next) {
       prevPly = 0
       prevStatus = ''
+      prevTurn = null
       return
     }
     const firstLoad = prevStatus === ''
@@ -763,11 +784,14 @@ watch(
         icon: 'none',
       })
     }
-    if (!firstLoad && next.status === 'playing' && prevStatus === 'playing' && next.turn === myColor.value) {
+    // 只在「轮走权真的换到我」时提示——deep watch 每次状态替换都会跑（聊天/WS 推送也不例外），
+    // 不加 prevTurn 守卫会每发一条消息就弹一次「轮到你了」
+    if (!firstLoad && next.status === 'playing' && prevStatus === 'playing' && next.turn === myColor.value && prevTurn !== myColor.value) {
       uni.showToast({ title: '轮到你了', icon: 'none' })
     }
     prevPly = next.ply
     prevStatus = next.status
+    prevTurn = next.turn
   },
   { deep: true },
 )
@@ -1292,21 +1316,6 @@ onShareAppMessage(() => ({
       font-size: 40rpx;
       line-height: 1;
     }
-
-    &-unread {
-      position: absolute;
-      top: -6rpx;
-      right: -6rpx;
-      min-width: 32rpx;
-      box-sizing: border-box;
-      background: #e85d4a;
-      color: #fff;
-      font-size: 18rpx;
-      border-radius: 999rpx;
-      padding: 0 8rpx;
-      line-height: 30rpx;
-      text-align: center;
-    }
   }
 
   &__hint {
@@ -1315,6 +1324,85 @@ onShareAppMessage(() => ({
     font-size: 22rpx;
     color: $color-text-secondary;
     margin-top: 16rpx;
+  }
+
+  /* ── 底部聊天条（照 UNO；触发钮在左） ── */
+  &__chatbar {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    margin-top: 16rpx;
+    background: #fff;
+    border: 2rpx solid #f0e4d7;
+    border-radius: 48rpx;
+    padding: 12rpx 20rpx;
+
+    &-feed {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4rpx;
+    }
+
+    &-item {
+      display: flex;
+      align-items: baseline;
+      font-size: 22rpx;
+      min-width: 0;
+    }
+
+    &-name {
+      color: #7d6f60;
+      flex-shrink: 0;
+    }
+
+    &-text {
+      color: #4a3f35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &--emoji {
+        font-size: 30rpx;
+      }
+    }
+
+    &-trigger {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10rpx;
+      height: 60rpx;
+      padding: 0 26rpx;
+      background: #f7eddf;
+      border-radius: 30rpx;
+      flex-shrink: 0;
+    }
+
+    &-icon {
+      font-size: 26rpx;
+    }
+
+    &-hint {
+      font-size: 24rpx;
+      color: #7d6f60;
+    }
+
+    &-unread {
+      position: absolute;
+      top: -10rpx;
+      right: -6rpx;
+      min-width: 30rpx;
+      box-sizing: border-box;
+      background: #e85d4a;
+      color: #fff;
+      font-size: 18rpx;
+      border-radius: 999rpx;
+      padding: 0 8rpx;
+      line-height: 28rpx;
+      text-align: center;
+    }
   }
 }
 

@@ -3,8 +3,8 @@
  *
  * 职责：面板开关/未读计数/3 秒冷却倒数/座位气泡按 seq 增量/消息渲染辅助。
  * 页面只需提供：读当前房间 chat 数组与我的座位、发送函数、（可选）收到新消息回调（音效）。
- * 发送体验同 uno/冒险棋：快捷句/表情/贴纸发送即收面板并起冷却；自由文字清空输入、收面板、
- * 失败还原；服务端负责内容审核与 fail-closed。
+ * 发送即收面板（页面需提供常驻聊天 feed 承接反馈，如 uno 的底部聊天条）；自由文字清空
+ * 输入、失败还原；服务端负责内容审核与 fail-closed。
  */
 
 import { computed, reactive, ref, watch, type Ref } from 'vue'
@@ -134,7 +134,7 @@ export function useRoomChat(options: UseRoomChatOptions) {
   async function sendText() {
     const text = chatInput.value.trim()
     if (!text || chatCooling.value) return
-    // 同 uno/冒险棋：发送即清空输入并收起面板——消息随后出现在底部 feed / 座位气泡
+    // 发送即收面板：消息随后出现在页面常驻聊天 feed / 座位气泡
     chatInput.value = ''
     chatPanelOpen.value = false
     startChatCooldown()
