@@ -90,6 +90,8 @@ No test framework is configured.
 
 ### Cross-cutting concern
 
+**原型保真（强制）**：有 Pen 原型的界面（`~/Downloads/枫叶小屋原型.pen`，PNG 快照 `docs/*-redesign/`），实现/改版必须先用 pencil MCP 读 .pen 里节点的**精确属性**（坐标/尺寸/颜色/圆角/旋转/图标名/描边），禁止凭截图目测或记忆近似——推箱子落地时卡底色、帽子旋转锚点、图标线条风格全是"没查原型"翻的车。已验证的陷阱清单：①Pen 的 `rotation` 绕**左上角**（不是中心），按锚点换算视觉中心再定位；②icon 节点（lucide）是**线条风格**（stroke 不填充），颜色查 `fill` 但渲染是描边；③颜色变量（`$tet-bg` 等）要解析成实值再抄——弹层卡底是奶油 `#FFF8F0`，写成纯白会让 `#FFFDF8` 的小人隐形；④WXSS `background-image` 只支持**网络图/base64 data-URI**，明文 SVG URI 不渲染（base64 才行）；⑤微信 canvas 别用 `Path2D`（异常会让 save 的变换栈泄漏、后续帧全歪），SVG 路径贝塞尔手转；⑥动态尺寸布局照 tetris 家法用**文档流兄弟节点**（canvas 与按钮不可重叠）+ 弹层出现时 canvas `v-show` 隐藏（原生组件层级最高）。实现后对照 `docs/*-redesign/` 截图自查。
+
 **静态资源走七牛云 CDN**：小程序包内不打包任何图片/音频（主包 1002→713KB、ludo 分包 785→28KB）。资源唯一本地副本在 `frontend/cdn-assets/`（git 跟踪，目录结构 = CDN key 结构），上传/更新跑 `python3 frontend/scripts/upload_qiniu.py`（凭证在 `frontend/.qiniu.env`，已 gitignore；HEAD 大小一致自动跳过，`--force` 强制覆盖）。代码引用一律走 `src/utils/cdn.ts` 的 `cdnUrl('/static/icons/uno-1.png')` → `https://oss.lqy-comic.com/fengye/static/icons/uno-1.png`（bucket=fengye，前缀 fengye，华东-浙江 z0，公开空间）。`tool_catalog.icon` 迁移 `2026_08_31_000025` 已把 uno/ludo 图标改成完整 CDN URL（icon 列扩到 varchar(255)），`ToolIcon.vue` 支持 http(s) 图标。**微信公众平台 downloadFile 合法域名必须包含 `https://oss.lqy-comic.com`**。canvas 贴图用 `canvasAdapter.loadDrawableImage`（远程图自动 wx.downloadFile 缓存）；音效 InnerAudioContext 直接播 https。飞行棋素材重切脚本输出目录也改为 `cdn-assets/`。
 
 Palette definitions are **duplicated** between PHP (`BeadPaletteService`, source of truth) and TypeScript (`src/utils/beadPaletteData.ts`, generated copy with identical RGB values). Changes to palettes must be kept in sync across both.

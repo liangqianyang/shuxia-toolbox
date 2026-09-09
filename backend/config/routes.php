@@ -19,6 +19,7 @@ use App\Controller\LudoController;
 use App\Controller\LudoWsController;
 use App\Controller\TravelController;
 use App\Controller\TetrisScoreController;
+use App\Controller\SokobanScoreController;
 use App\Controller\ToolController;
 use App\Controller\UnoController;
 use App\Controller\UnoWsController;
@@ -159,6 +160,10 @@ Router::addGroup('/api', function (): void {
     // 俄罗斯方块：单机成绩上报（保最好）与排行榜（未登录可看榜单）。
     Router::post('/tetris/score', [TetrisScoreController::class, 'submit']);
     Router::get('/tetris/leaderboard', [TetrisScoreController::class, 'leaderboard']);
+
+    // 推箱子：总星数上报（保最好）与收星总榜（未登录可看榜单）。
+    Router::post('/sokoban/score', [SokobanScoreController::class, 'submit']);
+    Router::get('/sokoban/leaderboard', [SokobanScoreController::class, 'leaderboard']);
 
     // AI 旅行攻略：地点搜索、生成/局部重写行程，以及云保存分享码。
     Router::get('/travel/geocode', [TravelController::class, 'geocode']);

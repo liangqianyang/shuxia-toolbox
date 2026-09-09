@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 240px; height: 240px; font-family: "PingFang SC", "Hiragino Sans GB", sans-serif; }
+  .icon {
+    width: 240px; height: 240px;
+    background: #FFF8F0;
+    border: 8px solid #B4855C;
+    border-radius: 52px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* 背景棋盘格（浅米底 + 奶油格,呼应棋盘） */
+  .grid {
+    position: absolute; inset: 0;
+    display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 1fr;
+    opacity: 0.5;
+  }
+  .grid i { background: #F1E4CE; }
+  .grid i:nth-child(2n) { background: transparent; }
+  /* 左侧：木箱推上落叶点（金箱+对勾） */
+  .box {
+    position: absolute; left: 46px; bottom: 74px;
+    width: 84px; height: 84px;
+    background: #F4B942;
+    border: 6px solid #C08A1E;
+    border-radius: 18px;
+    box-shadow: inset 0 6px 0 rgba(255, 255, 255, 0.35), inset 0 -5px 0 rgba(0, 0, 0, 0.14), 6px 8px 0 rgba(168, 116, 75, 0.22);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .check {
+    width: 40px; height: 34px;
+    border-left: 9px solid #FFFFFF;
+    border-bottom: 9px solid #FFFFFF;
+    transform: rotate(-48deg) translateY(-7px);
+    border-radius: 4px;
+  }
+  /* 右上：小人(白身+枫叶帽),推箱姿态 */
+  .man {
+    position: absolute; right: 40px; top: 74px;
+    width: 74px; height: 74px;
+    transform: rotate(10deg);
+    filter: drop-shadow(3px 5px 0 rgba(168, 116, 75, 0.24));
+  }
+  .face {
+    position: absolute; left: 7px; top: 7px;
+    width: 60px; height: 60px;
+    background: #FFFDF8;
+    border-radius: 50%;
+  }
+  .eye {
+    position: absolute; top: 28px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #4A3F35;
+  }
+  .eye.l { left: 25px; }
+  .eye.r { left: 43px; }
+  .hat {
+    position: absolute; left: 30px; top: -15px;
+    width: 26px; height: 26px;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23E85D4A'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    transform: rotate(-35deg);
+  }
+  /* 右下：落叶点(虚线圆环,品牌符号) */
+  .leaf {
+    position: absolute; right: 52px; bottom: 46px;
+    width: 56px; height: 56px;
+    border: 5px dashed #C08A1E;
+    border-radius: 50%;
+  }
+  .leaf::after {
+    content: '';
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px; height: 10px;
+    background: #C08A1E;
+    border-radius: 50%;
+  }
+  .title {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    text-align: center;
+    font-size: 28px; font-weight: 900; color: #A8744B;
+    letter-spacing: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="icon">
+  <div class="grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="box"><div class="check"></div></div>
+  <div class="man">
+    <div class="hat"></div>
+    <div class="face"></div>
+    <div class="eye l"></div>
+    <div class="eye r"></div>
+  </div>
+  <div class="leaf"></div>
+  <div class="title">推箱子</div>
+</div>
+</body>
+</html>

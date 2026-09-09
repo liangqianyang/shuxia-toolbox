@@ -54,6 +54,18 @@ import {
 import { computeTetrisLayout } from '@/utils/tetrisRender'
 import { createDragController, defaultDragConfig } from '@/utils/touchGestures'
 import {
+  DIRS,
+  applyAction as sokApplyAction,
+  createGame as sokCreateGame,
+  isDeadCell,
+  parseLevel,
+  starsFor,
+  type SokobanLevelDef,
+  type SokobanState,
+} from '@/utils/sokoban'
+import { nextPush, solve as sokSolve } from '@/utils/sokobanSolver'
+import { CHAPTERS, LEVELS, LEVELS_PER_CHAPTER } from '@/utils/sokobanLevels'
+import {
   CRUSH_CELL,
   FLY_FROM,
   FLY_TO,
@@ -1176,6 +1188,8 @@ async function main() {
   testLudo()
   testAdventure()
   testTetris()
+  testSokoban()
+  testSokobanLevels()
   if (failures > 0) {
     console.error(`\n${failures} 项断言失败`)
     process.exit(1)
@@ -1627,4 +1641,138 @@ function testTetris() {
   clock = 4500
   ctrl.onTouchEnd(touch(90, 152))
   assert(gestures.softs === 2 && gestures.moves.length === 3, '手势：竖直主导 → 软降且不再横移')
+}
+
+// ══════════════════════════════ 推箱子 ══════════════════════════════
+
+/** 引擎语义：解析/移动/推箱/撤销/死局启发/评星 + 求解器对拍与提示。 */
+function testSokoban() {
+  console.log('\n── 推箱子引擎 ──')
+
+  // 解析
+  const tiny = parseLevel({ id: 1, chapter: 1, xsb: ['#####', '#@$.#', '#####'], threeStar: 2, twoStar: 3 })
+  assert(tiny.w === 5 && tiny.h === 3, '解析尺寸按最长行')
+  assert(tiny.playerStart === 6 && tiny.boxesStart.length === 1, '小人与箱子位置')
+  assert(tiny.floor.filter(Boolean).length === 3, '可达地板从人洪泛（不含墙外）')
+  assert(tiny.targets[8], '目标点标记')
+
+  let threw = ''
+  try { parseLevel({ id: 2, chapter: 1, xsb: ['#####', '#@$..#', '#####'], threeStar: 1, twoStar: 2 }) } catch (e) { threw = String(e) }
+  assert(threw.includes('箱子'), '箱子数 ≠ 目标数时解析报错')
+
+  threw = ''
+  try { parseLevel({ id: 3, chapter: 1, xsb: ['####', '# $.#', '####'], threeStar: 1, twoStar: 2 }) } catch (e) { threw = String(e) }
+  assert(threw.includes('小人'), '缺小人时解析报错')
+
+  // 移动语义（roomy：下方可走、右推被墙挡）
+  const roomy = parseLevel({ id: 2, chapter: 1, xsb: ['#####', '#@$##', '#  .#', '#####'], threeStar: 2, twoStar: 3 })
+  let s: SokobanState = sokCreateGame(roomy)
+  const s0 = s
+  assert(sokApplyAction(s, { t: 'move', dir: 0 }) === s, '撞墙返回原引用')
+  assert(sokApplyAction(s, { t: 'move', dir: 1 }) === s, '推箱被墙挡返回原引用（无 blocked 事件）')
+  const walked = sokApplyAction(s, { t: 'move', dir: 2 })
+  assert(walked !== s && walked.player === twoW(roomy, 1, 2) && walked.steps === 1, '空走：人动步数+1')
+  assert(s0.player === twoW(roomy, 1, 1) && s0.steps === 0, '纯函数：输入状态不被改动')
+
+  const pushed = sokApplyAction(sokCreateGame(tiny), { t: 'move', dir: 1 })
+  assert(pushed.boxes[0] === 8 && pushed.pushes === 1 && pushed.steps === 1, '推箱：箱前空则推')
+  assert(pushed.events.some((ev) => ev.t === 'pushed' && ev.placed), '推箱事件带 placed')
+  assert(pushed.phase === 'won' && pushed.events.some((ev) => ev.t === 'won'), '全箱归位即胜')
+
+  // 撤销
+  const two = parseLevel({ id: 4, chapter: 1, xsb: ['######', '#@$ .#', '######'], threeStar: 3, twoStar: 4 })
+  s = sokCreateGame(two)
+  s = sokApplyAction(s, { t: 'move', dir: 1 })
+  const undone = sokApplyAction(s, { t: 'undo' })
+  assert(undone !== s && undone.boxes[0] === twoW(two, 2, 1) && undone.steps === 0 && undone.pushes === 0, '撤销恢复上一快照')
+  const fresh = sokCreateGame(two)
+  assert(sokApplyAction(fresh, { t: 'undo' }) === fresh, '无历史撤销返回原引用')
+  s = sokApplyAction(sokCreateGame(two), { t: 'move', dir: 1 })
+  s = sokApplyAction(s, { t: 'move', dir: 1 })
+  assert(s.boxes[0] === twoW(two, 4, 1) && s.phase === 'won', '连推两格到位并获胜')
+  assert(sokApplyAction(s, { t: 'undo' }) === s, '已胜状态拒绝撤销（结算已接管）')
+
+  // 死局启发（只允许漏报，不允许误报）：构造局面直呼 isDeadCell + 一个真实推箱触发用例
+  const deadLab = parseLevel({ id: 5, chapter: 1, xsb: ['#####', '#@ .#', '#   #', '# $ #', '#####'], threeStar: 2, twoStar: 3 })
+  assert(isDeadCell(deadLab, [twoW(deadLab, 1, 3)], twoW(deadLab, 1, 3)), '角死：左下角非点判死')
+  assert(isDeadCell(deadLab, [twoW(deadLab, 3, 3)], twoW(deadLab, 3, 3)), '角死：右下角同理')
+  assert(!isDeadCell(deadLab, [twoW(deadLab, 3, 1)], twoW(deadLab, 3, 1)), '角上是目标点 → 不判死')
+  assert(!isDeadCell(deadLab, [twoW(deadLab, 2, 2)], twoW(deadLab, 2, 2)), '房间中央不判死')
+  // 沿墙排：整段无点 → 死；有点 → 活
+  const wallDead = parseLevel({ id: 6, chapter: 1, xsb: ['#######', '#   @.#', '#     #', '#  $  #', '#######'], threeStar: 3, twoStar: 4 })
+  assert(isDeadCell(wallDead, [twoW(wallDead, 3, 3)], twoW(wallDead, 3, 3)), '沿墙死：整排扫到墙无点无开口')
+  const wallAlive = parseLevel({ id: 7, chapter: 1, xsb: ['#######', '#  @  #', '#     #', '#  $ .#', '#######'], threeStar: 3, twoStar: 4 })
+  assert(!isDeadCell(wallAlive, [twoW(wallAlive, 2, 3)], twoW(wallAlive, 2, 3)), '沿墙活：同排右边有目标点')
+  const wallOpen = parseLevel({ id: 12, chapter: 1, xsb: ['#######', '#  @ .#', '#     #', '#  $  #', '###  ##', '#######'], threeStar: 3, twoStar: 4 })
+  assert(!isDeadCell(wallOpen, [twoW(wallOpen, 3, 3)], twoW(wallOpen, 3, 3)), '沿墙活：扫到开口（墙断了）即活——回归：曾误判死')
+  // 2×2 冻结：上方两墙 + 底排两箱（排上有目标，沿墙规则不触发，专测 2×2）
+  const fzLab = parseLevel({ id: 8, chapter: 1, xsb: ['######', '#@.  #', '# ## #', '# $$.#', '######'], threeStar: 4, twoStar: 6 })
+  assert(isDeadCell(fzLab, [twoW(fzLab, 2, 3), twoW(fzLab, 3, 3)], twoW(fzLab, 2, 3)), '2×2 冻结：上墙下箱整块判死')
+  const openPair = parseLevel({ id: 9, chapter: 1, xsb: ['######', '#@.. #', '# $ $ #', '#    #', '######'], threeStar: 4, twoStar: 6 })
+  assert(!isDeadCell(openPair, [twoW(openPair, 2, 2), twoW(openPair, 4, 2)], twoW(openPair, 2, 2)), '房间中部箱对不判死')
+
+  // 真实推箱触发角死 + 撤销解除（箱子推进左下墙角：左墙 + 底墙）
+  const cornerLv = parseLevel({ id: 10, chapter: 1, xsb: ['#####', '#@ .#', '#$  #', '#   #', '#####'], threeStar: 2, twoStar: 3 })
+  s = sokCreateGame(cornerLv)
+  const down = sokApplyAction(s, { t: 'move', dir: 2 })
+  assert(down !== s && down.stuckBox === twoW(cornerLv, 1, 3), '角死：往下推进角落触发死局标记')
+  assert(down.events.some((ev) => ev.t === 'deadlock'), '死局事件')
+  const undone2 = sokApplyAction(down, { t: 'undo' })
+  assert(undone2.stuckBox === null && undone2.boxes[0] === twoW(cornerLv, 1, 2), '撤销后死局标记清除、箱子复位')
+  assert(sokApplyAction(down, { t: 'unstick' }).stuckBox === null, 'unstick 手动清除标记')
+
+  // 评星
+  const lv = parseLevel({ id: 9, chapter: 1, xsb: ['#####', '#@$.#', '#####'], threeStar: 3, twoStar: 5 })
+  assert(starsFor(lv, 3) === 3 && starsFor(lv, 5) === 2 && starsFor(lv, 6) === 1, '三星/二星/一星门槛')
+
+  // 求解器对拍（手算最优）
+  assert(sokSolve(tiny, tiny.boxesStart, tiny.playerStart).moves === 1, '求解器：单推 1 步')
+  assert(sokSolve(two, two.boxesStart, two.playerStart).moves === 2, '求解器：连推 2 步')
+  const l5 = parseLevel({ id: 11, chapter: 1, xsb: ['#######', '#     #', '#@$#  #', '#  #  #', '# .#  #', '#######'], threeStar: 5, twoStar: 6 })
+  assert(sokSolve(l5, l5.boxesStart, l5.playerStart).moves === 4, '求解器：绕顶 4 步（上右上推×2）')
+  // 死局局面 → 无解
+  assert(sokSolve(deadLab, [twoW(deadLab, 1, 3)], twoW(deadLab, 2, 3)).status === 'unsolvable', '求解器：角死局面判无解')
+  // 提示：返回合法推法
+  const hintLv = parseLevel({ id: 11, chapter: 1, xsb: ['######', '#@$ .#', '######'], threeStar: 3, twoStar: 4 })
+  const hint = nextPush(hintLv, hintLv.boxesStart, hintLv.playerStart, 1000)
+  assert(hint !== null && hint.dir === 1 && hint.box === twoW(hintLv, 2, 1), '提示：给出推法（右推该箱）')
+}
+
+function twoW(level: { w: number }, x: number, y: number): number {
+  return y * level.w + x
+}
+
+/** 关卡管线：全关卡可解 + 三星/二星门槛与求解器一致（threeStar=0 时打印建议值并挂起，供填数）。 */
+function testSokobanLevels() {
+  console.log('\n── 推箱子关卡管线 ──')
+  assert(LEVELS.length === 100, `五章 100 关（当前 ${LEVELS.length}）`)
+  assert(CHAPTERS.length === 5 && LEVELS_PER_CHAPTER === 20, '5 章 × 20 关结构')
+  // 各章 par 上限（章末最难关的合理范围,超了说明难度错章）
+  const chapterParCap = [30, 50, 75, 95, 125]
+  // 全局逐关严格递增（产品要求:第 N+1 关恒难于第 N 关）
+  const pars: number[] = []
+  let needFill = false
+  for (const def of LEVELS) {
+    const level = parseLevel(def)
+    const result = sokSolve(level, level.boxesStart, level.playerStart, { mode: 'optimal', budgetMs: 20000 })
+    assert(result.status === 'solved', `关卡 ${def.id} 可解（${result.status}）`)
+    if (result.status !== 'solved') continue
+    const par = result.moves
+    pars.push(par)
+    const want3 = Math.ceil(par * 1.25)
+    const want2 = Math.ceil(par * 1.5)
+    if (def.threeStar === 0) {
+      console.log(`  → 关卡 ${def.id}：par=${par} 建议 threeStar=${want3} twoStar=${want2}（nodes=${result.nodes}）`)
+      needFill = true
+      continue
+    }
+    assert(def.threeStar === want3, `关卡 ${def.id} 三星门槛 ${def.threeStar} = ceil(par${par}×1.25)`)
+    assert(def.twoStar === want2, `关卡 ${def.id} 二星门槛 ${def.twoStar} = ceil(par${par}×1.5)`)
+    assert(par <= chapterParCap[def.chapter - 1], `关卡 ${def.id} 第${def.chapter}章 par≤${chapterParCap[def.chapter - 1]}（实际 ${par}）`)
+  }
+  assert(!needFill, '门槛数据已回填（见上方建议值）')
+  assert(pars.length === LEVELS.length, 'par 全量收集')
+  for (let i = 1; i < pars.length; i++) {
+    assert(pars[i] > pars[i - 1], `全局递增:第 ${i + 1} 关 par${pars[i]} > 第 ${i} 关 par${pars[i - 1]}`)
+  }
 }

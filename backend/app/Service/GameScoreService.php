@@ -12,11 +12,14 @@ use App\Model\WechatUser;
 final class GameScoreService
 {
     public const GAME_TETRIS = 'tetris';
+    public const GAME_SOKOBAN = 'sokoban';
 
     private const MAX_SCORE = 10000000;
     private const MAX_LINES = 10000;
     private const MAX_LEVEL = 30;
     private const MAX_START_LEVEL = 15;
+    private const SOKOBAN_MAX_LEVELS = 100;
+    private const SOKOBAN_MAX_STARS = 300;
 
     /**
      * 提交俄罗斯方块成绩：校验合理性 → 保最好（新分更高才更新）→ 返回最好成绩与名次。
@@ -117,6 +120,112 @@ final class GameScoreService
             ->where('game_key', $gameKey)
             ->where('score', '>', $score)
             ->count();
+    }
+
+    /**
+     * 提交推箱子进度：score=总星数、levels=通关关数（列 lines_cleared 复用,关卡制的通用成绩表）。
+     *
+     * @return array{best: int, isNewBest: bool, rank: int}
+     */
+    public function submitSokoban(int $userId, int $score, int $levels): array
+    {
+        $this->assertSokobanPlausible($score, $levels);
+
+        /** @var null|GameScore $row */
+        $row = GameScore::query()
+            ->where('game_key', self::GAME_SOKOBAN)
+            ->where('user_id', $userId)
+            ->first();
+        $isNewBest = $row === null || $score > (int) $row->score;
+        if ($isNewBest) {
+            GameScore::query()->updateOrCreate(
+                ['game_key' => self::GAME_SOKOBAN, 'user_id' => $userId],
+                ['score' => $score, 'lines_cleared' => $levels, 'level' => 1],
+            );
+        }
+
+        $best = $isNewBest ? $score : (int) $row->score;
+        return [
+            'best' => $best,
+            'isNewBest' => $isNewBest,
+            'rank' => $this->rankOf(self::GAME_SOKOBAN, $best),
+        ];
+    }
+
+    /**
+     * 推箱子收星总榜：按总星数降序,附我的名次。
+     *
+     * @return array{entries: array<int, array{rank: int, nickname: string, avatarUrl: string, score: int, levels: int}>, mine: null|array{rank: int, score: int, levels: int}}
+     */
+    public function sokobanLeaderboard(int $limit, ?int $userId): array
+    {
+        $limit = max(1, min(100, $limit));
+        /** @var array<int, GameScore> $rows */
+        $rows = GameScore::query()
+            ->where('game_key', self::GAME_SOKOBAN)
+            ->orderByDesc('score')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get()
+            ->all();
+
+        $userIds = array_values(array_unique(array_map(static fn(GameScore $r): int => (int) $r->user_id, $rows)));
+        $usersById = [];
+        if ($userIds !== []) {
+            /** @var array<int, WechatUser> $users */
+            $users = WechatUser::query()->whereIn('id', $userIds)->get()->all();
+            foreach ($users as $user) {
+                $usersById[(int) $user->id] = $user;
+            }
+        }
+
+        $entries = [];
+        foreach ($rows as $index => $row) {
+            $user = $usersById[(int) $row->user_id] ?? null;
+            $entries[] = [
+                'rank' => $index + 1,
+                'nickname' => $user !== null && (string) $user->nickname !== '' ? (string) $user->nickname : '枫友',
+                'avatarUrl' => $user !== null ? (string) $user->avatar_url : '',
+                'score' => (int) $row->score,
+                'levels' => (int) $row->lines_cleared,
+            ];
+        }
+
+        $mine = null;
+        if ($userId !== null) {
+            /** @var null|GameScore $mineRow */
+            $mineRow = GameScore::query()
+                ->where('game_key', self::GAME_SOKOBAN)
+                ->where('user_id', $userId)
+                ->first();
+            if ($mineRow !== null) {
+                $mine = [
+                    'rank' => $this->rankOf(self::GAME_SOKOBAN, (int) $mineRow->score),
+                    'score' => (int) $mineRow->score,
+                    'levels' => (int) $mineRow->lines_cleared,
+                ];
+            }
+        }
+
+        return ['entries' => $entries, 'mine' => $mine];
+    }
+
+    /** 宽松合理性（同 tetris 定位——不是安全边界）：星数 ≤ 通关数×3 ≤ 300、每通关至少 1 星。 */
+    private function assertSokobanPlausible(int $score, int $levels): void
+    {
+        if ($levels < 0 || $levels > self::SOKOBAN_MAX_LEVELS) {
+            throw new BizException(422, '成绩无效');
+        }
+        if ($score < 0 || $score > self::SOKOBAN_MAX_STARS) {
+            throw new BizException(422, '成绩无效');
+        }
+        if ($score > $levels * 3) {
+            throw new BizException(422, '成绩无效');
+        }
+        // 通关了至少 1 星;没通关不该有星
+        if (($levels > 0 && $score < $levels) || ($levels === 0 && $score > 0)) {
+            throw new BizException(422, '成绩无效');
+        }
     }
 
     /** 宽松合理性：挡住明显编造的成绩（7 位数分数/超速升级/零行高分），不追求严密。 */
