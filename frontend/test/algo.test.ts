@@ -1776,3 +1776,104 @@ function testSokobanLevels() {
     assert(pars[i] > pars[i - 1], `全局递增:第 ${i + 1} 关 par${pars[i]} > 第 ${i} 关 par${pars[i - 1]}`)
   }
 }
+
+/* ── 斗兽棋规则镜像（与后端 app/Service/Jungle/JungleRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
+{
+  const j = require('@/utils/jungle') as typeof import('@/utils/jungle')
+
+  const P = (side: 'red' | 'blue', animal: j.JunglePiece['animal'], r: number, c: number): j.JunglePiece => ({ side, animal, r, c })
+
+  // 初始摆位与地形
+  {
+    const pieces = j.initialPieces()
+    assert(pieces.length === 16, '斗兽棋初始 16 子')
+    assert(pieces.filter((p) => p.side === 'red').length === 8, '红方 8 子')
+    assert(j.pieceAt(pieces, 0, 0)?.animal === 'lion', '蓝狮 (0,0)')
+    assert(j.pieceAt(pieces, 2, 6)?.animal === 'elephant', '蓝象 (2,6)')
+    assert(j.pieceAt(pieces, 8, 6)?.side === 'red' && j.pieceAt(pieces, 8, 6)?.animal === 'lion', '红狮 (8,6)')
+    assert(j.pieceAt(pieces, 6, 0)?.side === 'red' && j.pieceAt(pieces, 6, 0)?.animal === 'elephant', '红象 (6,0) 中心对称')
+    assert(j.isRiver(3, 1) && j.isRiver(5, 5) && !j.isRiver(3, 3) && !j.isRiver(6, 1), '河流 rows3-5×cols{1,2,4,5}')
+    assert(j.isDenOf('blue', 0, 3) && j.isDenOf('red', 8, 3), '兽穴 (0,3)/(8,3)')
+    assert(j.isTrapOf('red', 7, 3) && j.isTrapOf('blue', 1, 3) && !j.isTrapOf('red', 1, 3), '陷阱归属')
+  }
+
+  // 基础走子
+  {
+    const pieces = j.initialPieces()
+    assert(j.validateMove(pieces, 'red', 6, 0, 5, 0) === null, '红象上行一步合法')
+    assert(j.validateMove(pieces, 'red', 6, 0, 5, 1) === 'into_water', '象不能下河')
+    assert(j.validateMove(pieces, 'red', 6, 2, 6, 4) === 'blocked_own', '不能落在己方子上')
+    assert(j.validateMove(pieces, 'red', 8, 0, 8, 3) === 'own_den', '不可进己方兽穴')
+    assert(j.validateMove(pieces, 'blue', 1, 1, 0, 2) === 'not_adjacent', '非狮虎斜走不允许')
+    assert(j.validateMove(pieces, 'blue', 6, 0, 5, 0) === 'not_yours', '不能动对方的子')
+  }
+
+  // 鼠入河 + 水陆隔离
+  {
+    const iso = [P('red', 'rat', 4, 1), P('blue', 'rat', 4, 0)]
+    assert(j.validateMove(iso, 'red', 4, 1, 4, 0) === 'cannot_capture', '水中鼠不能吃岸上鼠')
+    assert(j.validateMove(iso, 'blue', 4, 0, 4, 1) === 'cannot_capture', '岸上鼠不能吃水中鼠')
+  }
+
+  // 鼠吃象 / 等级 / 陷阱
+  {
+    const re = [P('red', 'rat', 4, 3), P('blue', 'elephant', 3, 3)]
+    assert(j.validateMove(re, 'red', 4, 3, 3, 3) === null, '鼠吃象')
+    assert(j.validateMove(re, 'blue', 3, 3, 4, 3) === 'cannot_capture', '象不能吃鼠')
+    const catDog = [P('red', 'cat', 4, 3), P('blue', 'dog', 3, 3)]
+    assert(j.validateMove(catDog, 'red', 4, 3, 3, 3) === 'cannot_capture', '猫(2)不能吃狗(3)')
+    const same = [P('red', 'dog', 4, 3), P('blue', 'dog', 3, 3)]
+    assert(j.validateMove(same, 'red', 4, 3, 3, 3) === null, '同级互吃')
+    const trap = [P('blue', 'elephant', 7, 3), P('red', 'cat', 7, 2)]
+    assert(j.validateMove(trap, 'red', 7, 2, 7, 3) === null, '踩对方陷阱等级归零，猫吃象')
+    const ownTrap = [P('red', 'elephant', 7, 3), P('blue', 'wolf', 7, 2)]
+    assert(j.validateMove(ownTrap, 'blue', 7, 2, 7, 3) === 'cannot_capture', '己方陷阱不保护自己')
+    const eatsRat = [P('blue', 'rat', 7, 3), P('red', 'elephant', 7, 2)]
+    assert(j.validateMove(eatsRat, 'red', 7, 2, 7, 3) === null, '陷阱归零优先于鼠象特例：象吃陷阱鼠')
+  }
+
+  // 狮虎跳河
+  {
+    const jump = [P('red', 'lion', 4, 6), P('blue', 'dog', 4, 3)]
+    assert(j.validateMove(jump, 'red', 4, 6, 4, 3) === null, '狮跳河吃对岸狗')
+    const blocked = [P('red', 'lion', 4, 6), P('blue', 'rat', 4, 4)]
+    assert(j.validateMove(blocked, 'red', 4, 6, 4, 3) === 'jump_blocked', '水中有鼠挡道跳不成')
+    const ownBlock = [P('red', 'lion', 4, 6), P('red', 'rat', 4, 4)]
+    assert(j.validateMove(ownBlock, 'red', 4, 6, 4, 3) === 'jump_blocked', '己方鼠也挡道')
+    const tiger = [P('blue', 'tiger', 3, 0)]
+    assert(j.validateMove(tiger, 'blue', 3, 0, 3, 3) === null, '虎 0→3 跳')
+    assert(j.validateMove(tiger, 'blue', 3, 0, 3, 6) === 'jump_invalid', '0→6 不成对')
+    const offRow = [P('red', 'tiger', 7, 0)]
+    assert(j.validateMove(offRow, 'red', 7, 0, 7, 3) === 'jump_invalid', '河区外的行不能跳')
+    const rat = [P('red', 'rat', 4, 0)]
+    assert(j.validateMove(rat, 'red', 4, 0, 4, 3) === 'not_adjacent', '鼠不能跳河')
+  }
+
+  // 落点提示与胜负
+  {
+    const pieces = j.initialPieces()
+    const lionHints = j.findLegalMoves(pieces, 'red', 8, 6)
+    assert(lionHints.length === 2 && lionHints.every((h) => !h.capture && !h.jump), '开局红狮两个平移落点')
+    const mid = [P('red', 'lion', 4, 6), P('blue', 'dog', 4, 3)]
+    const hints = j.findLegalMoves(mid, 'red', 4, 6)
+    const jumpHint = hints.find((h) => h.jump)
+    assert(jumpHint?.r === 4 && jumpHint?.c === 3 && jumpHint?.capture === true, '狮跳河落点标记 jump+capture')
+    assert(j.findWin([P('red', 'rat', 1, 3)], 'red', 0, 3) === 'den', '入对方兽穴获胜')
+    assert(j.findWin([P('red', 'rat', 0, 0)], 'red', 0, 1) === 'eliminated', '吃光对方获胜')
+    const stuck = [P('red', 'elephant', 4, 3), P('blue', 'rat', 3, 3), P('blue', 'rat', 5, 3)]
+    assert(j.hasAnyMove(stuck, 'red') === false, '红象被双鼠围死困毙')
+    assert(j.hasAnyMove(stuck, 'blue') === true, '蓝方仍有着法')
+  }
+
+  // 战况派生与触摸换算
+  {
+    const pieces = [P('red', 'lion', 4, 6), P('blue', 'dog', 4, 3)]
+    assert(j.capturedOf(pieces, 'red').length === 7 && j.capturedOf(pieces, 'red')[0] === 'elephant', '红方阵亡 7 子按等级排序')
+    assert(j.aliveCount(pieces, 'blue') === 1, '蓝方存活 1 子')
+    const m = j.boardMetrics(315, 405)
+    assert(Math.abs(m.cell - 45) < 0.001 && m.offsetX === 0 && m.offsetY === 0, 'boardMetrics 315×405 → 格 45 居中无偏移')
+    const cell = j.pointToCell(100.5, 200.5, m)
+    assert(cell?.r === 4 && cell?.c === 2, 'pointToCell 落格正确')
+    assert(j.pointToCell(-1, 10, m) === null && j.pointToCell(316, 10, m) === null, '越界返回 null')
+  }
+}

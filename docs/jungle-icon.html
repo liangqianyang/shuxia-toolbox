@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 240px; height: 240px; font-family: "PingFang SC", "Hiragino Sans GB", sans-serif; }
+  .icon {
+    width: 240px; height: 240px;
+    background: #FFF8ED;
+    border: 8px solid #21483D;
+    border-radius: 52px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* 背景棋盘格（呼应 7×9 棋盘） */
+  .grid {
+    position: absolute; inset: 0;
+    display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr);
+    gap: 8px; padding: 16px;
+    opacity: 0.5;
+  }
+  .grid i { border-radius: 8px; background: #F7EEDF; box-shadow: inset 0 0 0 2px #E8D9C4; }
+  /* 中间横穿的河流（两大格） */
+  .river {
+    position: absolute; left: 14px; right: 14px; top: 108px; height: 52px;
+    display: flex; gap: 8px;
+  }
+  .river i {
+    flex: 1; border-radius: 8px; background: #C9E7F0; position: relative; overflow: hidden;
+  }
+  .river i::before, .river i::after {
+    content: ""; position: absolute; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.75);
+  }
+  .river i::before { left: 10%; top: 14px; width: 34%; }
+  .river i::after { left: 48%; top: 30px; width: 26%; background: rgba(255, 255, 255, 0.5); }
+  /* 棋子：招牌的 鼠(1) 克制 象(8) */
+  .chip {
+    position: absolute; width: 86px; height: 86px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 42px; font-weight: 800;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  }
+  .chip--red {
+    left: 18px; top: 24px; background: #E85D4A; border: 4px solid #B8402E;
+    transform: rotate(-8deg);
+    box-shadow: 4px 6px 0 rgba(33, 72, 61, 0.22);
+  }
+  .chip--blue {
+    right: 18px; bottom: 58px; background: #5B8FB9; border: 4px solid #3D6E96;
+    transform: rotate(8deg);
+    box-shadow: 4px 6px 0 rgba(33, 72, 61, 0.22);
+  }
+  /* 右下角阶数徽章 */
+  .rank {
+    position: absolute; right: -4px; bottom: -4px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #FFF8F0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 800; text-shadow: none;
+  }
+  .chip--red .rank { color: #E85D4A; }
+  .chip--blue .rank { color: #5B8FB9; }
+  /* 中央金色 VS 徽章 */
+  .vs {
+    position: absolute; left: 50%; top: 96px; transform: translateX(-50%) rotate(-6deg);
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #F4B942; border: 3px solid #C08A1E;
+    display: flex; align-items: center; justify-content: center;
+    color: #6B4A12; font-size: 17px; font-weight: 900;
+    box-shadow: 2px 3px 0 rgba(33, 72, 61, 0.25);
+    z-index: 3;
+  }
+  .title {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    text-align: center;
+    font-size: 30px; font-weight: 900; color: #21483D;
+    letter-spacing: 3px;
+    text-shadow: 0 2px 0 #FFFFFF;
+  }
+</style>
+</head>
+<body>
+  <div class="icon">
+    <div class="grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="river"><i></i><i></i></div>
+    <div class="chip chip--red">鼠<span class="rank">1</span></div>
+    <div class="vs">VS</div>
+    <div class="chip chip--blue">象<span class="rank">8</span></div>
+    <div class="title">斗兽棋</div>
+  </div>
+</body>
+</html>

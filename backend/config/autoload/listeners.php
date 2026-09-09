@@ -7,4 +7,5 @@ return [
     App\Listener\LudoTurnSweepListener::class,
     App\Listener\AdventureTurnSweepListener::class,
     App\Listener\GomokuRpsSweepListener::class,
+    App\Listener\JungleRpsSweepListener::class,
 ];

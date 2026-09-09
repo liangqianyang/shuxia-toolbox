@@ -15,6 +15,8 @@ use App\Controller\FortuneController;
 use App\Controller\GomokuController;
 use App\Controller\GomokuWsController;
 use App\Controller\HealthController;
+use App\Controller\JungleController;
+use App\Controller\JungleWsController;
 use App\Controller\LudoController;
 use App\Controller\LudoWsController;
 use App\Controller\TravelController;
@@ -95,6 +97,18 @@ Router::addGroup('/api', function (): void {
     Router::post('/gomoku/room/{code}/undo-respond', [GomokuController::class, 'respondUndo']);
     Router::post('/gomoku/room/{code}/chat', [GomokuController::class, 'chat']);
     Router::post('/gomoku/room/{code}/leave', [GomokuController::class, 'leave']);
+
+    // 联机斗兽棋：房间创建/加入、猜拳定选边、轮询同步（WS 降级通道）、走子、
+    // 再来一局与离开。走子不限时；猜拳/选边窗口超时由 Timer 清扫器 + 写路径懒检查推进。
+    Router::post('/jungle/room', [JungleController::class, 'create']);
+    Router::post('/jungle/room/{code}/join', [JungleController::class, 'join']);
+    Router::post('/jungle/room/{code}/rps', [JungleController::class, 'rps']);
+    Router::post('/jungle/room/{code}/choose-color', [JungleController::class, 'chooseColor']);
+    Router::get('/jungle/room/{code}', [JungleController::class, 'state']);
+    Router::post('/jungle/room/{code}/move', [JungleController::class, 'move']);
+    Router::post('/jungle/room/{code}/rematch', [JungleController::class, 'rematch']);
+    Router::post('/jungle/room/{code}/chat', [JungleController::class, 'chat']);
+    Router::post('/jungle/room/{code}/leave', [JungleController::class, 'leave']);
 
     // UNO 联机：房间创建/加入/开局、轮询同步（WS 降级通道）、出牌/摸牌/不出、
     // +4 质疑、喊/举报 UNO、再来一局与离开。回合超时由 Timer 清扫器 + 写操作懒检查推进。
@@ -180,4 +194,5 @@ Router::addServer('ws', function (): void {
     Router::get('/uno/ws', UnoWsController::class);
     Router::get('/ludo/ws', LudoWsController::class);
     Router::get('/adventure/ws', AdventureWsController::class);
+    Router::get('/jungle/ws', JungleWsController::class);
 });
