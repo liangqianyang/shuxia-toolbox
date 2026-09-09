@@ -59,26 +59,35 @@
           <text class="junqi__bar-status">{{ opponentStatusText }}</text>
         </view>
         <button v-if="state.status === 'waiting'" class="junqi__invite" open-type="share">邀请</button>
-        <view v-else class="junqi__tray">
-          <text class="junqi__tray-label">对方吃到</text>
-          <view class="junqi__tray-chips">
-            <view v-for="(rk, i) in capturedByOpponent" :key="i" class="junqi__tray-chip"><text>{{ RANK_NAMES[rk] }}</text></view>
-            <text v-if="!capturedByOpponent.length" class="junqi__tray-empty">暂无</text>
-          </view>
-        </view>
       </view>
 
-      <!-- 棋盘卡（布阵期顶部带约束提示） -->
+      <!-- 棋盘卡（布阵期顶部带约束提示）：左右竖轨=阵亡托盘（照原型 02 号稿） -->
       <view class="junqi__board-card" :style="{ width: cardWidth + 'px' }">
         <view v-if="isLayoutPhase" class="junqi__layout-hint">
           <text>地雷限后两排 · 炸弹不入首排 · 军旗限大本营</text>
         </view>
-        <canvas
-          id="junqi-board"
-          type="2d"
-          class="junqi__board"
-          :style="{ width: geo.width + 'px', height: geo.height + 'px' }"
-        ></canvas>
+        <view class="junqi__board-row">
+          <view class="junqi__rail">
+            <text class="junqi__rail-label">对方吃到</text>
+            <view class="junqi__rail-chips">
+              <view v-for="(rk, i) in capturedByOpponent" :key="'l' + i" class="junqi__rail-chip" :class="mySide === 'red' ? 'junqi__rail-chip--red' : 'junqi__rail-chip--blue'"><text>{{ RANK_NAMES[rk] }}</text></view>
+              <text v-if="!capturedByOpponent.length" class="junqi__rail-empty">暂无</text>
+            </view>
+          </view>
+          <canvas
+            id="junqi-board"
+            type="2d"
+            class="junqi__board"
+            :style="{ width: geo.width + 'px', height: geo.height + 'px' }"
+          ></canvas>
+          <view class="junqi__rail">
+            <text class="junqi__rail-label">我吃到</text>
+            <view class="junqi__rail-chips">
+              <view v-for="(rk, i) in capturedByMe" :key="'r' + i" class="junqi__rail-chip" :class="opponentSide === 'red' ? 'junqi__rail-chip--red' : 'junqi__rail-chip--blue'"><text>{{ RANK_NAMES[rk] }}</text></view>
+              <text v-if="!capturedByMe.length" class="junqi__rail-empty">暂无</text>
+            </view>
+          </view>
+        </view>
         <view class="junqi__board-hit" @tap="onBoardTap"></view>
       </view>
 
@@ -124,13 +133,6 @@
             <text v-if="state.red" class="junqi__dot" :class="{ 'junqi__dot--off': !state.red.online }"></text>
           </view>
           <text class="junqi__bar-status" :class="{ 'junqi__bar-status--mine': isMyTurn }">{{ myStatusText }}</text>
-        </view>
-        <view class="junqi__tray">
-          <text class="junqi__tray-label">我吃到</text>
-          <view class="junqi__tray-chips">
-            <view v-for="(rk, i) in capturedByMe" :key="i" class="junqi__tray-chip"><text>{{ RANK_NAMES[rk] }}</text></view>
-            <text v-if="!capturedByMe.length" class="junqi__tray-empty">暂无</text>
-          </view>
         </view>
       </view>
 
@@ -305,6 +307,22 @@
             <view class="junqi__sp-row"><text class="junqi__sp-chip junqi__sp-chip--gold">军旗</text><text class="junqi__sp-text">被扛走即输 · 限大本营 · 司令阵亡时亮出</text></view>
           </view>
           <view class="junqi__rule">
+            <view class="junqi__rule-label"><text>走子</text></view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip junqi__sp-chip--dark">公路</text><text class="junqi__sp-text">素底格一次走一格（山界中路也一步跨过）</text></view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip junqi__sp-chip--sand">铁路</text><text class="junqi__sp-text">沿铁路直线滑行任意远，中间不能有子</text></view>
+            <view class="junqi__mv-demo">
+              <view class="junqi__mv-cell junqi__mv-cell--piece junqi__mv-cell--red"><text>排</text></view>
+              <view class="junqi__mv-cell junqi__mv-cell--rail"></view>
+              <view class="junqi__mv-cell junqi__mv-cell--rail"></view>
+              <view class="junqi__mv-cell junqi__mv-cell--piece junqi__mv-cell--blue"><text>连</text></view>
+              <text class="junqi__mv-note">红排长沿铁路滑行吃掉蓝连长</text>
+            </view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip">工兵</text><text class="junqi__sp-text">铁路上可任意拐弯走「L」形，是唯一能拐弯的子</text></view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip junqi__sp-chip--green">行营</text><text class="junqi__sp-text">进出行营可斜走一格</text></view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip junqi__sp-chip--dark">锁足</text><text class="junqi__sp-text">地雷、军旗、已进大本营的棋子不能移动</text></view>
+            <view class="junqi__sp-row"><text class="junqi__sp-chip">开战</text><text class="junqi__sp-text">走到敌子格即战斗：大吃小、同级同归（炸弹/地雷见上）</text></view>
+          </view>
+          <view class="junqi__rule">
             <view class="junqi__rule-label"><text>地形</text></view>
             <view class="junqi__sp-row"><text class="junqi__sp-geo junqi__sp-geo--rail"></text><text class="junqi__sp-text">铁路：沿线直线滑行任意远（工兵可拐弯），跨山界左右两条</text></view>
             <view class="junqi__sp-row"><text class="junqi__sp-geo junqi__sp-geo--road"></text><text class="junqi__sp-text">公路：一步一格；山界中间一条通路</text></view>
@@ -363,16 +381,20 @@ import { playJunqiSound } from '@/utils/junqiSound'
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 军棋六帧，jun-*/dou-* 变量实值） ----------
 const COLOR_LAND = '#F7EEDF'
 const COLOR_GRID = '#E8D9C4'
-const COLOR_RAIL_FILL = '#F3E2C7'
+const COLOR_RAIL_FILL = '#F1DDB5'
 const COLOR_RAIL = '#C9A876'
+const COLOR_RAIL_LINE = '#B98A50'
+const COLOR_RAIL_TIE = '#D9BC8E'
 const COLOR_LINE = '#DCCDB6'
-const COLOR_BAND = '#EFE3CF'
-const COLOR_CAMP = '#E9F2E4'
-const COLOR_CAMP_LINE = '#CBDFC0'
-const COLOR_CAMP_TEXT = '#4E7D4A'
+const COLOR_BAND = '#E4D5BC'
+const COLOR_BAND_HILL = '#D5C09B'
+const COLOR_CAMP = '#DFEED6'
+const COLOR_CAMP_RING = '#6F9E58'
+const COLOR_CAMP_TEXT = '#3F6D33'
 const COLOR_HQ = '#F7DFD3'
 const COLOR_HQ_LINE = '#E3B4A6'
-const COLOR_HQ_TEXT = '#C05B4A'
+const COLOR_HQ_RING = '#D98C74'
+const COLOR_HQ_TEXT = '#B84A38'
 const COLOR_RED = '#E85D4A'
 const COLOR_RED_DEEP = '#B8402E'
 const COLOR_BLUE = '#5B8FB9'
@@ -607,12 +629,13 @@ function clearSelection() {
 // ---------- 棋盘渲染 ----------
 const windowWidth = getWindowInfo().windowWidth
 const windowHeight = getWindowInfo().windowHeight
-/** 卡宽 343（375 屏），盘面居中 5 列；高度按剩余空间约束格尺寸。 */
+/** 卡宽 343（375 屏）；左右窄轨（阵亡托盘，32px）填掉两侧余量，格尺寸尽量吃满高度（必要时轻微滚动）。 */
 const cardWidth = Math.min(windowWidth - 16, 343)
-const canvasWidth = cardWidth - 28
+const RAIL_WIDTH = 32
+const BOARD_GAP = 6
+const canvasWidth = cardWidth - 24 - RAIL_WIDTH * 2 - BOARD_GAP * 2
 const widthCell = canvasWidth / 5
-const heightBudget = Math.max(windowHeight - 390, 240)
-const cell = Math.max(Math.floor(Math.min(widthCell, heightBudget / 12.4)), 24)
+const cell = Math.max(Math.floor(Math.min(widthCell, (windowHeight - 240) / 12.4, 52)), 36)
 const geo: JunqiGeometry = boardGeometry(cell)
 let boardNode: CanvasNode | null = null
 let boardRect: ElementRect | null = null
@@ -669,10 +692,19 @@ function drawBoard() {
     }
   }
 
-  // 山界带 + 三条通路
+  // 山界带 + 山峰剪影 + 三条通路
   const bandY = 6 * cell
   ctx.fillStyle = COLOR_BAND
   roundRectPath(ctx, 1.5 * s, bandY + 1 * s, geo.width - 3 * s, geo.band - 2 * s, 3 * s)
+  ctx.fill()
+  ctx.fillStyle = COLOR_BAND_HILL
+  ctx.beginPath()
+  ctx.moveTo(6 * s, bandY + geo.band - 1 * s)
+  for (let px = 6 * s; px < geo.width - 8 * s; px += 14 * s) {
+    ctx.lineTo(px + 7 * s, bandY + geo.band - 1 * s - geo.band * 0.42)
+    ctx.lineTo(px + 14 * s, bandY + geo.band - 1 * s)
+  }
+  ctx.closePath()
   ctx.fill()
   for (const c of [0, 4]) {
     const cx = c * cell + cell / 2
@@ -683,43 +715,124 @@ function drawBoard() {
   ctx.fillStyle = COLOR_LINE
   ctx.fillRect(2 * cell + cell / 2 - 0.75 * s, bandY, 1.5 * s, geo.band)
 
-  // 地形格
+  // 地形格：公路素底 / 铁路双轨+枕木 / 行营绿环 / 大本营旗座
   for (let r = 0; r < 12; r++) {
     for (let c = 0; c < 5; c++) {
       const rect = cellRect(r, c, geo)
-      const rail = isRail(r, c)
-      ctx.fillStyle = rail ? COLOR_RAIL_FILL : COLOR_LAND
-      ctx.strokeStyle = rail ? COLOR_RAIL : COLOR_GRID
-      ctx.lineWidth = rail ? 1.5 * s : 1
-      roundRectPath(ctx, rect.x, rect.y, rect.size, rect.size, 2 * s)
-      ctx.fill()
-      ctx.stroke()
+      const railH = r === 1 || r === 5 || r === 6 || r === 10
+      const railV = (c === 0 || c === 4) && r >= 1 && r <= 10
+      const cx = rect.x + rect.size / 2
+      const cy = rect.y + rect.size / 2
+
       if (isCamp(r, c)) {
+        // 行营：双层绿环徽章（免战安全区）
         ctx.beginPath()
-        ctx.arc(rect.x + rect.size / 2, rect.y + rect.size / 2, rect.size / 2 - 3 * s, 0, Math.PI * 2)
+        ctx.arc(cx, cy, rect.size / 2 - 1.5 * s, 0, Math.PI * 2)
         ctx.fillStyle = COLOR_CAMP
         ctx.fill()
-        ctx.strokeStyle = COLOR_CAMP_LINE
-        ctx.lineWidth = 1 * s
+        ctx.strokeStyle = COLOR_CAMP_RING
+        ctx.lineWidth = 2 * s
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(cx, cy, rect.size / 2 - 6.5 * s, 0, Math.PI * 2)
+        ctx.strokeStyle = '#FFFFFFB0'
+        ctx.lineWidth = 1.2 * s
         ctx.stroke()
         ctx.fillStyle = COLOR_CAMP_TEXT
-        ctx.font = `700 ${10.5 * s}px sans-serif`
+        ctx.font = `700 ${12 * s}px sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText('营', rect.x + rect.size / 2, rect.y + rect.size / 2)
-      } else if (isHqOf('red', r, c) || isHqOf('blue', r, c)) {
+        ctx.fillText('营', cx, cy + 0.5 * s)
+        continue
+      }
+
+      if (isHqOf('red', r, c) || isHqOf('blue', r, c)) {
+        // 大本营：红座双层描边 + 小旗 + 座标
+        roundRectPath(ctx, rect.x, rect.y, rect.size, rect.size, 3 * s)
         ctx.fillStyle = COLOR_HQ
-        roundRectPath(ctx, rect.x + 3 * s, rect.y + 3 * s, rect.size - 6 * s, rect.size - 6 * s, 3 * s)
         ctx.fill()
+        ctx.strokeStyle = COLOR_HQ_RING
+        ctx.lineWidth = 1.8 * s
+        ctx.stroke()
+        roundRectPath(ctx, rect.x + 4 * s, rect.y + 4 * s, rect.size - 8 * s, rect.size - 8 * s, 2.5 * s)
         ctx.strokeStyle = COLOR_HQ_LINE
         ctx.lineWidth = 1 * s
         ctx.stroke()
+        ctx.strokeStyle = COLOR_HQ_TEXT
+        ctx.lineWidth = 1.2 * s
+        ctx.beginPath()
+        ctx.moveTo(cx - 4 * s, rect.y + 5 * s)
+        ctx.lineTo(cx - 4 * s, rect.y + 13 * s)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(cx - 4 * s, rect.y + 5 * s)
+        ctx.lineTo(cx + 5 * s, rect.y + 7.5 * s)
+        ctx.lineTo(cx - 4 * s, rect.y + 10 * s)
+        ctx.closePath()
         ctx.fillStyle = COLOR_HQ_TEXT
-        ctx.font = `700 ${8 * s}px sans-serif`
+        ctx.fill()
+        ctx.font = `700 ${8.5 * s}px sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText('大本营', rect.x + rect.size / 2, rect.y + rect.size / 2)
+        ctx.fillText('大本营', cx, rect.y + rect.size / 2 + 4.5 * s)
+        continue
       }
+
+      if (railH || railV) {
+        // 铁路：暖沙底 + 双轨线 + 枕木刻度（交叉口双向枕木成十字）
+        roundRectPath(ctx, rect.x, rect.y, rect.size, rect.size, 2 * s)
+        ctx.fillStyle = COLOR_RAIL_FILL
+        ctx.fill()
+        ctx.strokeStyle = COLOR_RAIL
+        ctx.lineWidth = 1.5 * s
+        ctx.stroke()
+        const half = 3.5 * s
+        if (railH) {
+          ctx.strokeStyle = COLOR_RAIL_LINE
+          ctx.lineWidth = 1.1 * s
+          ctx.beginPath()
+          ctx.moveTo(rect.x + 2 * s, cy - half)
+          ctx.lineTo(rect.x + rect.size - 2 * s, cy - half)
+          ctx.moveTo(rect.x + 2 * s, cy + half)
+          ctx.lineTo(rect.x + rect.size - 2 * s, cy + half)
+          ctx.stroke()
+          ctx.strokeStyle = COLOR_RAIL_TIE
+          ctx.lineWidth = 1 * s
+          ctx.beginPath()
+          for (let tx = rect.x + 5 * s; tx <= rect.x + rect.size - 4 * s; tx += 6.5 * s) {
+            ctx.moveTo(tx, cy - half - 1.5 * s)
+            ctx.lineTo(tx, cy + half + 1.5 * s)
+          }
+          ctx.stroke()
+        }
+        if (railV) {
+          ctx.strokeStyle = COLOR_RAIL_LINE
+          ctx.lineWidth = 1.1 * s
+          ctx.beginPath()
+          ctx.moveTo(cx - half, rect.y + 2 * s)
+          ctx.lineTo(cx - half, rect.y + rect.size - 2 * s)
+          ctx.moveTo(cx + half, rect.y + 2 * s)
+          ctx.lineTo(cx + half, rect.y + rect.size - 2 * s)
+          ctx.stroke()
+          ctx.strokeStyle = COLOR_RAIL_TIE
+          ctx.lineWidth = 1 * s
+          ctx.beginPath()
+          for (let ty = rect.y + 5 * s; ty <= rect.y + rect.size - 4 * s; ty += 6.5 * s) {
+            ctx.moveTo(cx - half - 1.5 * s, ty)
+            ctx.lineTo(cx + half + 1.5 * s, ty)
+          }
+          ctx.stroke()
+        }
+        continue
+      }
+
+      // 公路：素底细线
+      roundRectPath(ctx, rect.x, rect.y, rect.size, rect.size, 2 * s)
+      ctx.fillStyle = COLOR_LAND
+      ctx.fill()
+      ctx.strokeStyle = COLOR_GRID
+      ctx.lineWidth = 1
+      ctx.stroke()
     }
   }
 
@@ -828,7 +941,7 @@ function drawPiece(
   }
 
   ctx.fillStyle = flag ? COLOR_FLAG_TEXT : '#FFFFFF'
-  ctx.font = `700 ${12 * s}px sans-serif`
+  ctx.font = `700 ${13 * s}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(rank ? RANK_NAMES[rank] : '', x + size / 2, y + size / 2)
@@ -963,6 +1076,8 @@ watch(
     // lastEvent 差分：战报弹卡 + 音效（战斗/亮旗弹卡，其余只刷战报条）
     const event = next.lastEvent
     if (event && event.seq > prevEventSeq && !firstLoad) {
+      // 任何一手落地都重置回合倒计时（否则走完一步倒计时继续往下数到 0）
+      if (event.type === 'move' || event.type === 'battle' || event.type === 'reveal') resetCountdown()
       if (event.type === 'battle' || event.type === 'reveal') {
         playJunqiSound('capture')
         battleCard.value = { text: event.text, reveal: event.type === 'reveal' }
@@ -1304,8 +1419,8 @@ onShareAppMessage(() => ({
   &__room {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding-top: 8px;
+    gap: 8px;
+    padding-top: 6px;
   }
 
   &__topbar {
@@ -1491,36 +1606,62 @@ onShareAppMessage(() => ({
     }
   }
 
-  &__tray {
+  &__board-row {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 3px;
+    align-items: stretch;
+    justify-content: center;
+    gap: 8px;
   }
 
-  &__tray-label {
-    font-size: 9px;
+  &__rail {
+    width: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  &__rail-label {
+    flex-shrink: 0;
+    width: 32px;
+    font-size: 8px;
+    line-height: 1.3;
+    text-align: center;
     color: #b9a98f;
   }
 
-  &__tray-chips {
+  &__rail-chips {
+    flex: 1;
     display: flex;
-    gap: 3px;
+    flex-direction: column;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    max-width: 130px;
+    align-items: center;
+    align-content: center;
+    gap: 4px;
+    overflow: hidden;
   }
 
-  &__tray-chip {
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: #e85d4a;
+  &__rail-chip {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: #fff;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
+
+    &--red {
+      background: #e85d4a;
+    }
+
+    &--blue {
+      background: #5b8fb9;
+    }
   }
 
-  &__tray-empty {
+  &__rail-empty {
     font-size: 9px;
     color: #dccdb6;
   }
@@ -1676,9 +1817,9 @@ onShareAppMessage(() => ({
   }
 
   &__action {
-    width: 48px;
-    height: 48px;
-    border-radius: 24px;
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
     background: #f7eedf;
     display: flex;
     align-items: center;
@@ -2263,6 +2404,60 @@ onShareAppMessage(() => ({
       background: #f4b942;
       color: #5c3a08;
     }
+
+    &--sand {
+      background-color: #f1ddb5;
+      background-image: repeating-linear-gradient(90deg, #d9bc8e 0 1px, transparent 1px 3px);
+      color: #7a5c2e;
+    }
+
+    &--green {
+      background: #dfeed6;
+      color: #3f6d33;
+      border: 1px solid #6f9e58;
+    }
+  }
+
+  &__mv-demo {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0 2px 2px;
+  }
+
+  &__mv-cell {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--rail {
+      background-color: #f1ddb5;
+      background-image: repeating-linear-gradient(90deg, #d9bc8e 0 1.5px, transparent 1.5px 4.5px);
+      border: 1.5px solid #b98a50;
+    }
+
+    &--piece {
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    &--red {
+      background: #e85d4a;
+    }
+
+    &--blue {
+      background: #5b8fb9;
+    }
+  }
+
+  &__mv-note {
+    margin-left: 6px;
+    font-size: 10px;
+    color: #b9a98f;
   }
 
   &__sp-text {
@@ -2278,8 +2473,9 @@ onShareAppMessage(() => ({
     border-radius: 3px;
 
     &--rail {
-      background: #f3e2c7;
-      border: 1.5px solid #c9a876;
+      background-color: #f1ddb5;
+      background-image: repeating-linear-gradient(90deg, #d9bc8e 0 1.5px, transparent 1.5px 4.5px);
+      border: 1.5px solid #b98a50;
     }
 
     &--road {
@@ -2289,13 +2485,15 @@ onShareAppMessage(() => ({
 
     &--camp {
       border-radius: 50%;
-      background: #e9f2e4;
-      border: 1px solid #cbdfc0;
+      background: #dfeed6;
+      border: 2px solid #6f9e58;
+      box-shadow: inset 0 0 0 2px #ffffffb0;
     }
 
     &--hq {
       background: #f7dfd3;
-      border: 1px solid #e3b4a6;
+      border: 2px solid #d98c74;
+      box-shadow: inset 0 0 0 2px #e3b4a6;
     }
   }
 
