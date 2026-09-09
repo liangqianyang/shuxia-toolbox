@@ -13,11 +13,11 @@
           <input v-model="joinCode" class="join-input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
           <button class="btn btn-gold" :disabled="joinCode.length !== 4" @tap="onJoin">加入</button>
         </view>
-        <view class="rules-entry" @tap="rulesOpen = true">❓ 玩法说明</view>
+        <view class="rules-entry" hover-class="press" @tap="rulesOpen = true">❓ 玩法说明</view>
       </view>
       <view v-if="myRooms.length" class="my-rooms">
         <view class="my-rooms-title">我的对局</view>
-        <view v-for="room in myRooms" :key="room.code" class="my-room-item" @tap="joinByCode(room.code)">
+        <view v-for="room in myRooms" :key="room.code" class="my-room-item" hover-class="press" @tap="joinByCode(room.code)">
           <view class="my-room-code">{{ room.code }}</view>
           <view class="my-room-meta">{{ roomStatusText(room.status) }} · {{ room.playerCount }} 人</view>
           <view class="my-room-go">{{ room.status === 'saved' ? '继续' : '回到' }} ›</view>
@@ -30,12 +30,12 @@
     <view v-else class="room">
       <!-- 顶栏 -->
       <view class="room-header">
-        <view class="room-code" @tap="copyCode">房号 {{ current.code }} ⧉</view>
+        <view class="room-code" hover-class="press" @tap="copyCode">房号 {{ current.code }} ⧉</view>
         <view class="header-btns">
-          <view class="icon-btn" @tap="rulesOpen = true">❓</view>
-          <view class="icon-btn" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</view>
+          <view class="icon-btn" hover-class="press" @tap="rulesOpen = true">❓</view>
+          <view class="icon-btn" hover-class="press" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</view>
           <button class="icon-btn share-btn" open-type="share">📤</button>
-          <view class="icon-btn" @tap="onLeave">退出</view>
+          <view class="icon-btn" hover-class="press" @tap="onLeave">退出</view>
         </view>
       </view>
 
@@ -50,6 +50,7 @@
               :key="g"
               class="route-opt"
               :class="{ 'route-active': current.goal === g }"
+              hover-class="press"
               @tap="setGoal(g)"
             >
               <text class="route-name">{{ GOAL_LABELS[g] ?? g }}</text>
@@ -96,6 +97,7 @@
                 'player-current': current.currentSeat === p.seat && current.status === 'playing',
                 'player-targetable': !!targetingItem && canTargetSeat(p.seat),
               }"
+              hover-class="press"
               @tap="tapPlayerChip(p.seat)"
             >
               <view v-if="chatBubbles[p.seat]" class="seat-bubble" :class="{ 'seat-bubble--emoji': chatBubbles[p.seat].isEmoji }">{{ chatBubbles[p.seat].text }}</view>
@@ -226,6 +228,7 @@
                   :key="idx"
                   class="item-card"
                   :class="{ 'item-usable': canUseItemNow(id), 'item-targeting': targetingItem === id }"
+                  hover-class="press"
                   @tap="tapItem(id)"
                 >
                   <text class="item-icon">{{ itemIcon(id) }}</text>
@@ -438,7 +441,7 @@
                 <text class="chat-feed-text" :class="{ 'chat-feed-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : chatBody(m) }}</text>
               </view>
             </view>
-            <view class="chat-trigger" @tap="chatPanelOpen = true">
+            <view class="chat-trigger" hover-class="press" @tap="chatPanelOpen = true">
               <text class="chat-trigger-icon">💬</text>
               <text class="chat-trigger-hint">快捷聊天…</text>
               <text v-if="unreadChat" class="chat-unread">{{ unreadChat > 9 ? '9+' : unreadChat }}</text>
@@ -452,10 +455,10 @@
     <!-- 聊天面板 -->
     <view v-if="chatPanelOpen" class="chat-panel-mask" @tap="chatPanelOpen = false">
       <view class="chat-panel" @tap.stop>        <view class="chat-panel-tabs">
-          <view v-for="t in chatTabs" :key="t.key" class="chat-tab" :class="{ active: chatTab === t.key }" @tap="chatTab = t.key">
+          <view v-for="t in chatTabs" :key="t.key" class="chat-tab" :class="{ active: chatTab === t.key }" hover-class="press" @tap="chatTab = t.key">
             {{ t.label }}
           </view>
-          <view class="chat-close" @tap="chatPanelOpen = false">✕</view>
+          <view class="chat-close" hover-class="press" @tap="chatPanelOpen = false">✕</view>
         </view>
         <scroll-view class="chat-log" scroll-y :show-scrollbar="false">
           <view v-for="m in chatLog" :key="m.seq" class="chat-log-row" :class="{ 'chat-log-me': m.seat === mySeat }">
@@ -468,17 +471,17 @@
           <view v-for="g in phraseGroups" :key="g.key" class="chat-group">
             <view class="chat-group-title">{{ g.title }}</view>
             <view class="chat-group-btns">
-              <view v-for="p in g.phrases" :key="p.id" class="chat-phrase" :class="{ disabled: chatCooling }" @tap="sendPhrase(p.id)">
+              <view v-for="p in g.phrases" :key="p.id" class="chat-phrase" :class="{ disabled: chatCooling }" hover-class="press" @tap="sendPhrase(p.id)">
                 {{ p.text }}
               </view>
             </view>
           </view>
         </view>
         <view v-else-if="chatTab === 'emoji'" class="chat-emoji-grid">
-          <view v-for="e in ADVENTURE_EMOJIS" :key="e" class="chat-emoji" :class="{ disabled: chatCooling }" @tap="sendEmoji(e)">{{ e }}</view>
+          <view v-for="e in ADVENTURE_EMOJIS" :key="e" class="chat-emoji" :class="{ disabled: chatCooling }" hover-class="press" @tap="sendEmoji(e)">{{ e }}</view>
         </view>
         <view v-else-if="chatTab === 'sticker'" class="chat-sticker-grid">
-          <view v-for="(path, id) in ADVENTURE_STICKERS" :key="id" class="chat-sticker" :class="{ disabled: chatCooling }" @tap="sendSticker(id)">
+          <view v-for="(path, id) in ADVENTURE_STICKERS" :key="id" class="chat-sticker" :class="{ disabled: chatCooling }" hover-class="press" @tap="sendSticker(id)">
             <image class="chat-sticker-img" :src="stickerUrl(id)" mode="aspectFit" />
           </view>
         </view>

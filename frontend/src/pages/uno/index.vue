@@ -26,7 +26,7 @@
       </view>
 
       <!-- 资料提示：没设置过头像昵称时引导完善 -->
-      <view v-if="showProfileBanner" class="profile-banner" @tap="openProfileEditor">
+      <view v-if="showProfileBanner" class="profile-banner" hover-class="press" @tap="openProfileEditor">
         <text>🍁 你还没有头像昵称，点我设置，让牌友认出你</text>
         <text class="profile-banner__go">去设置 ›</text>
       </view>
@@ -111,7 +111,7 @@
         <!-- 桌面中央（+ 动作播报条） -->
         <view class="table-zone">
           <view class="table">
-            <view class="table__pile" @tap="onDeckTap">
+            <view class="table__pile" hover-class="press" @tap="onDeckTap">
               <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
               <text class="table__pile-count">{{ state.deckCount }}</text>
               <text v-if="isMyTurn && !state.drawnCard && !state.challenge?.mine" class="table__pile-hint">{{ state.drawStack ? `摸 ${state.drawStack.count} 张` : '点我摸牌' }}</text>
@@ -173,6 +173,7 @@
                   'hand__card--dim': isMyTurn && !canIPlay(card),
                 }"
                 :style="{ marginLeft: i === 0 ? '0' : '-' + cardOverlap + 'rpx' }"
+                hover-class="press"
                 @tap="onCardTap(i)"
               >
                 <image v-if="images[card]" :src="images[card]" class="hand__img" mode="aspectFit" />
@@ -217,14 +218,14 @@
 
       <!-- 底部聊天条：固定在屏幕底部，最近 3 条消息以列表形式常驻（新的从下方进入，超过 3 条顶部消失），
            点任意处展开完整面板。仅对局进行中显示（用户拍板：只有真正玩游戏的界面需要）。 -->
-      <view v-if="state.status === 'playing'" class="chat-bar" @tap="openChatPanel()">
+      <view v-if="state.status === 'playing'" class="chat-bar" hover-class="press" @tap="openChatPanel()">
         <view v-if="chatFeed.length" class="chat-bar__feed">
           <view v-for="m in chatFeed" :key="m.seq" class="chat-bar__feed-item">
             <text class="chat-bar__feed-name">{{ m.userId === myUserId ? '我' : chatSenderName(m) }}：</text>
             <text class="chat-bar__feed-text" :class="{ 'chat-bar__feed-text--emoji': m.kind === 'emoji' }">{{ m.text }}</text>
           </view>
         </view>
-        <view class="chat-bar__trigger" @tap.stop="openChatPanel()">
+        <view class="chat-bar__trigger" hover-class="press" @tap.stop="openChatPanel()">
           <text class="chat-bar__icon">💬</text>
           <text class="chat-bar__hint">快捷嘴炮…</text>
           <view v-if="unreadChat > 0" class="chat-bar__badge">{{ unreadChat > 9 ? '9+' : unreadChat }}</view>
@@ -341,6 +342,7 @@
             :key="c"
             class="color-panel__item"
             :style="{ background: COLOR_META[c].color }"
+            hover-class="press"
             @tap="onPickColor(c)"
           >
             <text class="color-panel__season">{{ COLOR_META[c].season }}</text>

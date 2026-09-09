@@ -53,8 +53,8 @@
           <view class="admin__tool-bottom">
             <text class="admin__status" :class="{ 'admin__status--off': !tool.isPublished }">{{ tool.isPublished ? '已上架' : '已下架' }}</text>
             <view class="admin__order">
-              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === 0 }" @tap="moveTool(tool, -1)">↑</view>
-              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === group.tools.length - 1 }" @tap="moveTool(tool, 1)">↓</view>
+              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === 0 }" hover-class="press" @tap="moveTool(tool, -1)">↑</view>
+              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === group.tools.length - 1 }" hover-class="press" @tap="moveTool(tool, 1)">↓</view>
             </view>
           </view>
         </view>

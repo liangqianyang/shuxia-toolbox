@@ -12,6 +12,7 @@
             ? { backgroundColor: POI_THEME[t].hex, color: textColorOn(POI_THEME[t].rgb) }
             : {}
         "
+        hover-class="press"
         @tap="emit('update', { type: t })"
       >
         <text class="stop__type-icon">{{ POI_ICON[t] }}</text>
@@ -22,13 +23,14 @@
     <!-- 地点搜索（地理编码） -->
     <view class="stop__search">
       <input class="stop__search-input" v-model="searchText" placeholder="搜地点名获取坐标，如「外滩」" />
-      <view class="stop__search-btn" @tap="doGeocode">{{ geocoding ? '…' : '搜索' }}</view>
+      <view class="stop__search-btn" hover-class="press" @tap="doGeocode">{{ geocoding ? '…' : '搜索' }}</view>
     </view>
     <view v-if="candidates.length" class="stop__candidates">
       <view
         v-for="(c, i) in candidates"
         :key="i"
         class="stop__candidate"
+        hover-class="press"
         @tap="pickCandidate(c)"
       >
         <text class="stop__cand-name">{{ c.title }}</text>
@@ -108,12 +110,12 @@
         <image :src="stop.photo" mode="aspectFill" />
         <text class="stop__photo-remove" @tap="emit('update', { photo: null })">×</text>
       </view>
-      <view v-else class="stop__add-photo" @tap="pickPhoto">+ 配图</view>
+      <view v-else class="stop__add-photo" hover-class="press" @tap="pickPhoto">+ 配图</view>
     </view>
 
     <!-- 到下一站交通（可自定义方式/线路/耗时）-->
     <view class="stop__leg">
-      <view class="stop__leg-toggle" @tap="legOpen = !legOpen">
+      <view class="stop__leg-toggle" hover-class="press" @tap="legOpen = !legOpen">
         <text class="stop__leg-title">↳ 到下一站</text>
         <text v-if="stop.travelToNext" class="stop__leg-cur"
           >{{ modeIcon(stop.travelToNext.mode) }} {{ modeLabel(stop.travelToNext.mode)
@@ -129,6 +131,7 @@
             :key="m"
             class="stop__leg-mode"
             :class="{ 'stop__leg-mode--active': legMode === m }"
+            hover-class="press"
             @tap="pickLegMode(m)"
           >
             <text class="stop__leg-mode-icon">{{ modeIcon(m) }}</text>
@@ -156,6 +159,7 @@
             v-for="alt in legAlternatives"
             :key="`${alt.mode}-${alt.durationMin}-${alt.distanceM}`"
             class="stop__leg-alt"
+            hover-class="press"
             @tap="pickAlternative(alt)"
           >
             <text class="stop__leg-alt-main"

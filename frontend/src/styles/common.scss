@@ -65,3 +65,11 @@ page {
   font-size: $font-caption;
   color: $color-text-secondary;
 }
+
+// 全局按压反馈：小程序 WebView 不触发 :active（上面 .btn-primary/.btn-ghost 的 :active 只在 H5 生效），
+// 微信官方机制是组件的 hover-class 属性——可点元素统一挂 hover-class="press"。
+// 样式沿用 .btn-primary「按下去」语言：轻微缩放 + 变淡；!important 保证压过页面级单类样式（app.wxss 先于页面 wxss 加载）。
+.press {
+  transform: scale(0.96) !important;
+  opacity: 0.7 !important;
+}

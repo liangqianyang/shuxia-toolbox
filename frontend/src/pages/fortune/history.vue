@@ -7,7 +7,7 @@
     </view>
 
     <view v-else class="history__list">
-      <view v-for="item in items" :key="item.drawId" class="history__item card" @tap="toggle(item.drawId)">
+      <view v-for="item in items" :key="item.drawId" class="history__item card" hover-class="press" @tap="toggle(item.drawId)">
         <view class="history__item-head">
           <view class="history__item-title-row">
             <text class="history__item-deck" :style="{ color: deckColor(item.deck) }">{{ item.deckName }}</text>
@@ -41,7 +41,7 @@
         </view>
       </view>
 
-      <view v-if="hasMore" class="history__more" @tap="loadMore">
+      <view v-if="hasMore" class="history__more" hover-class="press" @tap="loadMore">
         <text class="history__more-text">{{ loading ? '加载中…' : '加载更多' }}</text>
       </view>
       <text v-else-if="items.length > 0" class="history__end">—— 到底啦 ——</text>

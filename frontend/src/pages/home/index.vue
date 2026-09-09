@@ -7,7 +7,7 @@
         <text class="home__title">枫叶小屋</text>
         <text class="home__slogan">常用工具</text>
       </view>
-      <view class="home__sort-btn" :class="{ 'home__sort-btn--active': sorting }" @tap="toggleSortMode">
+      <view class="home__sort-btn" :class="{ 'home__sort-btn--active': sorting }" hover-class="press" @tap="toggleSortMode">
         {{ sorting ? '完成' : '排序' }}
       </view>
     </view>
@@ -20,6 +20,7 @@
         :key="tool.key"
         class="home__tool-card card"
         :class="{ 'home__tool-card--dragging': draggingToolKey === tool.key, 'home__tool-card--sorting': sorting }"
+        hover-class="press"
         @tap.stop="onToolTap(tool)"
         @longpress.stop="beginSort(tool.key)"
         @touchmove="onToolDragMove($event)"

@@ -26,7 +26,7 @@
       </view>
 
       <!-- 资料提示：没设置过头像昵称时引导完善 -->
-      <view v-if="showProfileBanner" class="profile-banner" @tap="openProfileEditor">
+      <view v-if="showProfileBanner" class="profile-banner" hover-class="press" @tap="openProfileEditor">
         <text>✈️ 你还没有头像昵称，点我设置，让棋友认出你</text>
         <text class="profile-banner__go">去设置 ›</text>
       </view>
@@ -93,6 +93,7 @@
               class="plane"
               :class="{ 'plane--mine': isMyMovePhase && pl.seat === state.mySeat && canMovePlane(pl.p), 'plane--done': pl.done }"
               :style="{ left: pl.x + '%', top: pl.y + '%' }"
+              hover-class="plane-press"
               @tap="onPlaneTap(pl)"
             >
               <image class="plane__img" :src="cdnUrl('/pages-ludo/static/ludo/planes/' + planeAsset(pl.color))" mode="aspectFit" />
@@ -159,7 +160,7 @@
                 <text class="chat-feed-text" :class="{ 'chat-feed-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
               </view>
             </view>
-            <view class="chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
+            <view class="chat-trigger" hover-class="press" @tap="roomChat.chatPanelOpen.value = true">
               <text class="chat-trigger-icon">💬</text>
               <text class="chat-trigger-hint">快捷聊天…</text>
               <text v-if="roomChat.unreadChat.value" class="chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
@@ -1266,6 +1267,11 @@ $maple-light: #FBE4D5;
   }
 
   &--done { opacity: 0.85; }
+}
+
+/* hover-class 按压：必须保留居中 translate——全局 .press 的 scale 会顶掉它,按压瞬间棋子右下偏移 */
+.plane.plane-press {
+  transform: translate(-50%, -50%) scale(0.86);
 }
 
 @keyframes plane-pulse {

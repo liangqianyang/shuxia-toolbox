@@ -32,19 +32,20 @@
           <template v-if="isOwner && member.userId !== data.ownerId">
             <view
               class="amp__role-toggle"
+              hover-class="press"
               @tap="toggleRole(member)"
             >
               {{ member.role === 'editor' ? '改为查看' : '改为编辑' }}
             </view>
-            <view class="amp__remove" @tap="removeMember(member)">移除</view>
+            <view class="amp__remove" hover-class="press" @tap="removeMember(member)">移除</view>
           </template>
         </view>
 
-        <view v-if="!isOwner" class="amp__leave" @tap="leave">退出这个共享</view>
+        <view v-if="!isOwner" class="amp__leave" hover-class="press" @tap="leave">退出这个共享</view>
         <text v-else class="amp__owner-note caption">创建者不能退出；删除日子请在「更多」里操作</text>
       </template>
 
-      <view class="amp__done" @tap="emit('close')">完成</view>
+      <view class="amp__done" hover-class="press" @tap="emit('close')">完成</view>
     </view>
   </view>
 </template>

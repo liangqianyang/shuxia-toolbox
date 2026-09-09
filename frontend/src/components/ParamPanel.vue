@@ -9,6 +9,7 @@
           :key="uc.key"
           class="param-panel__use"
           :class="{ 'param-panel__use--active': activeUseCase === uc.key }"
+          hover-class="press"
           @tap="applyUseCase(uc.key)"
         >
           <text class="param-panel__use-icon">{{ uc.icon }}</text>
@@ -18,7 +19,7 @@
       <text class="caption">{{ activeUseCaseHint }}</text>
     </view>
 
-    <view class="param-panel__adv-toggle" @tap="showAdvanced = !showAdvanced">
+    <view class="param-panel__adv-toggle" hover-class="press" @tap="showAdvanced = !showAdvanced">
       {{ showAdvanced ? '收起高级设置 ▴' : '高级设置（板型 / 格子 / 色卡）▾' }}
     </view>
 
@@ -31,6 +32,7 @@
           :key="preset.key"
           class="param-panel__chip"
           :class="{ 'param-panel__chip--active': params.boardPresetKey === preset.key }"
+          hover-class="press"
           @tap="setBoardPreset(preset.key)"
         >
           {{ preset.label }}
@@ -113,7 +115,7 @@
     </view>
 
     <view v-if="params.ownedOnly" class="param-panel__row">
-      <view class="param-panel__inv-toggle" @tap="toggleInventory">
+      <view class="param-panel__inv-toggle" hover-class="press" @tap="toggleInventory">
         {{ showInventory ? '收起库存' : '管理库存' }}（已选 {{ ownedCount }} 色）
       </view>
       <InventoryPicker v-if="showInventory" :palette-key="params.paletteKey" @change="onInventoryChange" />

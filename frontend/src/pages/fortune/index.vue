@@ -6,7 +6,7 @@
         <text v-if="quota" class="fortune__quota">今日剩 {{ quota.remaining }} 签</text>
       </view>
       <text class="fortune__title">每日灵签</text>
-      <view class="fortune__header-side fortune__header-side--right" @tap="goHistory">
+      <view class="fortune__header-side fortune__header-side--right" hover-class="press" @tap="goHistory">
         <text class="fortune__quota fortune__quota--link">📜 我的签文</text>
       </view>
     </view>
@@ -20,6 +20,7 @@
           :key="d.key"
           class="fortune__deck-card"
           :style="{ background: `linear-gradient(150deg, ${d.primary}, ${d.primaryDeep})` }"
+          hover-class="press"
           @tap="selectDeck(d.key)"
         >
           <text class="fortune__deck-icon">{{ d.icon }}</text>
@@ -35,7 +36,7 @@
     <!-- 阶段二：问事 -->
     <view v-else-if="stage === 'ask'" class="fortune__stage">
       <view class="fortune__ask-head">
-        <view class="fortune__back-pill" :style="{ borderColor: theme.primaryDeep, color: theme.primaryDeep }" @tap="backToDeck">
+        <view class="fortune__back-pill" :style="{ borderColor: theme.primaryDeep, color: theme.primaryDeep }" hover-class="press" @tap="backToDeck">
           <text class="fortune__back-pill-text">‹ 换签种</text>
         </view>
         <text class="fortune__ask-title" :style="{ color: theme.primaryDeep }">{{ theme.icon }} {{ theme.name }}</text>
@@ -50,6 +51,7 @@
             class="fortune__category"
             :class="{ 'fortune__category--active': category === c.key }"
             :style="category === c.key ? { background: theme.primary, borderColor: theme.primary } : {}"
+            hover-class="press"
             @tap="category = c.key"
           >
             <text>{{ c.icon }} {{ c.label }}</text>
@@ -95,6 +97,7 @@
           :class="{ 'fortune__book--flipping': shakeAnimating }"
           :style="{ background: `linear-gradient(150deg, ${theme.primary}, ${theme.primaryDeep})` }"
           @longpress="triggerDraw"
+          hover-class="press"
           @tap="triggerDraw"
         >
           <view class="fortune__book-pages" />
@@ -110,6 +113,7 @@
           class="fortune__tube"
           :class="{ 'fortune__tube--shaking': shakeAnimating }"
           @longpress="triggerDraw"
+          hover-class="press"
           @tap="triggerDraw"
         >
           <view class="fortune__tube-sticks" :style="{ background: theme.primary }">
@@ -207,6 +211,7 @@
           class="fortune__primary-btn"
           :style="{ background: theme.primary }"
           :disabled="interpretLoading"
+          hover-class="press"
           @tap="requestInterpret"
         >
           {{ interpretLoading ? '大师解签中…' : '请大师详解' }}

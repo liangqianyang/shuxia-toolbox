@@ -15,15 +15,15 @@
         </view>
         <view class="sok__title-row">
           <text class="sok__title">推箱子</text>
-          <view class="sok__star-pill" @tap="openRank">
+          <view class="sok__star-pill" hover-class="press" @tap="openRank">
             <text class="sok__star-pill-icon">★</text>
             <text class="sok__star-pill-num">{{ totalStars }} / {{ maxStars }}</text>
           </view>
           <view class="sok__flex"></view>
-          <view class="sok__icon-btn" @tap="toggleSound">
+          <view class="sok__icon-btn" hover-class="press" @tap="toggleSound">
             <text>{{ soundOn ? '🔊' : '🔇' }}</text>
           </view>
-          <view class="sok__icon-btn" @tap="showRules = true">
+          <view class="sok__icon-btn" hover-class="press" @tap="showRules = true">
             <text>ⓘ</text>
           </view>
         </view>
@@ -49,6 +49,7 @@
                 'is-cleared': !!progress.levels[def.id],
                 'is-current': def.id === currentLevelId,
               }"
+              hover-class="press"
               @tap="tapLevel(def.id)"
             >
               <text class="sok__level-num">{{ def.id }}</text>
@@ -78,7 +79,7 @@
     <!-- ═══════════ 对局面板（照原型帧 02-04） ═══════════ -->
     <view v-else class="sok__game">
       <view class="sok__bar">
-        <view class="sok__back-btn" @tap="showExit = true">
+        <view class="sok__back-btn" hover-class="press" @tap="showExit = true">
           <text class="sok__back-icon">‹</text>
         </view>
         <view class="sok__bar-level">
@@ -116,16 +117,45 @@
         </view>
       </view>
 
+      <!-- 十字方向键（照原型 Sok/方向键：滑动之外的点按操作,居中三行,按下枫叶金） -->
+      <view class="sok__dpad">
+        <view class="sok__dpad-row">
+          <view class="sok__dpad-cell"></view>
+          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(0)">
+            <view class="sok__dpad-arrow sok__dpad-arrow--up"></view>
+          </view>
+          <view class="sok__dpad-cell"></view>
+        </view>
+        <view class="sok__dpad-row">
+          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(3)">
+            <view class="sok__dpad-arrow sok__dpad-arrow--left"></view>
+          </view>
+          <view class="sok__dpad-hub">
+            <view class="sok__dpad-leaf"></view>
+          </view>
+          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(1)">
+            <view class="sok__dpad-arrow sok__dpad-arrow--right"></view>
+          </view>
+        </view>
+        <view class="sok__dpad-row">
+          <view class="sok__dpad-cell"></view>
+          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(2)">
+            <view class="sok__dpad-arrow sok__dpad-arrow--down"></view>
+          </view>
+          <view class="sok__dpad-cell"></view>
+        </view>
+      </view>
+
       <view class="sok__pad">
-        <view class="sok__pad-btn" @tap="undoTap">
+        <view class="sok__pad-btn" hover-class="press" @tap="undoTap">
           <text class="sok__pad-icon">↩</text>
           <text>撤销</text>
         </view>
-        <view class="sok__pad-btn" @tap="resetTap">
+        <view class="sok__pad-btn" hover-class="press" @tap="resetTap">
           <text class="sok__pad-icon">↺</text>
           <text>重开</text>
         </view>
-        <view class="sok__pad-btn sok__pad-btn--gold" @tap="hintTap">
+        <view class="sok__pad-btn sok__pad-btn--gold" hover-class="press" @tap="hintTap">
           <text class="sok__pad-icon">💡</text>
           <text>提示</text>
         </view>
@@ -143,8 +173,8 @@
           </view>
           <text class="sok__card-title">返回选关？</text>
           <text class="sok__card-sub">当前步数不会保存</text>
-          <view class="sok__card-btn sok__card-btn--primary" @tap="showExit = false"><text>留下</text></view>
-          <view class="sok__card-btn" @tap="exitToHome"><text>返回选关</text></view>
+          <view class="sok__card-btn sok__card-btn--primary" hover-class="press" @tap="showExit = false"><text>留下</text></view>
+          <view class="sok__card-btn" hover-class="press" @tap="exitToHome"><text>返回选关</text></view>
         </view>
       </view>
 
@@ -178,7 +208,7 @@
             <text class="sok__card-arrow">›</text>
           </view>
           <view v-else class="sok__card-btn sok__card-btn--primary" @tap="exitToHome"><text>返回选关</text></view>
-          <view class="sok__card-btn" @tap="restartLevel">
+          <view class="sok__card-btn" hover-class="press" @tap="restartLevel">
             <text>{{ result.stars >= 3 ? '重玩本关' : '重玩冲三星' }}</text>
           </view>
           <view v-if="result.hasNext" class="sok__card-btn" @tap="exitToHome"><text>返回选关</text></view>
@@ -194,9 +224,9 @@
           </view>
           <text class="sok__card-title">卡住了？</text>
           <text class="sok__card-sub">这只箱子推不到落叶点了</text>
-          <view class="sok__card-btn sok__card-btn--primary" @tap="stuckUndo"><text>撤销一步</text></view>
-          <view class="sok__card-btn" @tap="stuckReset"><text>重开本关</text></view>
-          <view class="sok__card-btn" @tap="showStuck = false"><text>再想想，自己推推看</text></view>
+          <view class="sok__card-btn sok__card-btn--primary" hover-class="press" @tap="stuckUndo"><text>撤销一步</text></view>
+          <view class="sok__card-btn" hover-class="press" @tap="stuckReset"><text>重开本关</text></view>
+          <view class="sok__card-btn" hover-class="press" @tap="showStuck = false"><text>再想想，自己推推看</text></view>
         </view>
       </view>
     </view>
@@ -208,12 +238,12 @@
       <view class="sok__rank" @tap.stop>
         <view class="sok__rank-head">
           <text class="sok__rank-title">收星总榜</text>
-          <text class="sok__rank-close" @tap="showRank = false">✕</text>
+          <view class="sok__rank-close" hover-class="press" @tap="showRank = false"><text>✕</text></view>
         </view>
         <view v-if="rankLoading" class="sok__rank-hint"><text>加载中…</text></view>
         <view v-else-if="rankError" class="sok__rank-hint">
           <text>{{ rankError }}</text>
-          <view class="sok__rank-retry" @tap="loadRank"><text>重试</text></view>
+          <view class="sok__rank-retry" hover-class="press" @tap="loadRank"><text>重试</text></view>
         </view>
         <view v-else-if="!rank || rank.entries.length === 0" class="sok__rank-hint">
           <text>🍁 虚位以待,推一关成为第一个上榜的枫友</text>
@@ -238,7 +268,7 @@
 /**
  * 推箱子页（单机,布局照 Pen 原型 docs/sokoban-redesign/ 九帧）：
  * 主页 = 装饰行 + 星数丸（点开总星数榜）+ 音效/规则钮 + 章节卡（内嵌关卡格）;
- * 对局 = 数据栏 + 弹性居中棋盘（canvas + 四向滑动 hit 层）+ 撤销/重开/提示 + 三个浮层。
+ * 对局 = 数据栏 + 弹性居中棋盘（canvas + 四向滑动 hit 层）+ 十字方向键 + 撤销/重开/提示 + 三个浮层。
  * 引擎 utils/sokoban.ts、求解器 sokobanSolver.ts、关卡 sokobanLevels.ts、
  * 绘帧 sokobanRender.ts、回合控制 composables/useSokoban.ts——页面只做节点获取/特效/进度。
  * 世界观：秋深了,帮枫叶小屋归置物资过冬（章节 = 离小屋越来越远的收纳地）。
@@ -463,6 +493,12 @@ function onTouchCancel(e: unknown): void {
   swipe?.onTouchCancel(e)
 }
 
+// ---------- 虚拟方向键（照原型 Sok/方向键,与滑动共用 move;方向码 0上/1右/2下/3左） ----------
+
+function dpadTap(dir: SokobanDir): void {
+  move(dir)
+}
+
 // ---------- 面板切换与关卡流程 ----------
 
 async function tapLevel(id: number): Promise<void> {
@@ -489,8 +525,8 @@ async function startLevel(id: number): Promise<void> {
 /** 算棋盘格子：文档流布局(照 tetris)——canvas 与按钮是兄弟节点,再大也只会把按钮往下推,永远不会盖住。 */
 function sizeBoard(level: ReturnType<typeof parseLevel>): void {
   const availW = win.windowWidth - SIDE_PAD_PX
-  // 预留 数据栏+按钮排+提示行+页边距(宁大勿小,超出只是页面可滚动)
-  const availH = Math.max(240, win.windowHeight - 240)
+  // 预留 数据栏+十字方向键(约220px)+按钮排+提示行+页边距(宁大勿小,超出只是页面可滚动)
+  const availH = Math.max(240, win.windowHeight - 400)
   layout.value = computeSokobanLayout(availW, availH, level.w, level.h)
   rebuildSwipe()
 }
@@ -606,10 +642,10 @@ function stuckReset(): void {
 
 const footerText = computed(() => {
   const s = gameState.value
-  if (!s) return '滑动一格走一步 · 木箱只能推，不能拉'
+  if (!s) return '滑动棋盘或点方向键 · 木箱只能推，不能拉'
   if (s.hint) return `提示：向${DIR_NAMES[s.hint.dir]}推这只箱子 · 不扣星`
   if (s.stuckBox !== null) return '这只箱子被推进死角啦 · 撤销一步或重开本关'
-  return '滑动一格走一步 · 木箱只能推，不能拉'
+  return '滑动棋盘或点方向键 · 木箱只能推，不能拉'
 })
 
 // ---------- 排行榜 ----------
@@ -680,7 +716,7 @@ const rulesSections = [
   {
     heading: '操作',
     lines: [
-      '棋盘上滑动，每滑一格走一步',
+      '滑动棋盘或点方向键，每格走一步',
       '撤销不限次数；重开从本关开头再来',
       '卡住可点「提示」看下一步，不扣星',
     ],
@@ -1091,6 +1127,73 @@ $s-box: #d9a05b;
   bottom: 0;
   left: 0;
   z-index: 1;
+}
+
+/* ---------- 十字方向键（照原型 Sok/方向键:64px 键帽×2=128rpx,圆角16×2,键距10×2） ---------- */
+.sok__dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+  padding-top: $space-1;
+}
+.sok__dpad-row {
+  display: flex;
+  gap: 20rpx;
+}
+.sok__dpad-cell {
+  width: 128rpx;
+  height: 128rpx;
+}
+.sok__dpad-hub {
+  width: 128rpx;
+  height: 128rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sok__dpad-key {
+  width: 128rpx;
+  height: 128rpx;
+  box-sizing: border-box;
+  background: $s-panel;
+  border: 2rpx solid $s-line;
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sok__dpad-key--press {
+  background: $s-gold;
+  border-color: $s-gold;
+}
+/* 箭头 = 原型 lucide arrow-up（线条风,圆头描边）,四方向旋转复用;按下换深金描边 */
+.sok__dpad-arrow {
+  width: 44rpx;
+  height: 44rpx;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%234A3F35'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.sok__dpad-key--press .sok__dpad-arrow {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%236B4A12'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
+}
+.sok__dpad-arrow--right {
+  transform: rotate(90deg);
+}
+.sok__dpad-arrow--down {
+  transform: rotate(180deg);
+}
+.sok__dpad-arrow--left {
+  transform: rotate(-90deg);
+}
+/* 中心枫叶标（原型 lucide leaf @ $sok-star-off,纯装饰不可点） */
+.sok__dpad-leaf {
+  width: 40rpx;
+  height: 40rpx;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23DCCDB6'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
 .sok__pad {
   display: flex;

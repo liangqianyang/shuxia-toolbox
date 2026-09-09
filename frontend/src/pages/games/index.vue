@@ -7,7 +7,7 @@
     </view>
 
     <view v-if="games.length" class="games__list">
-      <view v-for="game in games" :key="game.key" class="games__card card" @tap="openGame(game)">
+      <view v-for="game in games" :key="game.key" class="games__card card" hover-class="press" @tap="openGame(game)">
         <ToolIcon class="games__icon" :icon="game.icon" />
         <view class="games__copy">
           <view class="games__name-row">

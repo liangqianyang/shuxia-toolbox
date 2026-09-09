@@ -1,7 +1,7 @@
 <template>
   <view class="beads" :class="{ 'beads--panel': panelOpen }">
     <!-- 选图区 -->
-    <view v-if="!imagePath" class="beads__picker card" @tap="pickImage">
+    <view v-if="!imagePath" class="beads__picker card" hover-class="press" @tap="pickImage">
       <view class="beads__picker-icon">🖼️</view>
       <text class="beads__picker-text">点击选择图片</text>
       <text class="caption">支持照片、表情包、像素图</text>
@@ -11,7 +11,7 @@
     <view v-else class="beads__preview card">
       <image class="beads__thumb" :src="imagePath" mode="aspectFit" />
       <view class="beads__preview-actions">
-        <view class="btn-ghost beads__small-btn" @tap="pickImage">换一张图</view>
+        <view class="btn-ghost beads__small-btn" hover-class="press" @tap="pickImage">换一张图</view>
       </view>
     </view>
 
@@ -25,10 +25,10 @@
     />
 
     <!-- 生成按钮 / 重新生成提示 -->
-    <view v-if="imagePath && !result" class="btn-primary" :class="{ disabled: generating }" @tap="onGenerate">
+    <view v-if="imagePath && !result" class="btn-primary" :class="{ disabled: generating }" hover-class="press" @tap="onGenerate">
       {{ generating ? '生成中…' : '生成图纸' }}
     </view>
-    <view v-if="result && dirty" class="beads__dirty" @tap="onGenerate">
+    <view v-if="result && dirty" class="beads__dirty" hover-class="press" @tap="onGenerate">
       参数已修改，点击重新生成
     </view>
 
@@ -37,11 +37,12 @@
       <view class="card beads__result">
         <view class="beads__summary">
           <text class="section-title beads__summary-text">{{ summaryText }}</text>
-          <view v-if="canUndo && !build.active.value" class="beads__edit-toggle" @tap="onUndo">↶ 撤销</view>
+          <view v-if="canUndo && !build.active.value" class="beads__edit-toggle" hover-class="press" @tap="onUndo">↶ 撤销</view>
           <view
             v-if="!build.active.value"
             class="beads__edit-toggle"
             :class="{ 'beads__edit-toggle--active': editMode, disabled: dirty }"
+            hover-class="press"
             @tap="toggleEditMode"
           >
             编辑格子
@@ -49,6 +50,7 @@
           <view
             class="beads__edit-toggle"
             :class="{ 'beads__edit-toggle--active': build.active.value, disabled: dirty }"
+            hover-class="press"
             @tap="toggleBuildMode"
           >
             {{ build.active.value ? '退出拼制' : '开始拼制' }}
@@ -57,6 +59,7 @@
             v-if="!build.active.value"
             class="beads__edit-toggle"
             :class="{ 'beads__edit-toggle--active': compareOpen }"
+            hover-class="press"
             @tap="toggleCompare"
           >
             对比原图
@@ -67,6 +70,7 @@
               :key="z"
               class="beads__zoom-btn"
               :class="{ 'beads__zoom-btn--active': preview.zoom.value === z }"
+              hover-class="press"
               @tap="onZoom(z)"
             >
               {{ z }}x
@@ -178,11 +182,12 @@
             <view
               class="beads__dock-eraser"
               :class="{ 'beads__dock-eraser--active': activePaletteIndex === EMPTY_CELL }"
+              hover-class="press"
               @tap="toggleEraser"
             >
               ⌫ 擦除
             </view>
-            <view class="beads__edit-done" @tap="toggleEditMode">完成</view>
+            <view class="beads__edit-done" hover-class="press" @tap="toggleEditMode">完成</view>
           </view>
           <scroll-view class="beads__brush-strip" scroll-x enhanced>
             <view class="beads__brush-row">
@@ -197,6 +202,7 @@
                   class="beads__brush-swatch"
                   :class="{ 'beads__brush-swatch--active': activePaletteIndex === entry.index }"
                   :style="{ backgroundColor: entry.color.hex, color: textColorOn(entry.color.rgb) }"
+                  hover-class="press"
                   @tap="selectBrush(entry.index)"
                 >
                   {{ displayCode(entry.color.code) }}
@@ -218,13 +224,13 @@
                 {{ highlightedColor ? displayCode(highlightedColor.code) : '' }} 已高亮
               </text>
             </view>
-            <view class="beads__dock-action beads__dock-action--primary" @tap="onRecolorAll">
+            <view class="beads__dock-action beads__dock-action--primary" hover-class="press" @tap="onRecolorAll">
               全部改色
             </view>
-            <view class="beads__dock-action beads__dock-action--danger" @tap="onEraseAll">
+            <view class="beads__dock-action beads__dock-action--danger" hover-class="press" @tap="onEraseAll">
               全部擦除
             </view>
-            <view class="beads__edit-done" @tap="onCancelHighlight">取消</view>
+            <view class="beads__edit-done" hover-class="press" @tap="onCancelHighlight">取消</view>
           </view>
         </template>
 
@@ -233,7 +239,7 @@
             <view class="beads__brush-current">
               <text class="section-title">改成哪种颜色？</text>
             </view>
-            <view class="beads__edit-done" @tap="onCancelPick">返回</view>
+            <view class="beads__edit-done" hover-class="press" @tap="onCancelPick">返回</view>
           </view>
           <scroll-view class="beads__brush-strip" scroll-x enhanced>
             <view class="beads__brush-row">
@@ -247,6 +253,7 @@
                   :key="entry.index"
                   class="beads__brush-swatch"
                   :style="{ backgroundColor: entry.color.hex, color: textColorOn(entry.color.rgb) }"
+                  hover-class="press"
                   @tap="onPickTarget(entry.index)"
                 >
                   {{ displayCode(entry.color.code) }}
@@ -271,11 +278,12 @@
           <view
             v-if="build.focusIndex.value !== null"
             class="beads__dock-action beads__dock-action--primary"
+            hover-class="press"
             @tap="onCompleteFocused"
           >
             这个色拼好了 ✓
           </view>
-          <view class="beads__edit-done" @tap="toggleBuildMode">退出</view>
+          <view class="beads__edit-done" hover-class="press" @tap="toggleBuildMode">退出</view>
         </view>
         <scroll-view class="beads__brush-strip" scroll-x enhanced>
           <view class="beads__brush-row beads__build-row">
@@ -288,6 +296,7 @@
                 'beads__build-chip--done': build.isDone(item.color.code),
               }"
               :style="{ backgroundColor: item.color.hex, color: textColorOn(item.color.rgb) }"
+              hover-class="press"
               @tap="onFocusColor(item.paletteIndex)"
               @longpress="onToggleDone(item.paletteIndex)"
             >
@@ -308,6 +317,7 @@
         <view
           class="btn-primary beads__save"
           :class="{ disabled: exporter.exporting.value || dirty }"
+          hover-class="press"
           @tap="onSave"
         >
           保存高清图纸

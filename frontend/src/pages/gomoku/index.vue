@@ -25,7 +25,7 @@
     <!-- 房间 -->
     <view v-else class="gomoku__room">
       <view class="gomoku__header">
-        <view class="gomoku__code" @tap="copyCode">
+        <view class="gomoku__code" hover-class="press" @tap="copyCode">
           <text class="gomoku__code-label">房间码</text>
           <text class="gomoku__code-value">{{ state.code }}</text>
           <text class="gomoku__code-hint">点击复制</text>
@@ -160,7 +160,7 @@
               <text class="gomoku__chat-text" :class="{ 'gomoku__chat-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
             </view>
           </view>
-          <view class="gomoku__chat-trigger" @tap="roomChat.chatPanelOpen.value = true">
+          <view class="gomoku__chat-trigger" hover-class="press" @tap="roomChat.chatPanelOpen.value = true">
             <text class="gomoku__chat-trigger-icon">💬</text>
             <text class="gomoku__chat-trigger-hint">快捷聊天…</text>
             <text v-if="roomChat.unreadChat.value" class="gomoku__chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>

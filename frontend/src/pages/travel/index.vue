@@ -14,7 +14,7 @@
           placeholder="出发地（可选），如「杭州东站」"
           @confirm="searchAiPlace('origin')"
         />
-        <view class="travel__ai-place-btn" @tap="searchAiPlace('origin')">{{
+        <view class="travel__ai-place-btn" hover-class="press" @tap="searchAiPlace('origin')">{{
           aiPlaceSearching === 'origin' ? '…' : '地图'
         }}</view>
       </view>
@@ -23,6 +23,7 @@
           v-for="(c, i) in aiOriginCandidates"
           :key="`origin-${i}`"
           class="travel__ai-candidate"
+          hover-class="press"
           @tap="pickAiPlace('origin', c)"
         >
           <text class="travel__ai-cand-name">{{ c.title || c.name }}</text>
@@ -37,7 +38,7 @@
           placeholder="目的地，如「杭州」"
           @confirm="searchAiPlace('destination')"
         />
-        <view class="travel__ai-place-btn" @tap="searchAiPlace('destination')">{{
+        <view class="travel__ai-place-btn" hover-class="press" @tap="searchAiPlace('destination')">{{
           aiPlaceSearching === 'destination' ? '…' : '地图'
         }}</view>
       </view>
@@ -46,6 +47,7 @@
           v-for="(c, i) in aiDestinationCandidates"
           :key="`destination-${i}`"
           class="travel__ai-candidate"
+          hover-class="press"
           @tap="pickAiPlace('destination', c)"
         >
           <text class="travel__ai-cand-name">{{ c.title || c.name }}</text>
@@ -59,6 +61,7 @@
           :key="m"
           class="travel__mode"
           :class="{ 'travel__mode--active': aiMode === m }"
+          hover-class="press"
           @tap="aiMode = m"
         >
           <text class="travel__mode-icon">{{ TRAVEL_MODE_META[m].icon }}</text>
@@ -74,6 +77,7 @@
             :key="level"
             class="travel__intensity-item"
             :class="{ 'travel__intensity-item--active': aiIntensity === level }"
+            hover-class="press"
             @tap="aiIntensity = level"
           >
             <text class="travel__intensity-label">{{ TRAVEL_INTENSITY_META[level].label }}</text>
@@ -157,6 +161,7 @@
             :key="style"
             class="travel__style-item"
             :class="{ 'travel__style-item--active': trip.guideStyle === style }"
+            hover-class="press"
             @tap="setGuideStyleChoice(style)"
           >
             <text class="travel__style-label">{{ GUIDE_STYLE_META[style].label }}</text>
@@ -169,6 +174,7 @@
       <view
         class="btn-primary travel__ai-go"
         :class="{ disabled: planning || !aiDestination.trim() }"
+        hover-class="press"
         @tap="onPlan"
       >
         {{ planning ? '联网规划中…' : '生成攻略' }}
@@ -191,7 +197,7 @@
           <text class="section-title">云保存与分享</text>
           <text class="caption">保存当前行程到后端，分享码可发给同行人导入</text>
         </view>
-        <view class="btn-primary travel__cloud-save" :class="{ disabled: cloudSaving }" @tap="onCloudSave">{{
+        <view class="btn-primary travel__cloud-save" :class="{ disabled: cloudSaving }" hover-class="press" @tap="onCloudSave">{{
           cloudSaving ? '保存中…' : '云保存'
         }}</view>
       </view>
@@ -202,7 +208,7 @@
       </view>
       <view class="travel__cloud-import">
         <input class="travel__cloud-input" v-model="shareCodeInput" placeholder="输入分享码导入行程" />
-        <view class="btn-ghost travel__cloud-import-btn" @tap="onImportShareCode()">导入</view>
+        <view class="btn-ghost travel__cloud-import-btn" hover-class="press" @tap="onImportShareCode()">导入</view>
       </view>
     </view>
 
@@ -258,6 +264,7 @@
           :key="m"
           class="travel__mode"
           :class="{ 'travel__mode--active': trip.intercity.mode === m }"
+          hover-class="press"
           @tap="updateIntercity({ mode: m })"
         >
           <text class="travel__mode-icon">{{ TRAVEL_MODE_META[m].icon }}</text>
@@ -281,7 +288,7 @@
         :auto-height="true"
         @input="markDirty"
       />
-      <view class="btn-primary travel__intercity-apply" @tap="onApplyToCards">应用到攻略图</view>
+      <view class="btn-primary travel__intercity-apply" hover-class="press" @tap="onApplyToCards">应用到攻略图</view>
     </view>
 
     <!-- 按天编辑 -->
@@ -328,6 +335,7 @@
             :key="mood"
             class="travel__day-mood"
             :class="{ 'travel__day-mood--active': (day.dayMood || 'citywalk') === mood }"
+            hover-class="press"
             @tap="setDayMood(day.id, mood)"
           >
             <text class="travel__day-mood-label">{{ DAY_MOOD_META[mood].label }}</text>
@@ -351,10 +359,10 @@
         />
       </view>
 
-      <view class="travel__add-stop" @tap="addStop(day.id)">+ 添加地点</view>
+      <view class="travel__add-stop" hover-class="press" @tap="addStop(day.id)">+ 添加地点</view>
     </view>
 
-    <view class="travel__add-day" @tap="addDay()">+ 添加一天</view>
+    <view class="travel__add-day" hover-class="press" @tap="addDay()">+ 添加一天</view>
 
     <!-- 图片画廊：每张独立图 = 一个 canvas + 保存 -->
     <view v-if="rendered" class="card travel__gallery">
@@ -363,7 +371,7 @@
         <view class="travel__gallery-actions">
           <text class="travel__gallery-link" @tap="selectRecommendedCards">推荐</text>
           <text class="travel__gallery-link" @tap="selectAllCards">全选</text>
-          <view class="btn-primary travel__save-all" @tap="onSaveAll">保存选中</view>
+          <view class="btn-primary travel__save-all" hover-class="press" @tap="onSaveAll">保存选中</view>
         </view>
       </view>
       <view class="travel__suite-list">
@@ -372,6 +380,7 @@
           :key="suite.id"
           class="travel__suite"
           :class="{ 'travel__suite--active': selectedCardPreset === suite.id }"
+          hover-class="press"
           @tap="selectCardSuite(suite.id)"
         >
           <text class="travel__suite-label">{{ suite.label }}</text>
@@ -440,8 +449,8 @@
               <text class="travel__food-op travel__food-op--del" @tap="removeFood(fi)">删</text>
             </view>
           </view>
-          <view class="travel__food-add" @tap="addFood()">+ 添加美食</view>
-          <view class="btn-primary travel__food-apply" @tap="onApplyToCards">应用到攻略图</view>
+          <view class="travel__food-add" hover-class="press" @tap="addFood()">+ 添加美食</view>
+          <view class="btn-primary travel__food-apply" hover-class="press" @tap="onApplyToCards">应用到攻略图</view>
         </view>
       </template>
     </view>
@@ -469,7 +478,7 @@
           <text class="travel__pack-op" @tap="movePacking('must', i, 1)">↓</text>
           <text class="travel__pack-op travel__pack-op--del" @tap="removePacking('must', i)">删</text>
         </view>
-        <view class="travel__pack-add" @tap="addPacking('must')">+ 添加物品</view>
+        <view class="travel__pack-add" hover-class="press" @tap="addPacking('must')">+ 添加物品</view>
       </view>
       <!-- 注意事项 -->
       <view class="travel__pack-group">
@@ -485,16 +494,16 @@
           <text class="travel__pack-op" @tap="movePacking('note', i, 1)">↓</text>
           <text class="travel__pack-op travel__pack-op--del" @tap="removePacking('note', i)">删</text>
         </view>
-        <view class="travel__pack-add" @tap="addPacking('note')">+ 添加注意事项</view>
+        <view class="travel__pack-add" hover-class="press" @tap="addPacking('note')">+ 添加注意事项</view>
       </view>
-      <view class="btn-primary travel__pack-apply" @tap="onApplyToCards">应用到攻略图</view>
+      <view class="btn-primary travel__pack-apply" hover-class="press" @tap="onApplyToCards">应用到攻略图</view>
     </view>
 
     <!-- 小红书文案卡（可编辑，放出行清单之后）-->
     <view v-if="rendered && (trip.xhs.title || trip.xhs.body)" class="card travel__xhs">
       <view class="travel__xhs-head">
         <text class="section-title">小红书文案</text>
-        <view class="btn-primary travel__xhs-copy" @tap="onCopyXhs">复制文案</view>
+        <view class="btn-primary travel__xhs-copy" hover-class="press" @tap="onCopyXhs">复制文案</view>
       </view>
       <input
         class="travel__xhs-title-input"
@@ -541,15 +550,16 @@
     <view class="travel__dock">
       <view class="travel__dock-hint caption">{{ dirty ? '有未保存改动' : '草稿已保存' }}</view>
       <view class="travel__dock-actions">
-        <view class="btn-ghost" :class="{ disabled: regenerating }" @tap="onSave">保存草稿</view>
+        <view class="btn-ghost" :class="{ disabled: regenerating }" hover-class="press" @tap="onSave">保存草稿</view>
         <view
           v-if="rendered"
           class="btn-ghost travel__dock-saveall"
           :class="{ disabled: regenerating || saving }"
+          hover-class="press"
           @tap="onSaveAll"
           >{{ saving ? '保存中…' : '批量保存' }}</view
         >
-        <view class="btn-primary" :class="{ disabled: regenerating }" @tap="onGenerate">{{
+        <view class="btn-primary" :class="{ disabled: regenerating }" hover-class="press" @tap="onGenerate">{{
           regenerating ? '生成中…' : rendered ? '重新生成图' : '生成攻略图'
         }}</view>
       </view>

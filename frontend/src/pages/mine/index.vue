@@ -7,8 +7,8 @@
         <text class="mine__name">{{ displayName }}</text>
         <text class="mine__caption">{{ user ? '工具与偏好将同步到当前账号' : '登录后保存你的首页工具设置' }}</text>
       </view>
-      <view v-if="!user" class="mine__login-btn" @tap="authorizeProfile">登录</view>
-      <view v-else class="mine__profile-action" @tap="toggleProfileEditor">编辑资料</view>
+      <view v-if="!user" class="mine__login-btn" hover-class="press" @tap="authorizeProfile">登录</view>
+      <view v-else class="mine__profile-action" hover-class="press" @tap="toggleProfileEditor">编辑资料</view>
     </view>
 
     <view v-if="editingProfile" class="mine__profile-editor">
@@ -30,8 +30,8 @@
         </view>
       </view>
       <view class="mine__editor-actions">
-        <view class="mine__cancel-btn" @tap="cancelProfileEdit">取消</view>
-        <view class="mine__save-btn" :class="{ 'mine__save-btn--disabled': savingProfile }" @tap="saveProfile">
+        <view class="mine__cancel-btn" hover-class="press" @tap="cancelProfileEdit">取消</view>
+        <view class="mine__save-btn" :class="{ 'mine__save-btn--disabled': savingProfile }" hover-class="press" @tap="saveProfile">
           {{ savingProfile ? '保存中' : '保存资料' }}
         </view>
       </view>
@@ -40,7 +40,7 @@
     <view class="mine__section">
       <text class="mine__section-title">工具设置</text>
       <view class="mine__menu">
-        <view class="mine__menu-row" @tap="openToolLibrary">
+        <view class="mine__menu-row" hover-class="press" @tap="openToolLibrary">
           <view class="mine__menu-icon">▦</view>
           <text class="mine__menu-label">首页工具管理</text>
           <text class="mine__menu-arrow">›</text>
@@ -51,7 +51,7 @@
     <view v-if="isAdmin" class="mine__section">
       <text class="mine__section-title">运营管理</text>
       <view class="mine__menu">
-        <view class="mine__menu-row" @tap="openAdmin">
+        <view class="mine__menu-row" hover-class="press" @tap="openAdmin">
           <view class="mine__menu-icon">⚙</view>
           <text class="mine__menu-label">工具运营台</text>
           <text class="mine__menu-arrow">›</text>

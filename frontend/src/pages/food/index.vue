@@ -18,7 +18,7 @@
         <text class="food__account-title">{{ accountUser?.nickname || (authToken ? '微信用户' : '未登录') }}</text>
         <text class="food__account-sub">{{ authToken ? '饭池和饭局已同步到数据库' : '登录后跨设备同步饭池和饭局' }}</text>
       </view>
-      <view class="food__account-btn" @tap="openProfileEditor">{{ authToken ? '编辑资料' : '微信登录' }}</view>
+      <view class="food__account-btn" hover-class="press" @tap="openProfileEditor">{{ authToken ? '编辑资料' : '微信登录' }}</view>
     </view>
 
     <view v-if="profileEditing" class="food__profile">
@@ -32,7 +32,7 @@
         type="nickname"
         placeholder="填写昵称"
       />
-      <view class="food__profile-save" @tap="saveProfile">保存</view>
+      <view class="food__profile-save" hover-class="press" @tap="saveProfile">保存</view>
     </view>
 
     <view class="food__tabs">
@@ -41,6 +41,7 @@
         :key="tab.id"
         class="food__tab"
         :class="{ 'food__tab--active': activeTab === tab.id }"
+        hover-class="press"
         @tap="switchTab(tab.id)"
       >
         <text class="food__tab-symbol">{{ tab.icon }}</text>
@@ -62,7 +63,7 @@
           @input="onPlaceInput"
           @confirm="searchPlace"
         />
-        <view class="food__place-btn" @tap="searchPlace">{{ placeSearching ? '搜索中' : '搜索' }}</view>
+        <view class="food__place-btn" hover-class="press" @tap="searchPlace">{{ placeSearching ? '搜索中' : '搜索' }}</view>
       </view>
       <view class="food__place-current">
         <text>{{ locationLabel }}</text>
@@ -73,6 +74,7 @@
           :key="candidateKey(candidate)"
           class="food__place-result"
           :class="{ 'food__place-result--active': isSelectedPlace(candidate) }"
+          hover-class="press"
           @tap="choosePlace(candidate)"
         >
           <view class="food__place-result-copy">
@@ -97,6 +99,7 @@
             :key="item.value"
             class="food__radius-item"
             :class="{ 'food__radius-item--active': radiusM === item.value }"
+            hover-class="press"
             @tap="radiusM = item.value"
           >{{ item.label }}</view>
         </view>
@@ -116,6 +119,7 @@
               'food__tag--active': selectedPreferenceIds.includes(tag.id),
               'food__tag--editing': preferenceEditing,
             }"
+            hover-class="press"
             @tap="togglePreference(tag.id)"
           >
             <text>{{ tag.label }}</text>
@@ -131,7 +135,7 @@
             confirm-type="done"
             @confirm="addPreference"
           />
-          <view class="food__mini-btn" @tap="addPreference">添加</view>
+          <view class="food__mini-btn" hover-class="press" @tap="addPreference">添加</view>
         </view>
       </view>
 
@@ -157,7 +161,7 @@
               confirm-type="done"
               @confirm="loadFoodRoomByInput"
             />
-            <view class="food__mini-btn" @tap="loadFoodRoomByInput">加入</view>
+            <view class="food__mini-btn" hover-class="press" @tap="loadFoodRoomByInput">加入</view>
           </view>
           <view class="food__member-row">
             <view v-for="member in groupMembers" :key="member.id" class="food__member">
@@ -173,7 +177,7 @@
               confirm-type="done"
               @confirm="addGroupMember"
             />
-            <view class="food__mini-btn" @tap="addGroupMember">添加</view>
+            <view class="food__mini-btn" hover-class="press" @tap="addGroupMember">添加</view>
           </view>
         </view>
 
@@ -187,6 +191,7 @@
             :key="tag.id"
             class="food__tag"
             :class="{ 'food__tag--active': selectedGroupAvoidIds.includes(tag.id) }"
+            hover-class="press"
             @tap="toggleGroupAvoid(tag.id)"
           >
             <text>{{ tag.label }}</text>
@@ -200,11 +205,11 @@
             confirm-type="done"
             @confirm="addGroupAvoid"
           />
-          <view class="food__mini-btn" @tap="addGroupAvoid">添加</view>
+          <view class="food__mini-btn" hover-class="press" @tap="addGroupAvoid">添加</view>
         </view>
       </view>
 
-      <view class="food__decide" :class="{ 'food__decide--loading': deciding }" @tap="decideFood">
+      <view class="food__decide" hover-class="press" :class="{ 'food__decide--loading': deciding }" @tap="decideFood">
         <view>
           <text class="food__decide-title">{{ decideTitle }}</text>
           <text class="food__decide-sub">{{ decideHint }}</text>
@@ -259,10 +264,10 @@
         <text class="food__reason">{{ result.reason }}</text>
         <text v-if="result.address" class="food__address">{{ result.address }}</text>
         <view class="food__ticket-actions">
-          <view class="food__ticket-btn food__ticket-btn--primary" @tap="openResultLocation">{{ result.lat !== null && result.lng !== null ? '打开导航' : '绑定地点' }}</view>
-          <view class="food__ticket-btn" @tap="decideFood">换一个</view>
-          <view class="food__ticket-btn" @tap="saveResultToPool">加入饭池</view>
-          <view class="food__ticket-btn" @tap="markAte">吃过了</view>
+          <view class="food__ticket-btn food__ticket-btn--primary" hover-class="press" @tap="openResultLocation">{{ result.lat !== null && result.lng !== null ? '打开导航' : '绑定地点' }}</view>
+          <view class="food__ticket-btn" hover-class="press" @tap="decideFood">换一个</view>
+          <view class="food__ticket-btn" hover-class="press" @tap="saveResultToPool">加入饭池</view>
+          <view class="food__ticket-btn" hover-class="press" @tap="markAte">吃过了</view>
         </view>
       </template>
     </view>
@@ -294,17 +299,18 @@
           :key="group.id"
           class="food__tag"
           :class="{ 'food__tag--active': activePoolGroupId === group.id }"
+          hover-class="press"
           @tap="switchPoolGroup(group.id)"
           @longpress="managePoolGroup(group.id)"
         >
           <text>{{ group.name }}</text>
         </view>
-        <view class="food__tag food__tag--add" @tap="addPoolGroup">
+        <view class="food__tag food__tag--add" hover-class="press" @tap="addPoolGroup">
           <text>＋ 新建</text>
         </view>
       </view>
       <text class="food__caption food__caption--hint">长按分组可重命名或删除</text>
-      <view class="food__decide food__decide--pool" :class="{ 'food__decide--loading': deciding }" @tap="decideFromPoolTab">
+      <view class="food__decide food__decide--pool" hover-class="press" :class="{ 'food__decide--loading': deciding }" @tap="decideFromPoolTab">
         <view>
           <text class="food__decide-title">{{ poolDecideTitle }}</text>
           <text class="food__decide-sub">{{ poolDecideSubText }}</text>
@@ -340,6 +346,7 @@
             :key="candidateKey(candidate)"
             class="food__place-result"
             :class="{ 'food__place-result--active': isPickedShop(candidate) }"
+            hover-class="press"
             @tap="chooseShopCandidate(candidate)"
           >
             <view class="food__place-result-copy">
@@ -351,7 +358,7 @@
         </view>
         <text v-if="pickedShopCoords" class="food__caption food__caption--hint">已绑定定位，加入后可直接导航</text>
         <input class="food__pool-input" v-model="newShopNote" placeholder="备注，如 快速 / 人均 30 / 适合午餐" />
-        <view class="food__pool-add" @tap="addPoolItem">{{ poolAddButtonText }}</view>
+        <view class="food__pool-add" hover-class="press" @tap="addPoolItem">{{ poolAddButtonText }}</view>
       </view>
 
       <view v-if="currentGroupItems.length === 0" class="food__empty">
@@ -371,7 +378,7 @@
             </view>
             <text class="food__pool-note">{{ item.note || '自定义店家' }}</text>
           </view>
-          <view class="food__pool-delete" @tap="removePoolItem(item.id)">删</view>
+          <view class="food__pool-delete" hover-class="press" @tap="removePoolItem(item.id)">删</view>
         </view>
       </view>
     </view>

@@ -5,8 +5,8 @@
       <text class="caption">已选 {{ ownedCount }} / {{ colors.length }} 色</text>
     </view>
     <view class="inv__bulk">
-      <view class="inv__bulk-btn" @tap="onSelectAll">全选</view>
-      <view class="inv__bulk-btn" @tap="onClear">清空</view>
+      <view class="inv__bulk-btn" hover-class="press" @tap="onSelectAll">全选</view>
+      <view class="inv__bulk-btn" hover-class="press" @tap="onClear">清空</view>
     </view>
     <scroll-view class="inv__scroll" scroll-y enhanced>
       <view class="inv__grid">
@@ -16,6 +16,7 @@
           class="inv__swatch"
           :class="{ 'inv__swatch--on': owned.has(c.code) }"
           :style="{ backgroundColor: c.hex, color: textColorOn(c.rgb) }"
+          hover-class="press"
           @tap="onToggle(c.code)"
         >
           <text class="inv__code">{{ displayCode(c.code) }}</text>

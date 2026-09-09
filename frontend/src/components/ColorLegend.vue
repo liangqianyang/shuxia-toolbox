@@ -15,6 +15,7 @@
         class="legend__pill"
         :class="{ 'legend__pill--active': item.paletteIndex === activeIndex }"
         :style="{ backgroundColor: item.color.hex, color: textColorOn(item.color.rgb) }"
+        hover-class="press"
         @tap="onTap(item.paletteIndex)"
       >
         {{ displayCode(item.color.code) }} ({{ item.count }})

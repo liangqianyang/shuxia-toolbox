@@ -3,7 +3,7 @@
     <view class="rules-panel" @tap.stop>
       <view class="rules-head">
         <text class="rules-title">{{ title }}</text>
-        <text class="rules-close" @tap="$emit('close')">✕</text>
+        <view class="rules-close" hover-class="press" @tap="$emit('close')"><text>✕</text></view>
       </view>
       <scroll-view class="rules-body" scroll-y :show-scrollbar="false">
         <view v-for="(s, i) in sections" :key="i" class="rules-section">

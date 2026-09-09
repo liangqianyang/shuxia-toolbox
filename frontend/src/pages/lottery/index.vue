@@ -7,8 +7,8 @@
         <text class="lottery__brand-title">枫叶抽奖</text>
       </view>
       <view class="lottery__brand-actions">
-        <view class="lottery__text-btn" @tap="openHistory">记录</view>
-        <view class="lottery__new" @tap="confirmReset">新建</view>
+        <view class="lottery__text-btn" hover-class="press" @tap="openHistory">记录</view>
+        <view class="lottery__new" hover-class="press" @tap="confirmReset">新建</view>
       </view>
     </view>
 
@@ -22,6 +22,7 @@
             'lottery__step--active': activeStep === step.index,
             'lottery__step--ready': step.index <= maxStep,
           }"
+          hover-class="press"
           @tap="goStep(step.index)"
         >
           <view class="lottery__step-icon">{{ step.icon }}</view>
@@ -36,7 +37,7 @@
           <text class="lottery__eyebrow">本机保留最近 20 条</text>
           <text class="lottery__title">活动记录</text>
         </view>
-        <view v-if="historyItems.length" class="lottery__text-btn lottery__text-btn--danger" @tap="confirmClearHistory">清空</view>
+        <view v-if="historyItems.length" class="lottery__text-btn lottery__text-btn--danger" hover-class="press" @tap="confirmClearHistory">清空</view>
       </view>
 
       <view v-if="historyItems.length" class="lottery__history-list">
@@ -49,7 +50,7 @@
             <text class="lottery__history-meta">{{ formatHistoryTime(item.completedAt) }} · {{ item.summary }}</text>
             <text class="lottery__history-rule">{{ item.rules }}</text>
           </view>
-          <view class="lottery__history-copy-btn" @tap="copyHistoryItem(item)">复制</view>
+          <view class="lottery__history-copy-btn" hover-class="press" @tap="copyHistoryItem(item)">复制</view>
         </view>
       </view>
       <view v-else class="lottery__empty">
@@ -58,7 +59,7 @@
       </view>
 
       <view class="lottery__footer">
-        <view class="lottery__primary-btn" @tap="closeHistory">返回活动</view>
+        <view class="lottery__primary-btn" hover-class="press" @tap="closeHistory">返回活动</view>
       </view>
     </view>
 
@@ -89,6 +90,7 @@
             :key="item.id"
             class="lottery__template"
             :class="{ 'lottery__template--active': selectedTemplateId === item.id }"
+            hover-class="press"
             @tap="applyTemplate(item.id)"
           >
             <text class="lottery__template-icon">{{ item.icon }}</text>
@@ -105,6 +107,7 @@
             :key="item.id"
             class="lottery__mode"
             :class="{ 'lottery__mode--active': mode === item.id }"
+            hover-class="press"
             @tap="setMode(item.id)"
           >
             <text class="lottery__mode-icon">{{ item.icon }}</text>
@@ -120,11 +123,13 @@
           <view
             class="lottery__segment-item"
             :class="{ 'lottery__segment-item--active': nature === 'public' }"
+            hover-class="press"
             @tap="setNature('public')"
           >公开抽取</view>
           <view
             class="lottery__segment-item"
             :class="{ 'lottery__segment-item--active': nature === 'internal' }"
+            hover-class="press"
             @tap="setNature('internal')"
           >内部活动</view>
         </view>
@@ -147,8 +152,8 @@
       </text>
 
       <view class="lottery__footer">
-        <view class="lottery__secondary-btn" @tap="confirmReset">清空</view>
-        <view class="lottery__primary-btn" @tap="nextFromSetup">
+        <view class="lottery__secondary-btn" hover-class="press" @tap="confirmReset">清空</view>
+        <view class="lottery__primary-btn" hover-class="press" @tap="nextFromSetup">
           <text>{{ setupNextLabel }}</text><text>→</text>
         </view>
       </view>
@@ -160,12 +165,12 @@
           <text class="lottery__eyebrow">创建活动 · 2/3</text>
           <text class="lottery__title">{{ contentTitle }}</text>
         </view>
-        <view v-if="mode === 'prize'" class="lottery__compact-btn" @tap="addPrize">＋ 奖品</view>
+        <view v-if="mode === 'prize'" class="lottery__compact-btn" hover-class="press" @tap="addPrize">＋ 奖品</view>
       </view>
 
       <template v-if="mode === 'prize'">
         <view class="lottery__advanced">
-          <view class="lottery__advanced-head" @tap="togglePrizeAdvanced">
+          <view class="lottery__advanced-head" hover-class="press" @tap="togglePrizeAdvanced">
             <view>
               <text class="lottery__switch-title">高级开奖规则</text>
               <text class="lottery__switch-hint">{{ prizeDrawStrategy === 'weighted' ? '当前：混合奖池权重' : '当前：按奖项逐轮' }}</text>
@@ -177,11 +182,13 @@
               <view
                 class="lottery__segment-item"
                 :class="{ 'lottery__segment-item--active': prizeDrawStrategy === 'by-prize' }"
+                hover-class="press"
                 @tap="setPrizeDrawStrategy('by-prize')"
               >按奖项逐轮</view>
               <view
                 class="lottery__segment-item"
                 :class="{ 'lottery__segment-item--active': prizeDrawStrategy === 'weighted' }"
+                hover-class="press"
                 @tap="setPrizeDrawStrategy('weighted')"
               >混合奖池权重</view>
             </view>
@@ -206,23 +213,23 @@
                 maxlength="20"
                 placeholder="奖品名称"
               />
-              <view class="lottery__icon-btn" @tap="removePrize(prize.id)">×</view>
+              <view class="lottery__icon-btn" hover-class="press" @tap="removePrize(prize.id)">×</view>
             </view>
             <view class="lottery__prize-controls" :class="{ 'lottery__prize-controls--simple': prizeDrawStrategy === 'by-prize' }">
               <view class="lottery__control-block">
                 <text class="lottery__control-label">库存</text>
                 <view class="lottery__stepper">
-                  <view class="lottery__stepper-btn" @tap="changePrizeQuantity(prize, -1)">−</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeQuantity(prize, -1)">−</view>
                   <text class="lottery__stepper-value">{{ prize.quantity }}</text>
-                  <view class="lottery__stepper-btn" @tap="changePrizeQuantity(prize, 1)">＋</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeQuantity(prize, 1)">＋</view>
                 </view>
               </view>
               <view v-if="prizeDrawStrategy === 'weighted'" class="lottery__control-block">
                 <text class="lottery__control-label">权重</text>
                 <view class="lottery__stepper">
-                  <view class="lottery__stepper-btn" @tap="changePrizeWeight(prize, -1)">−</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeWeight(prize, -1)">−</view>
                   <text class="lottery__stepper-value">{{ prize.weight }}</text>
-                  <view class="lottery__stepper-btn" @tap="changePrizeWeight(prize, 1)">＋</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeWeight(prize, 1)">＋</view>
                 </view>
               </view>
               <view v-if="prizeDrawStrategy === 'weighted'" class="lottery__probability">
@@ -242,7 +249,7 @@
               <text class="lottery__section-title">特别赠礼</text>
               <text class="lottery__section-note">{{ specialGiftSummary }}</text>
             </view>
-            <view class="lottery__compact-btn" @tap="addSpecialGift">＋ 新增</view>
+            <view class="lottery__compact-btn" hover-class="press" @tap="addSpecialGift">＋ 新增</view>
           </view>
 
           <view v-if="specialGifts.length === 0" class="lottery__empty">
@@ -253,7 +260,7 @@
           <view v-for="(gift, index) in specialGifts" :key="gift.id" class="lottery__gift-rule">
             <view class="lottery__gift-head">
               <text class="lottery__gift-title">赠礼 {{ index + 1 }}</text>
-              <view class="lottery__icon-btn" @tap="removeSpecialGift(gift.id)">×</view>
+              <view class="lottery__icon-btn" hover-class="press" @tap="removeSpecialGift(gift.id)">×</view>
             </view>
             <view class="lottery__gift-grid">
               <view class="lottery__field lottery__field--compact">
@@ -265,9 +272,9 @@
               <view class="lottery__field lottery__field--compact">
                 <text class="lottery__control-label">数量</text>
                 <view class="lottery__stepper lottery__stepper--wide">
-                  <view class="lottery__stepper-btn" @tap="changeGiftQuantity(gift, -1)">−</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changeGiftQuantity(gift, -1)">−</view>
                   <text class="lottery__stepper-value">{{ gift.quantity }}</text>
-                  <view class="lottery__stepper-btn" @tap="changeGiftQuantity(gift, 1)">＋</view>
+                  <view class="lottery__stepper-btn" hover-class="press" @tap="changeGiftQuantity(gift, 1)">＋</view>
                 </view>
               </view>
             </view>
@@ -291,7 +298,7 @@
             <text class="lottery__label">候选内容</text>
             <view class="lottery__section-action">
               <text class="lottery__section-note">{{ randomParsedOptions.length }} 个选项</text>
-              <view class="lottery__compact-btn" @tap="appendClipboard('random')">粘贴</view>
+              <view class="lottery__compact-btn" hover-class="press" @tap="appendClipboard('random')">粘贴</view>
             </view>
           </view>
           <textarea
@@ -310,7 +317,7 @@
             <text class="lottery__label">参与名单</text>
             <view class="lottery__section-action">
               <text class="lottery__section-note">{{ teamParticipants.length }} 人</text>
-              <view class="lottery__compact-btn" @tap="appendClipboard('team')">粘贴</view>
+              <view class="lottery__compact-btn" hover-class="press" @tap="appendClipboard('team')">粘贴</view>
             </view>
           </view>
           <textarea
@@ -324,8 +331,8 @@
       </template>
 
       <view class="lottery__footer">
-        <view class="lottery__secondary-btn" @tap="goStep(1)">← 上一步</view>
-        <view class="lottery__primary-btn" @tap="nextFromContent">
+        <view class="lottery__secondary-btn" hover-class="press" @tap="goStep(1)">← 上一步</view>
+        <view class="lottery__primary-btn" hover-class="press" @tap="nextFromContent">
           <text>{{ contentNextLabel }}</text><text>→</text>
         </view>
       </view>
@@ -343,7 +350,7 @@
             <text class="lottery__label">参与者</text>
             <view class="lottery__section-action">
               <text class="lottery__section-note">{{ prizeParticipants.length }} 人</text>
-              <view class="lottery__compact-btn" @tap="appendClipboard('prize')">粘贴</view>
+              <view class="lottery__compact-btn" hover-class="press" @tap="appendClipboard('prize')">粘贴</view>
             </view>
           </view>
           <textarea
@@ -404,9 +411,9 @@
             <text class="lottery__switch-hint">最多不超过候选数量</text>
           </view>
           <view class="lottery__stepper">
-            <view class="lottery__stepper-btn" @tap="changeRandomDrawCount(-1)">−</view>
+            <view class="lottery__stepper-btn" hover-class="press" @tap="changeRandomDrawCount(-1)">−</view>
             <text class="lottery__stepper-value">{{ randomDrawCount }}</text>
-            <view class="lottery__stepper-btn" @tap="changeRandomDrawCount(1)">＋</view>
+            <view class="lottery__stepper-btn" hover-class="press" @tap="changeRandomDrawCount(1)">＋</view>
           </view>
         </view>
         <view class="lottery__switch-row">
@@ -427,9 +434,9 @@
           <view v-for="option in randomOptions" :key="option.id" class="lottery__weight-row">
             <text class="lottery__weight-name">{{ option.label }}</text>
             <view class="lottery__stepper">
-              <view class="lottery__stepper-btn" @tap="changeRandomWeight(option.label, -1)">−</view>
+              <view class="lottery__stepper-btn" hover-class="press" @tap="changeRandomWeight(option.label, -1)">−</view>
               <text class="lottery__stepper-value">{{ option.weight }}</text>
-              <view class="lottery__stepper-btn" @tap="changeRandomWeight(option.label, 1)">＋</view>
+              <view class="lottery__stepper-btn" hover-class="press" @tap="changeRandomWeight(option.label, 1)">＋</view>
             </view>
           </view>
         </view>
@@ -442,9 +449,9 @@
             <text class="lottery__switch-hint">自动保持各组人数尽量一致</text>
           </view>
           <view class="lottery__stepper">
-            <view class="lottery__stepper-btn" @tap="changeTeamCount(-1)">−</view>
+            <view class="lottery__stepper-btn" hover-class="press" @tap="changeTeamCount(-1)">−</view>
             <text class="lottery__stepper-value">{{ teamGroupCount }}</text>
-            <view class="lottery__stepper-btn" @tap="changeTeamCount(1)">＋</view>
+            <view class="lottery__stepper-btn" hover-class="press" @tap="changeTeamCount(1)">＋</view>
           </view>
         </view>
         <view class="lottery__field">
@@ -463,8 +470,8 @@
       </template>
 
       <view class="lottery__footer">
-        <view class="lottery__secondary-btn" @tap="goStep(2)">← 上一步</view>
-        <view class="lottery__primary-btn" @tap="startActivity">
+        <view class="lottery__secondary-btn" hover-class="press" @tap="goStep(2)">← 上一步</view>
+        <view class="lottery__primary-btn" hover-class="press" @tap="startActivity">
           <text>锁定并开始</text><text>→</text>
         </view>
       </view>
@@ -495,9 +502,9 @@
           <text class="lottery__switch-hint">本奖项本轮最多可抽 {{ currentRoundRandomCapacity }} 人</text>
         </view>
         <view class="lottery__stepper">
-          <view class="lottery__stepper-btn" @tap="changePrizeRoundDrawCount(-1)">−</view>
+          <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeRoundDrawCount(-1)">−</view>
           <text class="lottery__stepper-value">{{ prizeRoundDrawCount }}</text>
-          <view class="lottery__stepper-btn" @tap="changePrizeRoundDrawCount(1)">＋</view>
+          <view class="lottery__stepper-btn" hover-class="press" @tap="changePrizeRoundDrawCount(1)">＋</view>
         </view>
       </view>
 
@@ -519,11 +526,12 @@
       <view
         class="lottery__primary-btn lottery__primary-btn--full"
         :class="{ 'lottery__primary-btn--disabled': drawing || !canDraw }"
+        hover-class="press"
         @tap="performDraw"
       >
         <text>{{ drawButtonLabel }}</text>
       </view>
-      <view class="lottery__secondary-btn lottery__secondary-btn--full" @tap="goStep(3)">返回修改规则</view>
+      <view class="lottery__secondary-btn lottery__secondary-btn--full" hover-class="press" @tap="goStep(3)">返回修改规则</view>
     </view>
 
     <view v-else class="lottery__screen lottery__screen--result">
@@ -568,10 +576,10 @@
       </view>
 
       <view class="lottery__footer lottery__footer--result">
-        <view v-if="mode !== 'team' && canDraw" class="lottery__secondary-btn" @tap="continueDrawing">{{ continueDrawLabel }}</view>
-        <view class="lottery__primary-btn" @tap="finishActivity">完成活动</view>
+        <view v-if="mode !== 'team' && canDraw" class="lottery__secondary-btn" hover-class="press" @tap="continueDrawing">{{ continueDrawLabel }}</view>
+        <view class="lottery__primary-btn" hover-class="press" @tap="finishActivity">完成活动</view>
       </view>
-      <view class="lottery__copy-btn" @tap="copyResults">复制结果</view>
+      <view class="lottery__copy-btn" hover-class="press" @tap="copyResults">复制结果</view>
     </view>
   </view>
 </template>

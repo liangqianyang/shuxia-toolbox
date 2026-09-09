@@ -22,10 +22,10 @@
           <text class="tetris__title">俄罗斯方块</text>
           <text class="tetris__title-badge">TETRIS</text>
           <view class="tetris__title-flex"></view>
-          <view class="tetris__icon-btn" @tap="toggleSound">
+          <view class="tetris__icon-btn" hover-class="press" @tap="toggleSound">
             <text>{{ soundOn ? '🔊' : '🔇' }}</text>
           </view>
-          <view class="tetris__icon-btn" @tap="showRules = true">
+          <view class="tetris__icon-btn" hover-class="press" @tap="showRules = true">
             <text>ⓘ</text>
           </view>
         </view>
@@ -61,6 +61,7 @@
             :key="v"
             class="tetris__chip"
             :class="{ 'is-active': startLevel === v }"
+            hover-class="press"
             @tap="pickLevel(v)"
           >
             <text class="tetris__chip-num">{{ v }}</text>
@@ -74,7 +75,7 @@
         </view>
         <view v-else-if="leaderboardError" class="tetris__lb-hint">
           <text>{{ leaderboardError }}</text>
-          <view class="tetris__lb-retry" @tap="loadLeaderboard"><text>重试</text></view>
+          <view class="tetris__lb-retry" hover-class="press" @tap="loadLeaderboard"><text>重试</text></view>
         </view>
         <view v-else-if="!leaderboard || leaderboard.entries.length === 0" class="tetris__lb-hint">
           <text>🏆 虚位以待,玩一局成为第一个上榜的枫友</text>
@@ -108,7 +109,7 @@
 
       <view class="tetris__menu-flex"></view>
       <view class="tetris__start-wrap">
-        <view class="tetris__start-btn" @tap="startGame">
+        <view class="tetris__start-btn" hover-class="press" @tap="startGame">
           <text class="tetris__start-icon">▶</text>
           <text class="tetris__start-text">开始游戏</text>
         </view>
@@ -130,7 +131,7 @@
           <text class="tetris__hud-item-num tetris__hud-item-num--cyan">{{ view?.level ?? startLevel }}</text>
           <text class="tetris__hud-item-label">等级</text>
         </view>
-        <view class="tetris__pause-btn" @tap="pauseGame">
+        <view class="tetris__pause-btn" hover-class="press" @tap="pauseGame">
           <text>{{ paused ? '▶' : '⏸' }}</text>
         </view>
       </view>
@@ -176,14 +177,14 @@
           <text>→</text>
         </view>
         <view class="tetris__pad-flex"></view>
-        <view class="tetris__pad-btn tetris__pad-btn--rotate" @tap="rotatePiece">
+        <view class="tetris__pad-btn tetris__pad-btn--rotate" hover-class="press" @tap="rotatePiece">
           <text class="tetris__pad-rotate-icon">↻</text>
           <text>旋转</text>
         </view>
-        <view class="tetris__pad-btn tetris__pad-btn--drop" @tap="hardDropPiece">
+        <view class="tetris__pad-btn tetris__pad-btn--drop" hover-class="press" @tap="hardDropPiece">
           <text>⤓</text>
         </view>
-        <view class="tetris__pad-btn tetris__pad-btn--hold" @tap="holdPiece">
+        <view class="tetris__pad-btn tetris__pad-btn--hold" hover-class="press" @tap="holdPiece">
           <text>HOLD</text>
         </view>
       </view>
@@ -196,9 +197,9 @@
       <view v-if="paused" class="tetris__mask">
         <view class="tetris__mask-card">
           <text class="tetris__mask-title">已暂停</text>
-          <view class="tetris__mask-btn tetris__mask-btn--primary" @tap="resume"><text>继续</text></view>
-          <view class="tetris__mask-btn" @tap="restartGame"><text>重新开始</text></view>
-          <view class="tetris__mask-btn" @tap="exitToMenu"><text>退出</text></view>
+          <view class="tetris__mask-btn tetris__mask-btn--primary" hover-class="press" @tap="resume"><text>继续</text></view>
+          <view class="tetris__mask-btn" hover-class="press" @tap="restartGame"><text>重新开始</text></view>
+          <view class="tetris__mask-btn" hover-class="press" @tap="exitToMenu"><text>退出</text></view>
         </view>
       </view>
 
@@ -230,9 +231,9 @@
             <text class="tetris__over-rank-trophy">🏆</text>
             <text class="tetris__over-rank-text">全服第 {{ submitRank }} 名</text>
           </view>
-          <view class="tetris__mask-btn tetris__mask-btn--primary" @tap="restartGame"><text>再来一局</text></view>
-          <view class="tetris__mask-btn" @tap="viewLeaderboard"><text>看排行榜</text></view>
-          <view class="tetris__mask-btn" @tap="exitToMenu"><text>回菜单</text></view>
+          <view class="tetris__mask-btn tetris__mask-btn--primary" hover-class="press" @tap="restartGame"><text>再来一局</text></view>
+          <view class="tetris__mask-btn" hover-class="press" @tap="viewLeaderboard"><text>看排行榜</text></view>
+          <view class="tetris__mask-btn" hover-class="press" @tap="exitToMenu"><text>回菜单</text></view>
         </view>
       </view>
     </view>

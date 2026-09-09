@@ -7,7 +7,7 @@
     </view>
 
     <view v-if="tools.length" class="toolbox__list">
-      <view v-for="tool in tools" :key="tool.key" class="toolbox__card card" @tap="openTool(tool)">
+      <view v-for="tool in tools" :key="tool.key" class="toolbox__card card" hover-class="press" @tap="openTool(tool)">
         <ToolIcon class="toolbox__icon" :icon="tool.icon" />
         <view class="toolbox__copy">
           <view class="toolbox__name-row">

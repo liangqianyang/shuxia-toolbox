@@ -2,7 +2,7 @@
   <view class="shop card">
     <view class="shop__head">
       <text class="section-title">购物清单</text>
-      <view class="shop__copy" @tap="onCopy">复制清单</view>
+      <view class="shop__copy" hover-class="press" @tap="onCopy">复制清单</view>
     </view>
     <text class="caption">
       共 {{ used.length }} 色 · {{ totalBeads }} 颗 · 约 {{ totalPacks }} 包（每包约 {{ perPack }} 颗）

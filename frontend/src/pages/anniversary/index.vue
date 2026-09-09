@@ -8,7 +8,7 @@
         <text class="anniversary__eyebrow">时光纪念卡</text>
         <text class="anniversary__title">{{ headerTitle }}</text>
       </view>
-      <view class="anniversary__header-action" @tap="openCreate()">新建</view>
+      <view class="anniversary__header-action" hover-class="press" @tap="openCreate()">新建</view>
     </view>
 
     <view v-if="loading" class="anniversary__loading">正在读取重要日子…</view>
@@ -31,8 +31,8 @@
           <text class="caption">{{ invitePreview.role === 'editor' ? '能改名称和日期，不能删除或邀请别人' : '只能查看，提醒和卡片偏好仍归你自己' }}</text>
         </view>
         <view class="anniversary__invite-actions">
-          <view class="btn-ghost anniversary__invite-btn" @tap="declineInvite">暂不</view>
-          <view class="btn-primary anniversary__invite-btn" :class="{ disabled: inviteAccepting }" @tap="acceptInvite">
+          <view class="btn-ghost anniversary__invite-btn" hover-class="press" @tap="declineInvite">暂不</view>
+          <view class="btn-primary anniversary__invite-btn" hover-class="press" :class="{ disabled: inviteAccepting }" @tap="acceptInvite">
             {{ inviteAccepting ? '接受中…' : '接受邀请' }}
           </view>
         </view>
@@ -42,7 +42,7 @@
       <!-- ===== 列表页 ===== -->
       <template v-if="panel === 'home'">
         <AppEmpty v-if="events.length === 0" class="card" title="还没有记录重要日子" hint="从生日、旅行、纪念日或坚持一件事开始。">
-          <view class="btn-primary anniversary__empty-action" @tap="openCreate()">记录第一个日子</view>
+          <view class="btn-primary anniversary__empty-action" hover-class="press" @tap="openCreate()">记录第一个日子</view>
         </AppEmpty>
 
         <template v-else>
@@ -73,8 +73,8 @@
                 </view>
               </view>
               <view class="anniversary__hero-actions">
-                <view class="anniversary__hero-btn" @tap="addToCalendar(summary.nextEvent)">📅 写入日历</view>
-                <view class="anniversary__hero-btn" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '✨ 马上纪念' : '✨ 生成卡片' }}</view>
+                <view class="anniversary__hero-btn" hover-class="press" @tap="addToCalendar(summary.nextEvent)">📅 写入日历</view>
+                <view class="anniversary__hero-btn" hover-class="press" @tap="openCard(summary.nextEvent)">{{ heroIsToday ? '✨ 马上纪念' : '✨ 生成卡片' }}</view>
               </view>
             </view>
 
@@ -102,6 +102,7 @@
                 :key="tab.key"
                 class="anniversary__tab"
                 :class="{ 'anniversary__tab--active': activeTab === tab.key }"
+                hover-class="press"
                 @tap="switchTab(tab.key)"
               >
                 <text class="anniversary__tab-label">{{ tab.name }}</text>
@@ -110,7 +111,7 @@
             </view>
             <view class="anniversary__search-row" :class="{ 'anniversary__search-row--active': searching }">
               <input v-model="searchQuery" class="anniversary__search" placeholder="搜索纪念日…" maxlength="40" />
-              <view v-if="searchQuery" class="anniversary__search-clear" @tap="searchQuery = ''">×</view>
+              <view v-if="searchQuery" class="anniversary__search-clear" hover-class="press" @tap="searchQuery = ''">×</view>
             </view>
           </view>
 
@@ -124,6 +125,7 @@
                 filterScene === scene.key ? 'anniversary__scene-chip--active' : '',
                 scene.key ? 'anniversary__scene-chip--c-' + scene.key : '',
               ]"
+              hover-class="press"
               @tap="filterScene = filterScene === scene.key ? '' : scene.key"
             >
               <view v-if="scene.key" class="anniversary__chip-dot" :class="'anniversary__chip-dot--' + scene.key" />
@@ -141,6 +143,7 @@
                 v-for="item in searchResults"
                 :key="`sr-${item.event.id}`"
                 class="anniversary__event card"
+                hover-class="press"
                 @tap="openCard(item.event)"
               >
                 <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + item.event.sceneType" />
@@ -170,6 +173,7 @@
                   v-for="event in groups.today"
                   :key="`today-${event.id}`"
                   class="anniversary__event card"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -194,6 +198,7 @@
                   v-for="event in groups.week"
                   :key="`week-${event.id}`"
                   class="anniversary__event card"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -218,6 +223,7 @@
                   v-for="event in laterShown"
                   :key="`later-${event.id}`"
                   class="anniversary__event card"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -245,6 +251,7 @@
                   v-for="event in groups.counting"
                   :key="`counting-${event.id}`"
                   class="anniversary__event card"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -274,6 +281,7 @@
                 v-for="event in pastShown"
                 :key="`past-${event.id}`"
                 class="anniversary__event card"
+                hover-class="press"
                 @tap="openCard(event)"
               >
                 <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -306,6 +314,7 @@
                   v-for="event in onceActiveShown"
                   :key="`once-${event.id}`"
                   class="anniversary__event card"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -335,6 +344,7 @@
                   v-for="event in onceDoneShown"
                   :key="`done-${event.id}`"
                   class="anniversary__event card anniversary__event--done"
+                  hover-class="press"
                   @tap="openCard(event)"
                 >
                   <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
@@ -371,6 +381,7 @@
               { 'anniversary__scene-cell--active': form.sceneType === scene.key },
               'anniversary__scene-cell--c-' + scene.key,
             ]"
+            hover-class="press"
             @tap="selectScene(scene.key)"
           >
             <text class="anniversary__scene-cell-icon">{{ SCENE_ICONS[scene.key] }}</text>
@@ -386,8 +397,8 @@
           </view>
 
           <view class="anniversary__segmented">
-            <view :class="{ active: form.calendarType === 'solar' }" @tap="setCalendarType('solar')">公历</view>
-            <view :class="{ active: form.calendarType === 'lunar' }" @tap="setCalendarType('lunar')">农历</view>
+            <view hover-class="press" :class="{ active: form.calendarType === 'solar' }" @tap="setCalendarType('solar')">公历</view>
+            <view hover-class="press" :class="{ active: form.calendarType === 'lunar' }" @tap="setCalendarType('lunar')">农历</view>
           </view>
 
           <view v-if="form.calendarType === 'solar'" class="anniversary__field">
@@ -420,13 +431,13 @@
           </view>
 
           <view class="anniversary__segmented">
-            <view :class="{ active: form.countMode === 'countdown' }" @tap="form.countMode = 'countdown'">倒数</view>
-            <view :class="{ active: form.countMode === 'countup' }" @tap="form.countMode = 'countup'">正计时</view>
+            <view hover-class="press" :class="{ active: form.countMode === 'countdown' }" @tap="form.countMode = 'countdown'">倒数</view>
+            <view hover-class="press" :class="{ active: form.countMode === 'countup' }" @tap="form.countMode = 'countup'">正计时</view>
           </view>
 
           <view class="anniversary__segmented">
-            <view :class="{ active: form.repeatType === 'none' }" @tap="form.repeatType = 'none'">不重复</view>
-            <view :class="{ active: form.repeatType === 'yearly' }" @tap="form.repeatType = 'yearly'">每年重复</view>
+            <view hover-class="press" :class="{ active: form.repeatType === 'none' }" @tap="form.repeatType = 'none'">不重复</view>
+            <view hover-class="press" :class="{ active: form.repeatType === 'yearly' }" @tap="form.repeatType = 'yearly'">每年重复</view>
           </view>
         </view>
 
@@ -447,6 +458,7 @@
                 :key="preset"
                 class="anniversary__time-chip"
                 :class="{ 'anniversary__time-chip--active': form.remindTime === preset }"
+                hover-class="press"
                 @tap="form.remindTime = preset"
               >
                 {{ preset }}
@@ -476,10 +488,10 @@
             </picker>
           </view>
 
-          <view class="anniversary__cover" @tap="chooseCoverForForm">
+          <view class="anniversary__cover" hover-class="press" @tap="chooseCoverForForm">
             <view v-if="form.coverImage" class="anniversary__cover-image-wrap">
               <image class="anniversary__cover-image" :src="form.coverImage" mode="aspectFit" />
-              <view class="anniversary__cover-remove" @tap.stop="removeCover">✕</view>
+              <view class="anniversary__cover-remove" hover-class="press" @tap.stop="removeCover">✕</view>
             </view>
             <view v-else class="anniversary__cover-empty">
               <text>添加本机封面图</text>
@@ -489,8 +501,8 @@
         </view>
 
         <view class="anniversary__actions">
-          <view class="btn-ghost anniversary__action" @tap="goHome">取消</view>
-          <view class="btn-primary anniversary__action" :class="{ disabled: saving }" @tap="saveForm">保存</view>
+          <view class="btn-ghost anniversary__action" hover-class="press" @tap="goHome">取消</view>
+          <view class="btn-primary anniversary__action" hover-class="press" :class="{ disabled: saving }" @tap="saveForm">保存</view>
         </view>
       </template>
 
@@ -568,6 +580,7 @@
                 { 'anniversary__tpl--active': cardTemplate === template.key },
                 'anniversary__tpl-thumb--' + template.key,
               ]"
+              hover-class="press"
               @tap="selectCardTemplate(template.key)"
             >
               <view class="anniversary__tpl-thumb">
@@ -588,6 +601,7 @@
                 { 'anniversary__tone--active': cardTone === tone.key },
                 'anniversary__tone-swatch--' + tone.key,
               ]"
+              hover-class="press"
               @tap="selectCardTone(tone.key)"
             >
               <view class="anniversary__tone-swatch" :class="'anniversary__tone-swatch--' + tone.key" />
@@ -600,9 +614,9 @@
 
         <!-- 底部固定操作条：更多 / 分享 / 保存图片 -->
         <view class="anniversary__bottom-bar">
-          <view class="anniversary__bottom-btn" @tap="moreSheetOpen = true">⋯</view>
-          <view class="anniversary__bottom-btn" @tap="shareCard">↗</view>
-          <view class="anniversary__bottom-cta" :class="{ disabled: exporting }" @tap="exportCard">
+          <view class="anniversary__bottom-btn" hover-class="press" @tap="moreSheetOpen = true">⋯</view>
+          <view class="anniversary__bottom-btn" hover-class="press" @tap="shareCard">↗</view>
+          <view class="anniversary__bottom-cta" hover-class="press" :class="{ disabled: exporting }" @tap="exportCard">
             {{ exporting ? '生成中…' : '保存图片' }}
           </view>
         </view>
@@ -617,6 +631,7 @@
               :key="action.key"
               class="anniversary__sheet-item"
               :class="{ 'anniversary__sheet-item--danger': action.danger }"
+              hover-class="press"
               @tap="handleMoreAction(action.key)"
             >
               <view class="anniversary__sheet-icon">{{ action.icon }}</view>

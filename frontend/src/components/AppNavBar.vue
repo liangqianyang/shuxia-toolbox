@@ -5,7 +5,7 @@
   <view class="app-navbar" :style="bleed ? { margin: `0 -${bleed}rpx` } : undefined">
     <view class="app-navbar__status" :style="{ height: statusBarHeight + 'px' }" />
     <view class="app-navbar__row">
-      <view class="app-navbar__back" @tap="emit('back')">
+      <view class="app-navbar__back" hover-class="press" @tap="emit('back')">
         <view class="app-navbar__chevron" />
       </view>
       <text v-if="title" class="app-navbar__title">{{ title }}</text>

@@ -2,10 +2,10 @@
   <view v-if="c.chatPanelOpen" class="gcp-mask" @tap="c.chatPanelOpen = false">
     <view class="gcp-panel" @tap.stop>
       <view class="gcp-tabs">
-        <view v-for="t in tabs" :key="t.key" class="gcp-tab" :class="{ active: c.chatTab === t.key }" @tap="c.chatTab = t.key">
+        <view v-for="t in tabs" :key="t.key" class="gcp-tab" :class="{ active: c.chatTab === t.key }" hover-class="press" @tap="c.chatTab = t.key">
           {{ t.label }}
         </view>
-        <view class="gcp-close" @tap="c.chatPanelOpen = false">✕</view>
+        <view class="gcp-close" hover-class="press" @tap="c.chatPanelOpen = false">✕</view>
       </view>
       <scroll-view class="gcp-log" scroll-y :show-scrollbar="false">
         <view v-for="m in c.chatLog" :key="m.seq" class="gcp-log-row">
@@ -23,16 +23,17 @@
               :key="p.id"
               class="gcp-phrase"
               :class="{ disabled: c.chatCooling }"
+              hover-class="press"
               @tap="c.sendPhrase(p.id)"
             >{{ p.text }}</view>
           </view>
         </view>
       </view>
       <view v-else-if="c.chatTab === 'emoji'" class="gcp-emoji-grid">
-        <view v-for="e in emojis" :key="e" class="gcp-emoji" :class="{ disabled: c.chatCooling }" @tap="c.sendEmoji(e)">{{ e }}</view>
+        <view v-for="e in emojis" :key="e" class="gcp-emoji" :class="{ disabled: c.chatCooling }" hover-class="press" @tap="c.sendEmoji(e)">{{ e }}</view>
       </view>
       <view v-else-if="c.chatTab === 'sticker'" class="gcp-sticker-grid">
-        <view v-for="(path, id) in stickers" :key="id" class="gcp-sticker" :class="{ disabled: c.chatCooling }" @tap="c.sendSticker(id)">
+        <view v-for="(path, id) in stickers" :key="id" class="gcp-sticker" :class="{ disabled: c.chatCooling }" hover-class="press" @tap="c.sendSticker(id)">
           <image class="gcp-sticker-item" :src="cdnUrl(path)" mode="aspectFit" />
         </view>
       </view>

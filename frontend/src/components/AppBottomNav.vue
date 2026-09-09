@@ -5,6 +5,7 @@
       :key="item.id"
       class="bottom-nav__item"
       :class="{ 'bottom-nav__item--active': active === item.id }"
+      hover-class="press"
       @tap="go(item.id)"
     >
       <text class="bottom-nav__icon">{{ item.icon }}</text>

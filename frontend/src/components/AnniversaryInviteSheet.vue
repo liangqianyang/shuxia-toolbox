@@ -9,6 +9,7 @@
         <view
           class="ais__role"
           :class="{ 'ais__role--active': role === 'viewer' }"
+          hover-class="press"
           @tap="role = 'viewer'"
         >
           <text class="ais__role-name">👀 仅查看</text>
@@ -17,6 +18,7 @@
         <view
           class="ais__role"
           :class="{ 'ais__role--active': role === 'editor' }"
+          hover-class="press"
           @tap="role = 'editor'"
         >
           <text class="ais__role-name">✏️ 可编辑</text>
@@ -28,14 +30,14 @@
         <text class="ais__ready-code">{{ invite.code }}</text>
         <text class="ais__ready-hint">24 小时内有效 · 仅可接受一次</text>
         <button class="ais__share-btn" open-type="share">发给微信好友</button>
-        <view class="ais__regen" @tap="generate">重新生成</view>
+        <view class="ais__regen" hover-class="press" @tap="generate">重新生成</view>
       </view>
 
-      <view v-else class="ais__generate" :class="{ disabled: generating }" @tap="generate">
+      <view v-else class="ais__generate" :class="{ disabled: generating }" hover-class="press" @tap="generate">
         {{ generating ? '生成中…' : '生成邀请码' }}
       </view>
 
-      <view class="ais__cancel" @tap="closeSheet">取消</view>
+      <view class="ais__cancel" hover-class="press" @tap="closeSheet">取消</view>
     </view>
   </view>
 </template>
