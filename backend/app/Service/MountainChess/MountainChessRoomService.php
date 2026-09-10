@@ -567,7 +567,7 @@ final class MountainChessRoomService
             'rps' => $this->serializeRps($room, $myRole),
             'chat' => array_values($room->chat ?? []),
             'chatSeq' => $this->chatSeqOf($room),
-            'sharePath' => '/pages/junqi/index?room=' . $room->code,
+            'sharePath' => '/pages-games/junqi/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

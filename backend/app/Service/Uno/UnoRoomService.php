@@ -1042,7 +1042,7 @@ final class UnoRoomService
             'scores' => $state['scores'] ?? [],
             'roundScores' => $state['roundScores'] ?? null,
             'handValues' => $state['handValues'] ?? null,
-            'sharePath' => '/pages/uno/index?room=' . $room->code,
+            'sharePath' => '/pages-games/uno/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

@@ -12,12 +12,12 @@ export const BOARD_H = 20
 export const LOCK_DELAY_MS = 500
 export const MAX_LOCK_RESETS = 15
 /** 消行闪烁时长：满行先白闪 CLEAR_FLASH_MS 再塌落（由 tick 驱动，无动画帧）。 */
-export const CLEAR_FLASH_MS = 200
+export const CLEAR_FLASH_MS = 300
 
 /** 消 1/2/3/4 行的基础分（×当前等级），Guideline 计分。 */
 export const LINE_SCORES = [0, 100, 300, 500, 800] as const
 
-export type PieceId = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L'
+export type PieceId = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'M' | 'D' | 'V' | 'X'
 export type Cell = PieceId | null
 /** 200 格行主序：index = y*BOARD_W + x，y 向下增长。 */
 export type Board = Cell[]
@@ -59,6 +59,8 @@ export interface TetrisState {
   phase: TetrisPhase
   /** clearing 相位的满行行号。 */
   clearingRows: number[]
+  /** clearing 相位的待消列号（仅单格闪块使用，与满行互斥）。 */
+  clearingCols: number[]
   clearTimerMs: number
   /** 距下一次重力下落的累计毫秒。 */
   gravityMs: number
@@ -78,6 +80,11 @@ export type GameAction =
   | { t: 'tick'; dtMs: number }
 
 const PIECE_IDS: PieceId[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
+
+/** 变种块（低概率混入 7-bag）：M 单格闪块（锁定后消除所在列）/ D 二格多米诺 / V 三格角块 / X 三格斜阶梯（角相连，两形态）。 */
+const VARIANT_IDS: PieceId[] = ['M', 'D', 'V', 'X']
+/** 每袋混入一枚变种块的概率。 */
+export const VARIANT_CHANCE = 0.4
 
 /**
  * 各块四个旋转态的格子偏移（SRS 包围盒内，(列, 行)，行向下）。
@@ -124,7 +131,31 @@ const PIECE_SHAPES: Record<PieceId, ReadonlyArray<ReadonlyArray<readonly [number
     [[2, 0], [0, 1], [1, 1], [2, 1]],
     [[1, 0], [1, 1], [1, 2], [2, 2]],
     [[0, 1], [1, 1], [2, 1], [0, 2]],
-    [[0, 0], [0, 1], [1, 1], [1, 2]],
+    [[0, 0], [1, 0], [1, 1], [1, 2]],
+  ],
+  M: [
+    [[0, 0]],
+    [[0, 0]],
+    [[0, 0]],
+    [[0, 0]],
+  ],
+  D: [
+    [[0, 0], [1, 0]],
+    [[1, 0], [1, 1]],
+    [[0, 1], [1, 1]],
+    [[0, 0], [0, 1]],
+  ],
+  V: [
+    [[0, 0], [0, 1], [1, 1]],
+    [[1, 0], [0, 0], [0, 1]],
+    [[1, 0], [1, 1], [0, 0]],
+    [[0, 1], [1, 1], [1, 0]],
+  ],
+  X: [
+    [[0, 0], [1, 1], [2, 2]],
+    [[2, 0], [1, 1], [0, 2]],
+    [[0, 0], [1, 1], [2, 2]],
+    [[2, 0], [1, 1], [0, 2]],
   ],
 }
 
@@ -153,19 +184,34 @@ const KICKS_I: Record<string, ReadonlyArray<readonly [number, number]>> = {
   '3>0': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
   '0>3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
 }
+/** 小型块（D/V）踢墙：左右各试一格；M 旋转恒等只走 [0,0]。 */
+const KICKS_SMALL: Record<string, ReadonlyArray<readonly [number, number]>> = {
+  '0>1': [[0, 0], [1, 0], [-1, 0]],
+  '1>0': [[0, 0], [-1, 0], [1, 0]],
+  '1>2': [[0, 0], [1, 0], [-1, 0]],
+  '2>1': [[0, 0], [-1, 0], [1, 0]],
+  '2>3': [[0, 0], [-1, 0], [1, 0]],
+  '3>2': [[0, 0], [1, 0], [-1, 0]],
+  '3>0': [[0, 0], [-1, 0], [1, 0]],
+  '0>3': [[0, 0], [1, 0], [-1, 0]],
+}
 
 export function emptyBoard(): Board {
   return new Array<Cell>(BOARD_W * BOARD_H).fill(null)
 }
 
-/** 7-bag：7 种块洗成一袋，杜绝"等不到 I 块"的运气死局。 */
+/** 加量 8-bag：7 种各一 + 每袋加塞一根长条（I 密度 1/7→2/8），杜绝"等不到 I 块"；
+ *  每袋 VARIANT_CHANCE 概率把其中一枚替换成变种块（M/D/V）。 */
 export function shuffledBag(rng: () => number = Math.random): PieceId[] {
-  const bag = PIECE_IDS.slice()
+  const bag: PieceId[] = [...PIECE_IDS, 'I']
   for (let i = bag.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
     const tmp = bag[i]
     bag[i] = bag[j]
     bag[j] = tmp
+  }
+  if (rng() < VARIANT_CHANCE) {
+    bag[Math.floor(rng() * bag.length)] = VARIANT_IDS[Math.floor(rng() * VARIANT_IDS.length)]
   }
   return bag
 }
@@ -233,6 +279,7 @@ export function createGame(startLevel: number, rng: () => number = Math.random):
     startLevel: level,
     phase: 'playing',
     clearingRows: [],
+    clearingCols: [],
     clearTimerMs: 0,
     gravityMs: 0,
     lockMs: 0,
@@ -315,6 +362,28 @@ function lockPiece(state: TetrisState, events: TetrisEvent[]): TetrisState {
   }
 
   if (clearingRows.length === 0) {
+    // 单格闪块：没有满行时消除所在列（满行优先——补完整行的直觉优先于消列特效）。
+    if (active.id === 'M') {
+      const col = active.x
+      const points = LINE_SCORES[1] * state.level
+      const lines = state.lines + 1
+      const level = levelFrom(state.startLevel, lines)
+      const colEvents: TetrisEvent[] = [...lockedEvents, { t: 'cleared', rows: 1, points }]
+      const colFinalEvents: TetrisEvent[] = level > state.level ? [...colEvents, { t: 'levelUp', level }] : colEvents
+      return {
+        ...state,
+        board,
+        active: null,
+        score: state.score + points,
+        lines,
+        level,
+        phase: 'clearing',
+        clearingRows: [],
+        clearingCols: [col],
+        clearTimerMs: CLEAR_FLASH_MS,
+        events: colFinalEvents,
+      }
+    }
     return spawnNext({ ...state, board, active: null }, lockedEvents)
   }
 
@@ -351,6 +420,17 @@ function collapseRows(state: TetrisState, events: TetrisEvent[]): TetrisState {
   return spawnNext({ ...state, board, clearingRows: [], clearTimerMs: 0 }, events)
 }
 
+/** 单格闪块的消列收尾：整列清空（含闪块本体），其余列原样。 */
+function collapseCols(state: TetrisState, events: TetrisEvent[]): TetrisState {
+  const board = state.board.slice()
+  for (let y = 0; y < BOARD_H; y++) {
+    for (const col of state.clearingCols) {
+      board[y * BOARD_W + col] = null
+    }
+  }
+  return spawnNext({ ...state, board, clearingCols: [], clearTimerMs: 0 }, events)
+}
+
 export function applyAction(state: TetrisState, action: GameAction): TetrisState {
   switch (action.t) {
     case 'move': {
@@ -366,7 +446,7 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
       if (state.phase !== 'playing' || !state.active) return state
       const { active } = state
       const toRot = ((active.rot + action.dir) % 4 + 4) % 4
-      const kicks = active.id === 'I' ? KICKS_I : KICKS_JLSTZ
+      const kicks = active.id === 'I' ? KICKS_I : active.id === 'D' || active.id === 'V' ? KICKS_SMALL : KICKS_JLSTZ
       const table = kicks[`${active.rot}>${toRot}`]
       for (const [dx, dy] of table) {
         if (!collides(state.board, active.id, active.x + dx, active.y + dy, toRot)) {
@@ -443,6 +523,7 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
       if (state.phase === 'clearing') {
         const clearTimerMs = state.clearTimerMs - dtMs
         if (clearTimerMs > 0) return { ...state, clearTimerMs, events: [] }
+        if (state.clearingCols.length > 0) return collapseCols(state, [])
         return collapseRows(state, [])
       }
       if (!state.active) return state

@@ -5,7 +5,7 @@
  * 每次状态变化整幅重绘（clearRect 清全幅——右栏透明区不清屏会残留旧帧叠成马赛克）。
  */
 
-import { BOARD_H, BOARD_W, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/utils/tetris'
+import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/utils/tetris'
 
 /** 经典 7 色（柔和版）。 */
 export const PIECE_COLORS: Record<PieceId, string> = {
@@ -16,6 +16,10 @@ export const PIECE_COLORS: Record<PieceId, string> = {
   Z: '#E05F5F',
   J: '#6E8DF2',
   L: '#E8974E',
+  M: '#F4B942',
+  D: '#43B7A0',
+  V: '#E58FB1',
+  X: '#5C6BC0',
 }
 
 export const BOARD_BG = '#F7EEDF'
@@ -192,6 +196,57 @@ function drawRailPanel(
 }
 
 /** 一帧 = 清屏 → 棋盘（网格/边框/满行白闪/幽灵/活动块） + 右栏 HOLD/NEXT×3 深色面板。 */
+/**
+ * 消行/消列动画带（进度 p 0→1，三段式，驱动来自 33ms tick 重绘）：
+ * 0~25% 白闪压场 → 全程金核亮带随进度铺满 → 金白碎粒沿带方向飞散渐隐。
+ * center：行/列中心的画布 y/x 坐标；horizontal：行消（横向带）或列消（纵向带）。
+ */
+function drawClearBand(ctx: CanvasRenderingContext2D, layout: TetrisLayout, center: number, horizontal: boolean, p: number) {
+  const { cell, boardX, boardY } = layout
+  const w = cell * BOARD_W
+  const h = cell * BOARD_H
+  const band = cell * 0.92
+  const k = cell / 24 // 格尺寸缩放
+
+  // 1) 底色：前 25% 白闪压场，之后金底渐隐
+  if (p < 0.25) {
+    ctx.fillStyle = '#FFFFFF'
+    ctx.globalAlpha = 0.95
+  } else {
+    ctx.fillStyle = CLEAR_FLASH
+    ctx.globalAlpha = Math.max(0, 1 - (p - 0.25) / 0.75)
+  }
+  if (horizontal) ctx.fillRect(boardX, center - band / 2, w, band)
+  else ctx.fillRect(center - band / 2, boardY, band, h)
+  ctx.globalAlpha = 1
+
+  // 2) 亮带：白核金边渐变，从中心向两端铺满
+  const spread = p < 0.4 ? p / 0.4 : 1
+  const half = ((horizontal ? w : h) / 2) * spread
+  const grad = horizontal
+    ? ctx.createLinearGradient(center - half, 0, center + half, 0)
+    : ctx.createLinearGradient(0, center - half, 0, center + half)
+  grad.addColorStop(0, 'rgba(244,185,66,0)')
+  grad.addColorStop(0.5, `rgba(255,243,214,${0.9 * (1 - p * 0.6)})`)
+  grad.addColorStop(1, 'rgba(244,185,66,0)')
+  ctx.fillStyle = grad
+  if (horizontal) ctx.fillRect(center - half, center - band * 0.35, half * 2, band * 0.7)
+  else ctx.fillRect(center - band * 0.35, center - half, band * 0.7, half * 2)
+
+  // 3) 碎粒：金白交替沿带飞散 + 正弦上抛，随进度缩小渐隐
+  for (let i = 0; i < 6; i++) {
+    const dir = i % 2 === 0 ? 1 : -1
+    const dist = (0.25 + p * 1.6) * (18 + (i % 3) * 10) * k * dir
+    const px = horizontal ? center + dist : center + Math.sin(i * 2.4 + p * 2) * 5 * k
+    const py = horizontal ? center - Math.sin(p * Math.PI + i * 1.7) * 9 * k : center + dist
+    const size = Math.max(1.5, (4.5 - p * 2.5)) * k
+    ctx.fillStyle = i % 2 === 0 ? '#F4B942' : '#FFF3D6'
+    ctx.globalAlpha = Math.max(0, 1 - p * 0.9)
+    ctx.fillRect(px - size / 2, py - size / 2, size, size)
+  }
+  ctx.globalAlpha = 1
+}
+
 export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLayout, state: TetrisState): void {
   const { cell, boardX, boardY } = layout
   const boardW = cell * BOARD_W
@@ -232,12 +287,14 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
     }
   }
 
-  // 满行金闪（clearing 相位,塌行由引擎 tick 收尾;浅底上白色不可见）
+  // 消行动画（clearing 相位 300ms 三段式：白闪 → 金带收束 → 碎粒飞散；浅底上白色不可见故以金为主）
   if (state.phase === 'clearing') {
-    ctx.fillStyle = CLEAR_FLASH
+    const p = 1 - state.clearTimerMs / CLEAR_FLASH_MS // 0→1 进度
     for (const row of state.clearingRows) {
-      roundRectPath(ctx, boardX + 3, boardY + row * cell + 3, boardW - 6, cell - 6, cell * 0.16)
-      ctx.fill()
+      drawClearBand(ctx, layout, boardY + row * cell + cell / 2, true, p)
+    }
+    for (const col of state.clearingCols) {
+      drawClearBand(ctx, layout, boardX + col * cell + cell / 2, false, p)
     }
   }
 
@@ -256,9 +313,13 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
       }
       ctx.restore()
     }
+    // 单格闪块下落时按真实时间闪烁（每 140ms 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
+    const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / 140) % 2 === 0 ? 1 : 0.45) : 1
+    ctx.globalAlpha = monoBlink
     for (const [cx, cy] of pieceCells(active.id, active.rot)) {
       drawCell(ctx, boardX + (active.x + cx) * cell + 1.5, boardY + (active.y + cy) * cell + 1.5, cell - 3, active.id)
     }
+    ctx.globalAlpha = 1
   }
   ctx.restore()
 

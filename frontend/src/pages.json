@@ -51,72 +51,6 @@
       }
     },
     {
-      "path": "pages/gomoku/index",
-      "style": {
-        "navigationBarTitleText": "五子棋"
-      }
-    },
-    {
-      "path": "pages/uno/index",
-      "style": {
-        "navigationBarTitleText": "枫趣牌局"
-      }
-    },
-    {
-      "path": "pages/tetris/index",
-      "style": {
-        "navigationBarTitleText": "俄罗斯方块",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
-      "path": "pages/sokoban/index",
-      "style": {
-        "navigationBarTitleText": "推箱子",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
-      "path": "pages/jungle/index",
-      "style": {
-        "navigationBarTitleText": "斗兽棋",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
-      "path": "pages/junqi/index",
-      "style": {
-        "navigationBarTitleText": "军棋",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
-      "path": "pages/xiangqi/index",
-      "style": {
-        "navigationBarTitleText": "象棋",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
-      "path": "pages/tictactoe/index",
-      "style": {
-        "navigationBarTitleText": "井字棋",
-        "navigationBarBackgroundColor": "#FFF8F0",
-        "navigationBarTextStyle": "black",
-        "backgroundColor": "#FFF8F0"
-      }
-    },
-    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"
@@ -169,11 +103,90 @@
           }
         }
       ]
+    },
+    {
+      "root": "pages-games",
+      "pages": [
+        {
+          "path": "jungle/index",
+          "style": {
+            "navigationBarTitleText": "斗兽棋",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        },
+        {
+          "path": "gomoku/index",
+          "style": {
+            "navigationBarTitleText": "五子棋"
+          }
+        },
+        {
+          "path": "uno/index",
+          "style": {
+            "navigationBarTitleText": "枫趣牌局"
+          }
+        },
+        {
+          "path": "tetris/index",
+          "style": {
+            "navigationBarTitleText": "俄罗斯方块",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        },
+        {
+          "path": "sokoban/index",
+          "style": {
+            "navigationBarTitleText": "推箱子",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        },
+        {
+          "path": "junqi/index",
+          "style": {
+            "navigationBarTitleText": "军棋",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        },
+        {
+          "path": "xiangqi/index",
+          "style": {
+            "navigationBarTitleText": "象棋",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        },
+        {
+          "path": "tictactoe/index",
+          "style": {
+            "navigationBarTitleText": "井字棋",
+            "navigationBarBackgroundColor": "#FFF8F0",
+            "navigationBarTextStyle": "black",
+            "backgroundColor": "#FFF8F0"
+          }
+        }
+      ]
     }
   ],
   "globalStyle": {
     "navigationBarBackgroundColor": "#FFF8F0",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#FFF8F0"
+  },
+  "preloadRule": {
+    "pages/games/index": {
+      "network": "all",
+      "packages": [
+        "pages-games"
+      ]
+    }
   }
 }

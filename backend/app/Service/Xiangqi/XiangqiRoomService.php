@@ -472,7 +472,7 @@ final class XiangqiRoomService
             'rps' => $this->serializeRps($room, $myRole),
             'chat' => array_values($room->chat ?? []),
             'chatSeq' => $this->chatSeqOf($room),
-            'sharePath' => '/pages/xiangqi/index?room=' . $room->code,
+            'sharePath' => '/pages-games/xiangqi/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

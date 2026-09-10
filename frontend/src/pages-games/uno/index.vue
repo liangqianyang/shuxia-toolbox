@@ -1,0 +1,1883 @@
+<template>
+  <view class="uno">
+    <!-- 大厅 -->
+    <view v-if="!state" class="lobby">
+      <image class="lobby__logo" :src="cdnUrl('/static/icons/uno-1.png')" mode="aspectFit" />
+      <view class="lobby__title">枫趣牌局</view>
+      <view class="lobby__subtitle">2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩</view>
+      <button class="lobby__create" :disabled="acting" @tap="onCreate">创建房间</button>
+      <view class="lobby__join">
+        <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
+        <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
+      </view>
+      <text class="lobby__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
+    </view>
+
+    <!-- 房间 -->
+    <view v-else class="room" :class="{ 'room--playing': state.status === 'playing' }">
+      <view class="room__header">
+        <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
+        <view class="room__header-actions">
+          <text class="room__sound" @tap="rulesOpen = true">❓</text>
+          <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
+          <button open-type="share" class="room__share">邀请</button>
+          <text class="room__leave" @tap="onLeave">离开</text>
+        </view>
+      </view>
+
+      <!-- 资料提示：没设置过头像昵称时引导完善 -->
+      <view v-if="showProfileBanner" class="profile-banner" hover-class="press" @tap="openProfileEditor">
+        <text>🍁 你还没有头像昵称，点我设置，让牌友认出你</text>
+        <text class="profile-banner__go">去设置 ›</text>
+      </view>
+
+      <!-- 等待开局 -->
+      <view v-if="state.status === 'waiting'" class="waiting">
+        <view class="waiting__players">
+          <view v-for="p in state.players" :key="p.userId" class="waiting__player">
+            <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="waiting__avatar" />
+            <view v-else class="waiting__avatar waiting__avatar--placeholder">🍁</view>
+            <text class="waiting__name">{{ p.nickname }}</text>
+            <text v-if="p.seat === state.ownerSeat" class="waiting__owner">房主</text>
+            <view class="waiting__dot" :class="{ 'waiting__dot--off': !p.online }" />
+          </view>
+        </view>
+        <button v-if="isOwner" class="waiting__start" :disabled="acting || state.players.length < 2" @tap="start">
+          开始游戏（{{ state.players.length }}/10）
+        </button>
+        <view v-else class="waiting__hint">等待房主开局…（{{ state.players.length }}/10）</view>
+      </view>
+
+      <!-- 牌桌 -->
+      <template v-else>
+        <!-- 抽牌比大小定庄家（首局） -->
+        <view v-if="state.phase === 'dealerDraw'" class="dealer">
+          <view class="dealer__title">🎲 抽牌比大小定庄家</view>
+          <view v-if="state.dealerReveal" class="dealer__sub dealer__sub--reveal">
+            🎴 亮牌！<text class="dealer__winner-name">{{ dealerWinnerName }}</text> 点数最大（{{ dealerWinnerValue }}），坐庄先行 · {{ turnCountdown }}s 后发牌
+          </view>
+          <view v-else class="dealer__sub">数字最大的玩家成为庄家先出牌 · {{ turnCountdown }}s 后未抽的将自动代抽</view>
+          <view class="dealer__players">
+            <view
+              v-for="p in state.players"
+              :key="p.userId"
+              class="dealer__player"
+              :class="{ 'dealer__player--win': state.dealerReveal && p.seat === dealerWinnerSeat, 'dealer__player--dim': state.dealerReveal && p.seat !== dealerWinnerSeat }"
+            >
+              <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="dealer__avatar" />
+              <view v-else class="dealer__avatar dealer__avatar--placeholder">🍁</view>
+              <text class="dealer__name">{{ p.nickname }}</text>
+              <view v-if="state.dealerReveal && p.seat === dealerWinnerSeat" class="dealer__crown">👑 庄</view>
+              <image
+                v-if="dealerDrawOf(p.seat) && images[dealerDrawOf(p.seat)!]"
+                :src="images[dealerDrawOf(p.seat)!]"
+                class="dealer__card"
+                mode="aspectFit"
+              />
+              <view v-else class="dealer__card dealer__card--pending">?</view>
+            </view>
+          </view>
+          <button v-if="!state.dealerReveal && isSeated && !myDealerDrawn" class="dealer__draw" :disabled="acting" @tap="drawDealer">🍁 抽一张</button>
+          <view v-else-if="!state.dealerReveal && isSeated" class="dealer__waiting">已抽，等其他玩家…</view>
+        </view>
+
+        <template v-else>
+        <!-- 对手排 -->
+        <view class="opponents">
+          <view
+            v-for="p in opponents"
+            :key="p.userId"
+            class="opp"
+            :class="{ 'opp--current': p.seat === state.currentSeat, 'opp--left': p.left }"
+          >
+            <view class="opp__avatar-wrap">
+              <view v-if="chatBubbles[p.seat]" class="seat-bubble seat-bubble--opp" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[p.seat] }">{{ chatBubbles[p.seat] }}</view>
+              <image v-if="p.avatarUrl" :src="avatarOf(p.avatarUrl)" class="opp__avatar" />
+              <view v-else class="opp__avatar opp__avatar--placeholder">🍁</view>
+              <view class="opp__dot" :class="{ 'opp__dot--off': !p.online }" />
+              <view v-if="p.seat === state.currentSeat && state.status === 'playing'" class="opp__timer">{{ turnCountdown }}</view>
+            </view>
+            <text class="opp__name">{{ p.nickname }}</text>
+            <view class="opp__cards">
+              <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="opp__back" />
+              <text class="opp__count">×{{ p.handCount }}</text>
+            </view>
+            <view v-if="p.left" class="opp__tag">已离开</view>
+            <view v-else-if="p.idle" class="opp__tag">挂机中</view>
+            <view v-else-if="p.unoDeclared" class="opp__tag opp__tag--uno">UNO!</view>
+          </view>
+        </view>
+
+        <!-- 桌面中央（+ 动作播报条） -->
+        <view class="table-zone">
+          <view class="table">
+            <view class="table__pile" hover-class="press" @tap="onDeckTap">
+              <image v-if="images[BACK_KEY]" :src="images[BACK_KEY]" class="table__card" />
+              <text class="table__pile-count">{{ state.deckCount }}</text>
+              <text v-if="isMyTurn && !state.drawnCard && !state.challenge?.mine" class="table__pile-hint">{{ state.drawStack ? `摸 ${state.drawStack.count} 张` : '点我摸牌' }}</text>
+            </view>
+            <view class="table__info">
+              <view class="table__color" :style="{ background: colorMeta.color }">{{ colorMeta.season }}</view>
+              <view class="table__direction">{{ state.direction === 1 ? '↻ 顺时针' : '↺ 逆时针' }}</view>
+            </view>
+            <view class="table__top">
+              <image v-if="state.topCard && images[state.topCard]" :src="images[state.topCard]" class="table__card" />
+            </view>
+          </view>
+          <view class="event-banner" :class="{ 'event-banner--show': bannerVisible }">{{ bannerText }}</view>
+        </view>
+
+        <!-- 叠加加牌提示条 -->
+        <view v-if="state.drawStack" class="stack-bar">
+          <text class="stack-bar__text">
+            🃏 加牌累计 {{ state.drawStack.count }} 张！{{ isMyTurn ? (state.drawStack.only4 ? '只能出 +4 继续叠，或点牌堆全摸' : '出 +2/+4 继续叠，或点牌堆全摸') : '等待应对…' }}
+          </text>
+        </view>
+
+        <!-- +4 质疑条 -->
+        <view v-if="state.challenge" class="challenge">
+          <template v-if="state.challenge.mine">
+            <text class="challenge__text">被 +4 了！质疑对方，或叠 +4 反击（{{ challengeCountdown }}s）</text>
+            <button class="challenge__btn" :disabled="acting" @tap="challenge">质疑</button>
+            <button class="challenge__btn challenge__btn--plain" :disabled="acting" @tap="decline">不质疑，摸 4 张</button>
+          </template>
+          <text v-else class="challenge__text">等待被 +4 的玩家决定是否质疑…（{{ challengeCountdown }}s）</text>
+        </view>
+
+        <!-- UNO 条 -->
+        <view v-if="canSayUno || canCatchUno" class="uno-bar">
+          <button v-if="canSayUno" class="uno-bar__say" :disabled="acting" @tap="sayUno">🍁 喊 UNO！</button>
+          <button v-if="canCatchUno" class="uno-bar__catch" :disabled="acting" @tap="reportUno(unoSeat)">TA 没喊 UNO，举报！</button>
+        </view>
+
+        <!-- 我的手牌 -->
+        <view class="hand">
+          <view v-if="state.mySeat !== null && chatBubbles[state.mySeat]" class="seat-bubble seat-bubble--mine" :class="{ 'seat-bubble--emoji': chatBubbleEmoji[state.mySeat] }">{{ chatBubbles[state.mySeat] }}</view>
+          <view class="hand__status">
+            <template v-if="state.status === 'playing'">
+              <text v-if="state.colorPick && !state.colorPick.mine">等待 {{ colorPickPlayerName }} 选择开局颜色…</text>
+              <text v-else-if="isMyTurn" class="hand__status--mine">
+                {{ myTurnHint }}（{{ turnCountdown }}s）
+              </text>
+              <text v-else>等待 {{ currentPlayerName }} 出牌…</text>
+            </template>
+          </view>
+          <scroll-view scroll-x class="hand__scroll" :show-scrollbar="false" enhanced>
+            <view class="hand__cards">
+              <view
+                v-for="(card, i) in sortedHand"
+                :key="i"
+                class="hand__card"
+                :class="{
+                  'hand__card--selected': selectedIndex === i,
+                  'hand__card--dim': isMyTurn && !canIPlay(card),
+                }"
+                :style="{ marginLeft: i === 0 ? '0' : '-' + cardOverlap + 'rpx' }"
+                hover-class="press"
+                @tap="onCardTap(i)"
+              >
+                <image v-if="images[card]" :src="images[card]" class="hand__img" mode="aspectFit" />
+                <text v-if="card === state.drawnCard" class="hand__new">新</text>
+              </view>
+            </view>
+          </scroll-view>
+          <view v-if="isMyTurn" class="hand__actions">
+            <template v-if="selectedCard">
+              <button v-if="myHandCount === 2" class="hand__btn hand__btn--uno" :disabled="acting" @tap="onPlay(true)">
+                喊 UNO 并出牌
+              </button>
+              <button class="hand__btn" :disabled="acting" @tap="onPlay(false)">
+                {{ myHandCount === 2 ? '直接出牌（不喊）' : '出牌' }}
+              </button>
+            </template>
+            <button v-if="state.drawnCard && !selectedCard" class="hand__btn hand__btn--plain" :disabled="acting" @tap="pass">
+              不出，跳过本轮
+            </button>
+          </view>
+        </view>
+
+        <!-- 结算面板 -->
+        <view v-if="state.status === 'finished'" class="result-mask">
+          <view class="result">
+            <view class="result__title">🎉 {{ winnerName }} 获胜！</view>
+            <view class="result__reason">{{ winReasonText }}</view>
+            <view class="result__scores">
+              <view v-for="p in state.players" :key="p.userId" class="result__row">
+                <text class="result__name">{{ p.nickname }}</text>
+                <text class="result__score">
+                  本局 +{{ state.roundScores?.[p.userId] ?? 0 }} · 总分 {{ state.scores[p.userId] ?? 0 }}
+                </text>
+              </view>
+            </view>
+            <button class="result__btn" :disabled="acting" @tap="requestRematch">再来一局</button>
+            <button class="result__btn result__btn--plain" @tap="onLeave">离开房间</button>
+          </view>
+        </view>
+        </template>
+      </template>
+
+      <!-- 底部聊天条：固定在屏幕底部，最近 3 条消息以列表形式常驻（新的从下方进入，超过 3 条顶部消失），
+           点任意处展开完整面板。仅对局进行中显示（用户拍板：只有真正玩游戏的界面需要）。 -->
+      <view v-if="state.status === 'playing'" class="chat-bar" hover-class="press" @tap="openChatPanel()">
+        <view v-if="chatFeed.length" class="chat-bar__feed">
+          <view v-for="m in chatFeed" :key="m.seq" class="chat-bar__feed-item">
+            <text class="chat-bar__feed-name">{{ m.userId === myUserId ? '我' : chatSenderName(m) }}：</text>
+            <text class="chat-bar__feed-text" :class="{ 'chat-bar__feed-text--emoji': m.kind === 'emoji' }">{{ m.text }}</text>
+          </view>
+        </view>
+        <view class="chat-bar__trigger" hover-class="press" @tap.stop="openChatPanel()">
+          <text class="chat-bar__icon">💬</text>
+          <text class="chat-bar__hint">快捷嘴炮…</text>
+          <view v-if="unreadChat > 0" class="chat-bar__badge">{{ unreadChat > 9 ? '9+' : unreadChat }}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 聊天面板：快捷句 / 表情 / 自由文字 + 最近消息 -->
+    <view v-if="chatPanelVisible" class="chat-mask" @tap="closeChatPanel">
+      <view class="chat-panel" @tap.stop>
+        <view class="chat-panel__header">
+          <text class="chat-panel__title">牌桌嘴炮</text>
+          <text class="chat-panel__close" @tap="closeChatPanel">✕</text>
+        </view>
+
+        <!-- 最近消息 -->
+        <scroll-view scroll-y class="chat-panel__log" :show-scrollbar="false">
+          <view v-if="!chatLog.length" class="chat-panel__empty">还没有人说话，来带个节奏~</view>
+          <view v-for="m in chatLog" :key="m.seq" class="chat-panel__log-item" :class="{ 'chat-panel__log-item--mine': m.userId === myUserId }">
+            <text class="chat-panel__log-name">{{ m.userId === myUserId ? '我' : chatSenderName(m) }}</text>
+            <text class="chat-panel__log-text" :class="{ 'chat-panel__log-text--emoji': m.kind === 'emoji' }">{{ m.text }}</text>
+          </view>
+        </scroll-view>
+
+        <!-- tab 切换 -->
+        <view class="chat-panel__tabs">
+          <text
+            v-for="t in chatTabs"
+            :key="t.key"
+            class="chat-panel__tab"
+            :class="{ 'chat-panel__tab--on': chatTab === t.key, 'chat-panel__tab--off': t.key === 'text' && !unoChatTextEnabled }"
+            @tap="switchChatTab(t.key)"
+          >{{ t.label }}</text>
+        </view>
+
+        <!-- 快捷句（按局势前置相关分组） -->
+        <scroll-view v-if="chatTab === 'phrase'" scroll-y class="chat-panel__body" :show-scrollbar="false">
+          <view v-for="g in sortedPhraseGroups" :key="g.key" class="chat-panel__group">
+            <text class="chat-panel__group-title">{{ g.title }}</text>
+            <view class="chat-panel__phrases">
+              <text
+                v-for="p in g.phrases"
+                :key="p.id"
+                class="chat-panel__phrase"
+                :class="{ 'chat-panel__phrase--off': chatCooldown > 0 }"
+                @tap="sendPhraseMsg(p.id)"
+              >{{ p.text }}</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <!-- 表情 -->
+        <view v-else-if="chatTab === 'emoji'" class="chat-panel__body">
+          <view class="chat-panel__emojis">
+            <text
+              v-for="e in UNO_EMOJIS"
+              :key="e"
+              class="chat-panel__emoji"
+              :class="{ 'chat-panel__emoji--off': chatCooldown > 0 }"
+              @tap="sendEmojiMsg(e)"
+            >{{ e }}</text>
+          </view>
+        </view>
+
+        <!-- 自由文字（受运营台开关控制，服务端 msg_sec_check 过审） -->
+        <view v-else class="chat-panel__body chat-panel__body--text">
+          <view v-if="!unoChatTextEnabled" class="chat-panel__text-off">文字聊天维护中，先用快捷句和表情斗图吧</view>
+          <template v-else>
+            <view class="chat-panel__input-row">
+              <input
+                v-model="chatInput"
+                class="chat-panel__input"
+                type="text"
+                maxlength="40"
+                placeholder="说点什么（40 字内，须经审核）"
+                confirm-type="send"
+                :disabled="chatCooldown > 0"
+                @confirm="sendTextMsg"
+              />
+              <button class="chat-panel__send" :disabled="chatCooldown > 0" @tap="sendTextMsg">
+                {{ chatCooldown > 0 ? `${chatCooldown}s` : '发送' }}
+              </button>
+            </view>
+          </template>
+        </view>
+      </view>
+    </view>
+
+    <!-- 资料设置弹层（微信头像选择 + 昵称输入） -->
+    <view v-if="profileEditorVisible" class="color-mask" @tap="profileEditorVisible = false">
+      <view class="color-panel" @tap.stop>
+        <view class="color-panel__title">设置昵称和头像</view>
+        <view class="profile">
+          <button class="profile__avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+            <image v-if="profileAvatar" :src="profileAvatar" class="profile__avatar" mode="aspectFill" />
+            <text v-else class="profile__avatar-hint">🍁<br/>选头像</text>
+          </button>
+          <input v-model="profileNickname" class="profile__nickname" type="nickname" placeholder="输入昵称" maxlength="20" />
+          <button class="profile__save" :disabled="savingProfile" @tap="saveMyProfile">保存</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 选色弹层：出百搭牌选色 / 开局首张变色牌选色；面板上移以便看清手牌 -->
+    <view v-if="colorPickerVisible" class="color-mask" @tap="onMaskTap">
+      <view class="color-panel" @tap.stop>
+        <view class="color-panel__title">{{ colorPickMode === 'start' ? '你翻开了变色牌，选择开局季节' : '为它选择一个季节' }}</view>
+        <view v-if="colorPickMode === 'wild' && pendingWildCard && images[pendingWildCard]" class="color-panel__preview">
+          <image :src="images[pendingWildCard]" class="color-panel__card" mode="aspectFit" />
+        </view>
+        <view class="color-panel__row">
+          <view
+            v-for="c in UNO_COLORS"
+            :key="c"
+            class="color-panel__item"
+            :style="{ background: COLOR_META[c].color }"
+            hover-class="press"
+            @tap="onPickColor(c)"
+          >
+            <text class="color-panel__season">{{ COLOR_META[c].season }}</text>
+            <text class="color-panel__cname">{{ COLOR_META[c].name }}</text>
+          </view>
+        </view>
+        <button v-if="colorPickMode === 'wild'" class="color-panel__cancel" @tap="cancelColorPick">先不出这张</button>
+      </view>
+    </view>
+
+    <!-- 玩法说明 -->
+    <GameRulesModal :visible="rulesOpen" title="枫趣牌局 · 玩法说明" :sections="GAME_RULES" @close="rulesOpen = false" />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue'
+import { cdnUrl } from '@/utils/cdn'
+import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
+import { useUnoRoom } from '@/composables/useUnoRoom'
+import { useUnoCards } from '@/composables/useUnoCards'
+import { useFeatures } from '@/composables/useFeatures'
+import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
+import { BACK_KEY } from '@/utils/unoCards'
+import { COLOR_META, UNO_COLORS, cardLabel, isWild, sortHand } from '@/utils/uno'
+import { UNO_EMOJIS, UNO_PHRASE_GROUPS } from '@/utils/unoChat'
+import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/utils/unoSound'
+import type { UnoChatMessage, UnoColor } from '@/types/uno'
+import GameRulesModal from '@/components/GameRulesModal.vue'
+
+const rulesOpen = ref(false)
+
+/** 玩法说明（玩家视角精简版，含本房间村规）。 */
+const GAME_RULES: { heading?: string; lines: string[] }[] = [
+  {
+    heading: '🎯 目标',
+    lines: [
+      '最先出完手牌的人赢下本局；多局累计胜场',
+      '结算：赢家收全场手牌分，数字牌按面值、功能牌 20 分、万能牌 50 分',
+    ],
+  },
+  {
+    heading: '🃏 出牌规则',
+    lines: [
+      '出的牌必须与桌面弃牌同色、或同数字/同符号；万能牌任何时候都能出',
+      '出变色牌时从四色中指定一种颜色',
+      '没有能出的牌可以主动摸一张；摸完本轮可以出任意能出的牌，也可以直接跳过',
+      '开局首张翻出变色牌时，首位玩家选颜色开局',
+    ],
+  },
+  {
+    heading: '⚡ 功能牌',
+    lines: ['跳过：下家停一回合', '反转：调转出牌方向（2 人局等于跳过对方）', '+2：下家摸 2 张并跳过', '万能+4：指定颜色且下家摸 4 张'],
+  },
+  {
+    heading: '🏔️ 本房间村规：+2/+4 可叠加',
+    lines: [
+      '出 +2/+4 不立即罚摸，而是累计叠起来压给下家',
+      '下家可以继续叠任意颜色的 +2/+4，或者放弃：整堆全摸并跳过',
+      '被裸 +4 时可以质疑（对方真没别的牌你输：他改摸 4；你错：你摸 6），也可以出 +2/+4 反击转为叠加',
+      '叠加出的 +4 不可再质疑',
+    ],
+  },
+  {
+    heading: '📣 喊 UNO',
+    lines: [
+      '手里剩最后 1 张时要按「喊 UNO」，忘了会被其他玩家举报罚摸 2 张',
+      '被 +4 后你有 10 秒决定是否质疑',
+    ],
+  },
+  {
+    heading: '💬 聊天与超时',
+    lines: [
+      '房间内可发快捷句、表情和文字（自由文字需过微信内容审核）',
+      '出牌 20 秒超时自动代打，连续 3 次进入挂机；可随时开托管',
+    ],
+  },
+]
+
+const {
+  state,
+  acting,
+  isSeated,
+  isOwner,
+  isMyTurn,
+  myPlayer,
+  opponents,
+  myHandCount,
+  turnCountdown,
+  challengeCountdown,
+  unoWindowCountdown,
+  canIPlay,
+  createAndEnter,
+  joinByCode,
+  start,
+  drawDealer,
+  play,
+  draw,
+  pass,
+  challenge,
+  decline,
+  chooseStartColor,
+  sayUno,
+  reportUno,
+  requestRematch,
+  sendChat,
+  exitRoom,
+  startSync,
+  stopSync,
+} = useUnoRoom()
+
+const { unoChatTextEnabled, refreshFeatures } = useFeatures()
+
+const { images, ensure, preload } = useUnoCards()
+
+const joinCode = ref('')
+const selectedIndex = ref(-1)
+const colorPickerVisible = ref(false)
+const colorPickMode = ref<'wild' | 'start'>('wild')
+const pendingWildCard = ref('')
+const soundOn = ref(unoSoundEnabled())
+let pendingWild: { card: string; declaredUno: boolean } | null = null
+
+function toggleSound() {
+  soundOn.value = !soundOn.value
+  setUnoSoundEnabled(soundOn.value)
+  uni.showToast({ title: soundOn.value ? '音效已开启' : '音效已关闭', icon: 'none' })
+}
+
+/** 头像相对路径（/uploads/avatar/…）补全为后端绝对地址 */
+function avatarOf(url: string): string {
+  return url ? resolveAvatarUrl(url) : ''
+}
+
+// ---------- 房间内完善资料（微信头像昵称授权） ----------
+
+const profileEditorVisible = ref(false)
+const profileNickname = ref('')
+const profileAvatar = ref('')
+const savingProfile = ref(false)
+
+/** 已入座但还没设置过头像昵称时，显示引导横幅 */
+const showProfileBanner = computed(() => {
+  const me = myPlayer.value
+  return Boolean(me && (!me.avatarUrl || !me.nickname || me.nickname === '牌友'))
+})
+
+function openProfileEditor() {
+  profileNickname.value = myPlayer.value?.nickname === '牌友' ? '' : (myPlayer.value?.nickname ?? '')
+  profileAvatar.value = myPlayer.value?.avatarUrl ? avatarOf(myPlayer.value.avatarUrl) : ''
+  profileEditorVisible.value = true
+}
+
+function onChooseAvatar(event: { detail?: { avatarUrl?: string } }) {
+  const url = String(event.detail?.avatarUrl || '')
+  if (url) profileAvatar.value = url
+}
+
+async function saveMyProfile() {
+  if (savingProfile.value) return
+  const nickname = profileNickname.value.trim()
+  if (!nickname) {
+    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    return
+  }
+  savingProfile.value = true
+  try {
+    let avatarUrl = profileAvatar.value
+    if (avatarUrl.startsWith('wxfile://') || avatarUrl.startsWith('http://tmp/')) {
+      avatarUrl = await uploadAvatar(avatarUrl)
+    } else if (myPlayer.value?.avatarUrl && avatarUrl === avatarOf(myPlayer.value.avatarUrl)) {
+      avatarUrl = myPlayer.value.avatarUrl // 已存在后端的头像，回传相对路径即可
+    }
+    await saveUserProfile({ nickname, avatarUrl })
+    profileEditorVisible.value = false
+    uni.showToast({ title: '资料已保存', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '资料保存失败', icon: 'none' })
+  } finally {
+    savingProfile.value = false
+  }
+}
+
+// ---------- 动作播报条（对手出了什么牌、变了什么色，全员可见） ----------
+
+const bannerText = ref('')
+const bannerVisible = ref(false)
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+
+function seatName(seat: unknown): string {
+  if (typeof seat !== 'number' || !state.value) return ''
+  return state.value.players.find((p) => p.seat === seat)?.nickname ?? ''
+}
+
+function seasonName(color: unknown): string {
+  const c = String(color ?? '')
+  return c === 'r' || c === 'g' || c === 'b' || c === 'y' ? `「${COLOR_META[c].season}」` : ''
+}
+
+function eventText(ev: { type: string; card?: string; [key: string]: unknown }): string {
+  const name = seatName(ev.seat)
+  const label = ev.card ? cardLabel(String(ev.card)) : ''
+  switch (ev.type) {
+    case 'play':
+      return `${name} 出了 ${label}${ev.unoDeclared ? '，并喊了 UNO！' : ''}`
+    case 'skip':
+      return `${name} 出了跳过牌，${seatName(ev.skippedSeat)} 被跳过`
+    case 'reverse':
+      return `${name} 出了反转牌，方向掉转`
+    case 'draw2':
+      return ev.stackCount && Number(ev.stackCount) > 2
+        ? `${name} 叠加 +2，累计要摸 ${ev.stackCount} 张！`
+        : `${name} 出了 +2，${seatName(ev.toSeat)} 可叠加或摸 2 张`
+    case 'wild':
+      return `${name} 出了变色牌，指定${seasonName(ev.color)}季`
+    case 'wild4':
+      return ev.stacked
+        ? `${name} 叠加 +4，累计要摸 ${ev.stackCount} 张！`
+        : `${name} 出了王牌 +4 并指定${seasonName(ev.color)}季，${seatName(ev.toSeat)} 可质疑`
+    case 'stack_draw':
+      return `${name} 摸了 ${ev.count} 张加牌并跳过`
+    case 'wild4_draw':
+      return `${seatName(ev.toSeat)} 摸 4 张并跳过`
+    case 'challenge_guilty':
+      return `质疑成功！${seatName(ev.fromSeat)} 的 +4 违规，改摸 4 张`
+    case 'challenge_innocent':
+      return `质疑失败，${name} 摸 6 张`
+    case 'draw':
+      return `${name} 摸了 1 张牌`
+    case 'draw_pass':
+      return `${name} 摸牌后仍无牌可出，跳过`
+    case 'timeout':
+      return `${name} 超时，自动摸牌跳过`
+    case 'pass':
+      return `${name} 选择不出`
+    case 'uno':
+      return `${name} 喊了 UNO！`
+    case 'catch':
+      return `${seatName(ev.bySeat)} 举报 ${name} 没喊 UNO，罚摸 2 张`
+    case 'color_pick':
+      return ev.auto ? `${name} 超时，随机${seasonName(ev.color)}季开局` : `${name} 选择${seasonName(ev.color)}季开局`
+    case 'win':
+      return `${name} 出完所有手牌！`
+    case 'leave':
+      return `${name} 离开了牌局`
+    case 'win_last_man':
+      return `其他玩家都已离开或离线，${name} 获胜！`
+    case 'dealer_draw':
+      return `${name} 抽到了 ${label}`
+    case 'dealer_reveal':
+      return '🎴 全员亮牌！比比谁的点数大'
+    case 'dealer':
+      return ev.byWinner
+        ? `上局赢家 ${name} 作为庄家先出牌`
+        : `🎲 ${name} 抽的牌最大，成为庄家先出牌！`
+    default:
+      return ''
+  }
+}
+
+function showBanner(text: string) {
+  if (!text) return
+  bannerText.value = text
+  bannerVisible.value = true
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => {
+    bannerVisible.value = false
+  }, 2600)
+}
+
+// 桌面事件 → 提示音 + 播报条（所有在线玩家都会收到，WS 推送驱动）
+watch(
+  () => state.value?.version,
+  () => {
+    const ev = state.value?.lastEvent
+    if (!ev?.type) return
+    const type = ev.type
+    if (type === 'win' || type === 'win_last_man') playUnoSound('win')
+    else if (type === 'uno' || type === 'catch' || type === 'dealer') playUnoSound('uno')
+    else if (type === 'play' && ev.unoDeclared) playUnoSound('uno') // 喊 UNO 并出牌
+    else if (['draw', 'draw_pass', 'stack_draw', 'timeout', 'wild4_draw', 'challenge_guilty', 'challenge_innocent'].includes(type)) playUnoSound('draw')
+    else if (['play', 'skip', 'reverse', 'draw2', 'wild', 'wild4', 'color_pick', 'dealer_draw'].includes(type)) playUnoSound('play')
+    showBanner(eventText(ev))
+  },
+)
+
+/** 手牌自动理牌：同色归堆（春绿→夏红→秋黄→冬蓝→百搭），摸牌自动插进同色区。 */
+const sortedHand = computed(() => sortHand(state.value?.myHand ?? []))
+
+const selectedCard = computed(() => {
+  const hand = sortedHand.value
+  if (!hand || selectedIndex.value < 0 || selectedIndex.value >= hand.length) return null
+  return hand[selectedIndex.value]
+})
+
+const colorMeta = computed(() => {
+  const color = state.value?.currentColor
+  if (color === 'r' || color === 'g' || color === 'b' || color === 'y') return COLOR_META[color]
+  return { season: '—', color: '#8a8a8a', name: '', deep: '#666666' }
+})
+
+const currentPlayerName = computed(() => {
+  const current = state.value
+  if (!current || current.currentSeat === null) return ''
+  return current.players.find((p) => p.seat === current.currentSeat)?.nickname ?? ''
+})
+
+const winnerName = computed(() => {
+  const current = state.value
+  if (!current || current.winnerUserId === null) return ''
+  return current.players.find((p) => p.userId === current.winnerUserId)?.nickname ?? ''
+})
+
+const winReasonText = computed(() => {
+  const reason = state.value?.winReason
+  if (reason === 'forfeit') return '对手逃跑，判你获胜'
+  if (reason === 'last_man') return '其他玩家都已离开或离线，你是最后的玩家'
+  return '出完了所有手牌'
+})
+
+/** 我可喊 UNO：处于被举报窗口（补喊），或手牌只剩 1 张且还没喊过。 */
+const canSayUno = computed(() => {
+  const current = state.value
+  if (!current || current.status !== 'playing' || !isSeated.value) return false
+  if (current.uno?.mine) return true
+  return myHandCount.value === 1 && !current.players.find((p) => p.seat === current.mySeat)?.unoDeclared
+})
+
+/** 我可举报：有人没喊 UNO，3s 自喊宽限已过，且不是我自己。 */
+const canCatchUno = computed(() => {
+  const current = state.value
+  if (!current || current.status !== 'playing' || !isSeated.value || !current.uno) return false
+  return !current.uno.mine && unoWindowCountdown.value === 0
+})
+
+/** 手牌动态重叠：牌少全展开，牌多逐张叠（每张至少露出 48rpx 数字角），再多交给横向滚动。 */
+const cardOverlap = computed(() => {
+  const n = myHandCount.value
+  if (n <= 1) return 0
+  const total = 140 * n
+  const avail = 750 - 32 * 2 // 页面左右留白后可用宽度
+  if (total <= avail) return 0
+  return Math.min(Math.ceil((total - avail) / (n - 1)), 92)
+})
+
+const unoSeat = computed(() => state.value?.uno?.seat ?? -1)
+
+/** 抽牌定庄家：某座位抽到的牌 */
+function dealerDrawOf(seat: number): string | null {
+  return state.value?.dealerDraws?.[String(seat)] ?? null
+}
+
+/** 亮牌态的庄家判定（展示用，与服务端 pickDealer 同语义：数字最大、并列座位号小者）。 */
+const dealerWinnerSeat = computed<number | null>(() => {
+  const current = state.value
+  if (!current?.dealerReveal || !current.dealerDraws) return null
+  let winner: number | null = null
+  let best = -1
+  for (const p of current.players) {
+    if (p.left) continue
+    const card = current.dealerDraws[String(p.seat)]
+    if (!card) continue
+    const value = Number(card.slice(1))
+    if (value > best) {
+      best = value
+      winner = p.seat
+    }
+  }
+  return winner
+})
+const dealerWinnerName = computed(() => {
+  const seat = dealerWinnerSeat.value
+  return seat === null ? '?' : (state.value?.players.find((p) => p.seat === seat)?.nickname ?? '?')
+})
+const dealerWinnerValue = computed(() => {
+  const seat = dealerWinnerSeat.value
+  const card = seat === null ? null : (state.value?.dealerDraws?.[String(seat)] ?? null)
+  return card === null ? '?' : Number(card.slice(1))
+})
+
+const myDealerDrawn = computed(() => {
+  const current = state.value
+  return Boolean(current && current.mySeat !== null && current.dealerDraws && current.dealerDraws[String(current.mySeat)] !== undefined)
+})
+
+/** 我的回合提示：按实际局面给出张数准确的指引 */
+const myTurnHint = computed(() => {
+  const current = state.value
+  if (!current) return ''
+  if (current.drawnCard) return '已摸牌：出任意能出的牌，或选择不出'
+  const stack = current.drawStack
+  if (stack) {
+    return stack.only4
+      ? `被叠了 +4，累计 ${stack.count} 张：只能出 +4 反击，或点牌堆全摸`
+      : `被加牌累计 ${stack.count} 张：出 +2/+4 叠加，或点牌堆全摸`
+  }
+  if (current.challenge?.mine) return '被 +4 了：质疑、叠 +4 反击，或不质疑摸 4 张'
+  return '轮到你了：出牌或摸一张'
+})
+
+const colorPickPlayerName = computed(() => {
+  const current = state.value
+  if (!current?.colorPick) return ''
+  return current.players.find((p) => p.seat === current.colorPick?.seat)?.nickname ?? ''
+})
+
+// 牌面图片按需渲染：手牌/顶牌/牌背/抽牌定庄家的牌变化时补齐
+watch(
+  () => [state.value?.myHand, state.value?.topCard, state.value?.dealerDraws] as const,
+  () => {
+    const keys = [BACK_KEY]
+    if (state.value?.topCard) keys.push(state.value.topCard)
+    if (state.value?.myHand) keys.push(...state.value.myHand)
+    if (state.value?.dealerDraws) keys.push(...Object.values(state.value.dealerDraws))
+    ensure(keys)
+  },
+  { immediate: true, deep: true },
+)
+
+// 状态变化时收回已不在手上的选中
+watch(selectedCard, (card) => {
+  if (card === null) selectedIndex.value = -1
+})
+
+function onCardTap(index: number) {
+  if (!isMyTurn.value) {
+    uni.showToast({ title: '还没轮到你', icon: 'none' })
+    return
+  }
+  const card = sortedHand.value[index]
+  if (!card) return
+  // 已选中的牌任何时候都可以点按取消选中（哪怕摸牌后已不可出）
+  if (selectedIndex.value === index) {
+    selectedIndex.value = -1
+    return
+  }
+  if (!canIPlay(card)) {
+    const current = state.value
+    const tip = current?.challenge?.mine
+      ? '被 +4 了：只能叠 +4 反击'
+      : current?.drawStack
+        ? (current.drawStack.only4 ? '叠过 +4 后只能再叠 +4，或点牌堆全摸' : '只能出 +2/+4 叠加，或点牌堆全摸')
+        : '这张牌出不了'
+    uni.showToast({ title: tip, icon: 'none' })
+    return
+  }
+  selectedIndex.value = index
+}
+
+function onPlay(declaredUno: boolean) {
+  const card = selectedCard.value
+  if (!card) return
+  if (isWild(card)) {
+    pendingWild = { card, declaredUno }
+    pendingWildCard.value = card
+    colorPickMode.value = 'wild'
+    colorPickerVisible.value = true
+    return
+  }
+  selectedIndex.value = -1
+  void play(card, null, declaredUno)
+}
+
+function onPickColor(color: UnoColor) {
+  if (colorPickMode.value === 'start') {
+    colorPickerVisible.value = false
+    void chooseStartColor(color)
+    return
+  }
+  colorPickerVisible.value = false
+  pendingWildCard.value = ''
+  const pending = pendingWild
+  pendingWild = null
+  if (!pending) return
+  selectedIndex.value = -1
+  void play(pending.card, color, pending.declaredUno)
+}
+
+/** 开局选色必须选一个（官方规则），只有出牌选色可取消 */
+function onMaskTap() {
+  if (colorPickMode.value === 'wild') cancelColorPick()
+}
+
+function cancelColorPick() {
+  colorPickerVisible.value = false
+  pendingWildCard.value = ''
+  pendingWild = null
+}
+
+// 首张翻出变色牌：我是首位玩家时自动弹出选色
+watch(
+  () => state.value?.colorPick,
+  (colorPick) => {
+    if (colorPick?.mine) {
+      colorPickMode.value = 'start'
+      colorPickerVisible.value = true
+    } else if (colorPickMode.value === 'start' && !colorPick) {
+      colorPickerVisible.value = false
+    }
+  },
+)
+
+function onDeckTap() {
+  if (!isMyTurn.value || state.value?.drawnCard) return
+  selectedIndex.value = -1 // 摸牌后只能出摸的那张，先清掉选中态防卡死
+  void draw()
+}
+
+async function onCreate() {
+  await createAndEnter()
+}
+
+async function onJoin() {
+  await joinByCode(joinCode.value.trim())
+}
+
+async function onLeave() {
+  await exitRoom()
+  joinCode.value = ''
+}
+
+function copyCode() {
+  if (!state.value) return
+  uni.setClipboardData({ data: state.value.code })
+}
+
+// ---------- 聊天：座位气泡 + 未读角标 + 三 tab 面板 ----------
+
+const CHAT_COOLDOWN_S = 3
+const CHAT_BUBBLE_MS = 4000
+
+const chatPanelVisible = ref(false)
+const chatTab = ref<'phrase' | 'emoji' | 'text'>('phrase')
+const chatTabs = [
+  { key: 'phrase' as const, label: '快捷' },
+  { key: 'emoji' as const, label: '表情' },
+  { key: 'text' as const, label: '文字' },
+]
+const chatInput = ref('')
+const chatCooldown = ref(0)
+const unreadChat = ref(0)
+/** 座位 → 气泡文案；emoji 单独记一 map 控制字号 */
+const chatBubbles = reactive<Record<number, string>>({})
+const chatBubbleEmoji = reactive<Record<number, boolean>>({})
+const bubbleTimers = new Map<number, ReturnType<typeof setTimeout>>()
+let cooldownTimer: ReturnType<typeof setTimeout> | null = null
+let lastChatSeq = 0
+let chatSynced = false
+
+const myUserId = computed(() => {
+  const current = state.value
+  return current?.players.find((p) => p.seat === current.mySeat)?.userId ?? null
+})
+
+/** 面板里的最近消息（最新在上，最多 30 条）。 */
+const chatLog = computed<UnoChatMessage[]>(() => {
+  return (state.value?.chat ?? []).slice(-30).reverse()
+})
+
+/** 底部聊天条常驻显示的最近几条消息（新的在底部，超过 CHAT_FEED_KEEP 条顶部的消失）。 */
+const CHAT_FEED_KEEP = 5
+const chatFeed = computed<UnoChatMessage[]>(() => {
+  return (state.value?.chat ?? []).slice(-CHAT_FEED_KEEP)
+})
+
+function chatSenderName(m: UnoChatMessage): string {
+  return state.value?.players.find((p) => p.seat === m.seat)?.nickname ?? '牌友'
+}
+
+/** 快捷句分组按局势前置：被 +4 → 质疑组；自己或对手剩 1 张 → 剩牌博弈组。 */
+const sortedPhraseGroups = computed(() => {
+  const current = state.value
+  let priorityKey: string | null = null
+  if (current?.challenge?.mine) {
+    priorityKey = 'wild4'
+  } else if (current?.status === 'playing') {
+    const someoneLeft = current.players.some((p) => !p.left && p.handCount === 1 && p.seat !== current.mySeat)
+    if (myHandCount.value === 1 || someoneLeft) priorityKey = 'lastCard'
+  }
+  if (!priorityKey) return UNO_PHRASE_GROUPS
+  const hit = UNO_PHRASE_GROUPS.find((g) => g.key === priorityKey)
+  return hit ? [hit, ...UNO_PHRASE_GROUPS.filter((g) => g !== hit)] : UNO_PHRASE_GROUPS
+})
+
+function showBubble(seat: number, kind: string, text: string) {
+  chatBubbles[seat] = text
+  chatBubbleEmoji[seat] = kind === 'emoji'
+  const old = bubbleTimers.get(seat)
+  if (old) clearTimeout(old)
+  bubbleTimers.set(seat, setTimeout(() => {
+    delete chatBubbles[seat]
+    delete chatBubbleEmoji[seat]
+    bubbleTimers.delete(seat)
+  }, CHAT_BUBBLE_MS))
+}
+
+// 新消息按 seq 增量驱动：冒气泡 + 音效 + 未读；进房首帧只对齐 seq 不回放历史
+watch(
+  () => state.value?.chat,
+  (chat) => {
+    if (!chat || !chat.length) return
+    if (!chatSynced) {
+      chatSynced = true
+      lastChatSeq = chat[chat.length - 1].seq
+      return
+    }
+    const fresh = chat.filter((m) => m.seq > lastChatSeq)
+    if (!fresh.length) return
+    lastChatSeq = fresh[fresh.length - 1].seq
+    for (const m of fresh) {
+      showBubble(m.seat, m.kind, m.text)
+      if (m.userId !== myUserId.value) {
+        playUnoSound('chat')
+        if (!chatPanelVisible.value) unreadChat.value++
+      }
+    }
+  },
+)
+
+// 换房间/回大厅时重置聊天增量游标
+watch(
+  () => state.value?.code,
+  () => {
+    chatSynced = false
+    lastChatSeq = 0
+    unreadChat.value = 0
+    for (const seat of Object.keys(chatBubbles)) delete chatBubbles[Number(seat)]
+  },
+)
+
+function openChatPanel(preferred?: 'phrase' | 'emoji' | 'text') {
+  // 聊天条的「说点什么…」是输入样式，点了直接落到文字 tab；文字开关关闭时退回快捷句
+  if (preferred) {
+    chatTab.value = preferred === 'text' && !unoChatTextEnabled.value ? 'phrase' : preferred
+  }
+  chatPanelVisible.value = true
+  unreadChat.value = 0
+}
+
+function closeChatPanel() {
+  chatPanelVisible.value = false
+}
+
+function switchChatTab(key: 'phrase' | 'emoji' | 'text') {
+  chatTab.value = key
+}
+
+function startChatCooldown() {
+  chatCooldown.value = CHAT_COOLDOWN_S
+  if (cooldownTimer) clearTimeout(cooldownTimer)
+  const tick = () => {
+    if (chatCooldown.value > 0) {
+      chatCooldown.value--
+      cooldownTimer = setTimeout(tick, 1000)
+    }
+  }
+  cooldownTimer = setTimeout(tick, 1000)
+}
+
+// 乐观发送：点按立即关面板 + 进冷却（体感即时），请求后台异步跑，失败由 sendChat 内部 toast
+async function sendPhraseMsg(id: string) {
+  if (chatCooldown.value > 0) return
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('phrase', id)
+}
+
+async function sendEmojiMsg(emoji: string) {
+  if (chatCooldown.value > 0) return
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('emoji', emoji)
+}
+
+async function sendTextMsg() {
+  if (chatCooldown.value > 0) return
+  const text = chatInput.value.trim()
+  if (!text) {
+    uni.showToast({ title: '先说点什么吧', icon: 'none' })
+    return
+  }
+  if (!unoChatTextEnabled.value) {
+    uni.showToast({ title: '文字聊天维护中，用快捷句吧', icon: 'none' })
+    return
+  }
+  chatInput.value = ''
+  closeChatPanel()
+  startChatCooldown()
+  await sendChat('text', text)
+}
+
+// ---------- 生命周期 ----------
+
+onLoad((query) => {
+  void preload()
+  const code = typeof query?.room === 'string' ? query.room : ''
+  if (/^[0-9]{4}$/.test(code)) {
+    void joinByCode(code)
+  }
+})
+
+onShow(() => {
+  if (state.value) startSync()
+  void refreshFeatures()
+})
+
+onHide(() => {
+  stopSync()
+})
+
+onUnload(() => {
+  stopSync()
+})
+
+onShareAppMessage(() => ({
+  title: state.value ? `来一局枫趣牌局！房间码 ${state.value.code}` : '来一局枫趣牌局！',
+  path: state.value ? `/pages-games/uno/index?room=${state.value.code}` : '/pages-games/uno/index',
+}))
+</script>
+
+<style lang="scss" scoped>
+// 「枫趣牌局」品牌色板：奶油白底 + 墨绿桌布 + 枫叶红主色 + 金黄强调（60/25/10/5）
+$felt: #21483D;
+$cream: #FFF8ED;
+$ink: #493E37;
+$red: #E85D4A;
+$gold: #F4B942;
+$maple-light: #FBE4D5;
+
+.uno {
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, $cream 0%, #FDF1E0 100%);
+  color: $ink;
+
+  // 去掉小程序 button 默认的 ::after 描边；disabled 时微信会套默认灰色，需显式覆盖
+  button::after { border: none; }
+  button[disabled] { opacity: 1; }
+}
+
+// ---------- 大厅 ----------
+.lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 140rpx 48rpx 0;
+
+  &__logo { width: 220rpx; height: 220rpx; border-radius: 48rpx; box-shadow: 0 12rpx 32rpx rgba(73, 62, 55, 0.18); }
+  &__title { font-size: 56rpx; font-weight: 700; margin-top: 28rpx; color: $felt; }
+  &__subtitle { font-size: 26rpx; color: rgba(73, 62, 55, 0.6); margin-top: 12rpx; }
+  &__create {
+    margin-top: 80rpx;
+    width: 480rpx;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 48rpx;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+  }
+  &__join { display: flex; align-items: center; gap: 16rpx; margin-top: 40rpx; }
+  &__rules { margin-top: 28rpx; font-size: 26rpx; color: $ink; text-decoration: underline; }
+  // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
+  &__input {
+    width: 320rpx;
+    height: 88rpx;
+    padding: 0 24rpx;
+    background: #ffffff;
+    border: 2rpx solid #f0e4d7;
+    border-radius: 20rpx;
+    color: $ink;
+    font-size: 28rpx;
+    box-sizing: border-box;
+    text-align: center;
+    letter-spacing: 8rpx;
+  }
+  &__join-btn {
+    width: 160rpx;
+    height: 88rpx;
+    line-height: 88rpx;
+    border-radius: 20rpx;
+    background: #ffffff;
+    color: #a8744b;
+    border: 2rpx solid #c8956c;
+    font-size: 28rpx;
+    box-sizing: border-box;
+
+    &[disabled] { opacity: 0.55; }
+  }
+}
+
+// ---------- 房间公共 ----------
+.room { padding: 24rpx; }
+// 对局中底部有固定的聊天条（消息流 + 入口），留出内容空间防遮挡
+.room--playing { padding-bottom: calc(330rpx + env(safe-area-inset-bottom)); }
+
+.room__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8rpx 8rpx 16rpx;
+
+  &-actions { display: flex; align-items: center; gap: 16rpx; }
+}
+.room__code { font-size: 30rpx; font-weight: 600; color: $ink; }
+.room__sound { font-size: 34rpx; padding: 8rpx; }
+.room__share {
+  font-size: 24rpx;
+  background: $maple-light;
+  color: $ink;
+  border-radius: 28rpx;
+  padding: 0 28rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+}
+.room__leave {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $red;
+  background: rgba(232, 93, 74, 0.12);
+  border-radius: 28rpx;
+  padding: 0 28rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+}
+
+// ---------- 资料引导 ----------
+.profile-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 8rpx 20rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 20rpx;
+  background: #FDF3D8;
+  border: 2rpx dashed $gold;
+  font-size: 26rpx;
+  color: $ink;
+
+  &__go { color: $red; font-weight: 600; }
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 28rpx;
+  gap: 24rpx;
+
+  &__avatar-btn {
+    width: 140rpx;
+    height: 140rpx;
+    border-radius: 50%;
+    padding: 0;
+    background: $maple-light;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  &__avatar { width: 140rpx; height: 140rpx; border-radius: 50%; }
+  &__avatar-hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.55); text-align: center; line-height: 1.4; }
+  &__nickname {
+    width: 100%;
+    height: 88rpx;
+    background: $maple-light;
+    border-radius: 16rpx;
+    padding: 0 24rpx;
+    box-sizing: border-box;
+    font-size: 30rpx;
+    color: $ink;
+  }
+  &__save {
+    width: 100%;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 40rpx;
+  }
+}
+
+// ---------- 等待开局 ----------
+.waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 60rpx;
+
+  &__players {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28rpx;
+    max-width: 640rpx;
+  }
+  &__player { display: flex; flex-direction: column; align-items: center; min-width: 140rpx; position: relative; }
+  &__player--win { animation: dealer-win-pulse 1s ease-in-out infinite; }
+  &__player--dim { opacity: 0.55; }
+  &__crown {
+    position: absolute; top: -10rpx; right: 6rpx; font-size: 22rpx; font-weight: 800;
+    background: $gold; color: $ink; border-radius: 999rpx; padding: 4rpx 12rpx;
+    box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.25); z-index: 2;
+  }
+  &__sub--reveal { color: #ffe9b8; font-weight: 700; }
+  &__winner-name { color: $gold; font-weight: 800; }
+  &__avatar {
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 50%;
+    background: $maple-light;
+    &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 48rpx; }
+  }
+  &__name { font-size: 26rpx; margin-top: 10rpx; max-width: 240rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__owner {
+    margin-top: 4rpx;
+    font-size: 18rpx;
+    font-weight: 700;
+    color: $ink;
+    background: $gold;
+    padding: 2rpx 14rpx;
+    border-radius: 16rpx;
+  }
+  &__dot {
+    position: absolute;
+    top: 4rpx;
+    right: 24rpx;
+    width: 18rpx;
+    height: 18rpx;
+    border-radius: 50%;
+    background: #83cc90;
+    border: 3rpx solid $cream;
+    &--off { background: #b8b0a8; }
+  }
+  &__start {
+    margin-top: 70rpx;
+    width: 480rpx;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 48rpx;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+  }
+  &__hint { margin-top: 70rpx; font-size: 28rpx; color: rgba(73, 62, 55, 0.6); }
+}
+
+// ---------- 抽牌定庄家 ----------
+.dealer {
+  margin: 24rpx 12rpx;
+  padding: 40rpx 28rpx;
+  background: $felt;
+  border-radius: 36rpx;
+  box-shadow: 0 12rpx 32rpx rgba(33, 72, 61, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__title { font-size: 38rpx; font-weight: 700; color: $cream; }
+  &__sub { font-size: 24rpx; color: rgba(255, 248, 237, 0.75); margin-top: 12rpx; text-align: center; }
+  &__players {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28rpx;
+    margin-top: 36rpx;
+  }
+  &__player { display: flex; flex-direction: column; align-items: center; min-width: 120rpx; }
+  &__avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: rgba(255, 248, 237, 0.2);
+    &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+  }
+  &__name { font-size: 22rpx; color: $cream; margin-top: 8rpx; max-width: 160rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__card {
+    width: 96rpx;
+    height: 144rpx;
+    border-radius: 12rpx;
+    margin-top: 12rpx;
+
+    &--pending {
+      background: rgba(255, 248, 237, 0.15);
+      border: 2rpx dashed rgba(255, 248, 237, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 248, 237, 0.5);
+      font-size: 40rpx;
+    }
+  }
+  &__draw {
+    margin-top: 40rpx;
+    width: 360rpx;
+    background: $gold;
+    color: $ink;
+    font-weight: 700;
+    border-radius: 44rpx;
+  }
+  &__waiting { margin-top: 40rpx; font-size: 26rpx; color: rgba(255, 248, 237, 0.75); }
+}
+
+// ---------- 对手 ----------
+.opponents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16rpx;
+  min-height: 170rpx;
+}
+
+.opp {
+  min-width: 150rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #ffffff;
+  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.08);
+  position: relative;
+
+  &--current { background: #FDF3D8; box-shadow: 0 0 0 3rpx $gold; }
+  &--left { opacity: 0.45; }
+
+  &__avatar-wrap { position: relative; }
+  &__avatar {
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: 50%;
+    background: $maple-light;
+    &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 36rpx; }
+  }
+  &__dot {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 50%;
+    background: #83cc90;
+    border: 3rpx solid #ffffff;
+    &--off { background: #b8b0a8; }
+  }
+  &__timer {
+    position: absolute;
+    top: -14rpx;
+    left: -14rpx;
+    min-width: 40rpx;
+    height: 40rpx;
+    border-radius: 50%;
+    background: $red;
+    color: #fff;
+    font-size: 22rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+  &__name { font-size: 24rpx; margin-top: 8rpx; max-width: 220rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__cards { display: flex; align-items: center; margin-top: 6rpx; }
+  &__back { width: 30rpx; height: 45rpx; border-radius: 6rpx; }
+  &__count { font-size: 24rpx; margin-left: 8rpx; font-weight: 600; }
+  &__tag {
+    margin-top: 6rpx;
+    font-size: 20rpx;
+    padding: 2rpx 14rpx;
+    border-radius: 20rpx;
+    background: $maple-light;
+    color: $ink;
+
+    &--uno { background: $red; color: #fff; font-weight: 700; }
+  }
+}
+
+// ---------- 桌面中央（墨绿桌布） ----------
+.table-zone {
+  position: relative;
+}
+
+.event-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  max-width: 84%;
+  padding: 16rpx 36rpx;
+  border-radius: 44rpx;
+  background: rgba(33, 72, 61, 0.94);
+  color: #FFF8ED;
+  font-size: 28rpx;
+  font-weight: 600;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 6;
+
+  &--show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.table {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 48rpx;
+  margin: 28rpx 12rpx 8rpx;
+  padding: 36rpx 24rpx;
+  min-height: 260rpx;
+  background: $felt;
+  border-radius: 36rpx;
+  box-shadow: 0 12rpx 32rpx rgba(33, 72, 61, 0.3);
+
+  &__card { width: 150rpx; height: 225rpx; border-radius: 18rpx; box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.35); }
+  &__pile { position: relative; display: flex; flex-direction: column; align-items: center; }
+  &__pile-count {
+    position: absolute;
+    bottom: 52rpx;
+    right: -12rpx;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 20rpx;
+    padding: 2rpx 14rpx;
+    border-radius: 20rpx;
+  }
+  &__pile-hint { margin-top: 10rpx; font-size: 22rpx; color: $gold; }
+  &__info { display: flex; flex-direction: column; align-items: center; gap: 16rpx; }
+  &__color {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36rpx;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 0 6rpx rgba(255, 255, 255, 0.25);
+  }
+  &__direction { font-size: 22rpx; color: rgba(255, 248, 237, 0.8); }
+}
+
+// ---------- 质疑 / UNO 条 / 叠加条 ----------
+.challenge,
+.uno-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin: 12rpx 24rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 20rpx;
+  background: $maple-light;
+
+  &__text { font-size: 26rpx; }
+  &__btn {
+    font-size: 26rpx;
+    background: $red;
+    color: #fff;
+    border-radius: 32rpx;
+    padding: 0 36rpx;
+    height: 64rpx;
+    line-height: 64rpx;
+
+    &--plain { background: rgba(73, 62, 55, 0.12); color: $ink; }
+  }
+}
+
+.stack-bar {
+  display: flex;
+  justify-content: center;
+  margin: 12rpx 24rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 20rpx;
+  background: rgba(232, 93, 74, 0.14);
+  border: 2rpx dashed $red;
+
+  &__text { font-size: 26rpx; font-weight: 600; color: $red; }
+}
+
+.uno-bar {
+  background: #FDF3D8;
+
+  &__say,
+  &__catch {
+    font-size: 28rpx;
+    font-weight: 700;
+    border-radius: 36rpx;
+    padding: 0 40rpx;
+    height: 72rpx;
+    line-height: 72rpx;
+  }
+  &__say { background: $gold; color: $ink; }
+  &__catch { background: $red; color: #fff; }
+}
+
+// ---------- 手牌 ----------
+.hand {
+  margin-top: 12rpx;
+
+  &__status { text-align: center; font-size: 26rpx; color: rgba(73, 62, 55, 0.7); min-height: 40rpx;
+    &--mine { color: $red; font-weight: 600; }
+  }
+  &__scroll { margin-top: 8rpx; white-space: nowrap; }
+  &__cards { display: inline-flex; align-items: flex-end; padding: 20rpx 48rpx 8rpx 24rpx; min-height: 240rpx; box-sizing: content-box; }
+  &__card {
+    width: 140rpx;
+    height: 210rpx;
+    flex-shrink: 0;
+    border-radius: 16rpx;
+    position: relative;
+    transition: transform 0.15s ease;
+    &--selected { transform: translateY(-28rpx); }
+    &--dim { opacity: 0.78; filter: grayscale(0.3); }
+  }
+  &__new {
+    position: absolute;
+    top: -10rpx;
+    right: -6rpx;
+    background: $gold;
+    color: $ink;
+    font-size: 18rpx;
+    font-weight: 700;
+    padding: 2rpx 10rpx;
+    border-radius: 16rpx;
+    box-shadow: 0 2rpx 6rpx rgba(73, 62, 55, 0.25);
+  }
+  &__img { width: 140rpx; height: 210rpx; border-radius: 16rpx; box-shadow: 0 4rpx 10rpx rgba(73, 62, 55, 0.15); }
+  &__actions { display: flex; justify-content: center; gap: 20rpx; margin-top: 16rpx; min-height: 80rpx; }
+  &__btn {
+    font-size: 28rpx;
+    font-weight: 700;
+    border-radius: 40rpx;
+    padding: 0 48rpx;
+    height: 80rpx;
+    line-height: 80rpx;
+    background: $felt;
+    color: $cream;
+
+    &--uno { background: $red; color: #fff; }
+    &--plain { background: $maple-light; color: $ink; }
+  }
+}
+
+// ---------- 结算 ----------
+.result-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(73, 62, 55, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.result {
+  width: 600rpx;
+  background: $cream;
+  color: $ink;
+  border-radius: 28rpx;
+  padding: 48rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__title { font-size: 40rpx; font-weight: 700; }
+  &__reason { font-size: 26rpx; color: rgba(73, 62, 55, 0.6); margin-top: 10rpx; }
+  &__scores { width: 100%; margin-top: 32rpx; }
+  &__row { display: flex; justify-content: space-between; padding: 12rpx 0; font-size: 28rpx; border-bottom: 1rpx solid rgba(73, 62, 55, 0.1); }
+  &__btn {
+    margin-top: 28rpx;
+    width: 100%;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    border-radius: 44rpx;
+
+    &--plain { background: rgba(73, 62, 55, 0.1); color: $ink; margin-top: 16rpx; }
+  }
+}
+
+// ---------- 选色 ----------
+.color-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(73, 62, 55, 0.18);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  box-sizing: border-box;
+  z-index: 30;
+}
+
+.color-panel {
+  width: 600rpx;
+  background: $cream;
+  border-radius: 28rpx;
+  padding: 40rpx;
+
+  &__title { text-align: center; font-size: 34rpx; font-weight: 700; color: $ink; }
+  &__preview { display: flex; justify-content: center; margin-top: 20rpx; }
+  &__card { width: 120rpx; height: 180rpx; border-radius: 14rpx; box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.2); }
+  &__row { display: flex; justify-content: space-between; margin-top: 28rpx; }
+  &__item {
+    width: 120rpx;
+    height: 120rpx;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.2);
+  }
+  &__season { font-size: 40rpx; font-weight: 700; text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3); }
+  &__cname { font-size: 20rpx; opacity: 0.9; }
+  &__cancel {
+    margin-top: 16rpx;
+    width: 100%;
+    background: rgba(73, 62, 55, 0.08);
+    color: $ink;
+    font-size: 28rpx;
+    border-radius: 40rpx;
+  }
+}
+
+// ---------- 聊天 ----------
+// 座位气泡：挂在各锚点（对手头像/等待区玩家/我的手牌区）上方，约 4s 自动消失
+.seat-bubble {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 320rpx;
+  padding: 10rpx 20rpx;
+  background: #fff;
+  border: 2rpx solid rgba(73, 62, 55, 0.12);
+  border-radius: 18rpx;
+  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.15);
+  font-size: 24rpx;
+  color: $ink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 12;
+  animation: bubble-pop 0.18s ease-out;
+
+  &--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
+  &--opp { bottom: calc(100% + 8rpx); }
+  &--mine { top: -64rpx; left: 24rpx; transform: none; background: $maple-light; }
+}
+
+@keyframes bubble-pop {
+  from { transform: translateX(-50%) scale(0.6); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+// 底部聊天条：固定在屏幕底部，消息流（最近 3 条，新的从下方滑入，顶部超出消失）+ 快捷入口
+.chat-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 248, 237, 0.95);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+
+  &__feed { display: flex; flex-direction: column; gap: 4rpx; }
+  &__feed-item {
+    display: flex;
+    align-items: baseline;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 24rpx;
+    animation: feed-in 0.2s ease-out;
+  }
+  &__feed-name { color: rgba(73, 62, 55, 0.5); flex-shrink: 0; }
+  &__feed-text { color: rgba(73, 62, 55, 0.85); overflow: hidden; text-overflow: ellipsis; }
+  &__feed-text--emoji { font-size: 30rpx; }
+
+  &__trigger {
+    position: relative;
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    height: 60rpx;
+    padding: 0 26rpx;
+    background: #fff;
+    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    border-radius: 30rpx;
+  }
+  &__icon { font-size: 26rpx; }
+  &__hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); }
+  &__badge {
+    position: absolute;
+    top: -10rpx;
+    right: -6rpx;
+    min-width: 30rpx;
+    height: 30rpx;
+    line-height: 30rpx;
+    padding: 0 6rpx;
+    box-sizing: border-box;
+    border-radius: 15rpx;
+    background: $red;
+    color: #fff;
+    font-size: 20rpx;
+    text-align: center;
+  }
+}
+
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(73, 62, 55, 0.28);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 40;
+}
+
+.chat-panel {
+  width: 100%;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: $cream;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+
+  &__header { display: flex; justify-content: space-between; align-items: center; }
+  &__title { font-size: 32rpx; font-weight: 700; color: $ink; }
+  &__close { font-size: 32rpx; color: rgba(73, 62, 55, 0.5); padding: 8rpx; }
+
+  &__log {
+    height: 200rpx;
+    margin-top: 16rpx;
+    padding: 12rpx 20rpx;
+    background: rgba(73, 62, 55, 0.05);
+    border-radius: 16rpx;
+    box-sizing: border-box;
+  }
+  &__empty { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); text-align: center; margin-top: 60rpx; }
+  &__log-item { display: flex; align-items: baseline; gap: 12rpx; margin-top: 8rpx; }
+  &__log-name { font-size: 22rpx; color: rgba(73, 62, 55, 0.55); flex-shrink: 0; }
+  &__log-text { font-size: 26rpx; color: $ink; word-break: break-all; }
+  &__log-text--emoji { font-size: 34rpx; }
+
+  &__tabs { display: flex; gap: 12rpx; margin-top: 20rpx; }
+  &__tab {
+    padding: 8rpx 32rpx;
+    border-radius: 28rpx;
+    background: rgba(73, 62, 55, 0.08);
+    font-size: 26rpx;
+    color: $ink;
+
+    &--on { background: $felt; color: $cream; font-weight: 600; }
+    &--off { opacity: 0.45; }
+  }
+
+  &__body { flex: 1; min-height: 320rpx; max-height: 40vh; margin-top: 16rpx; }
+
+  &__group { margin-top: 12rpx; }
+  &__group-title { font-size: 22rpx; color: rgba(73, 62, 55, 0.5); }
+  &__phrases { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 10rpx; }
+  &__phrase {
+    padding: 12rpx 24rpx;
+    background: #fff;
+    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    border-radius: 28rpx;
+    font-size: 26rpx;
+    color: $ink;
+
+    &--off { opacity: 0.45; }
+  }
+
+  &__emojis { display: flex; flex-wrap: wrap; gap: 8rpx; }
+  &__emoji {
+    width: 122rpx;
+    height: 96rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52rpx;
+    border-radius: 16rpx;
+    background: #fff;
+
+    &--off { opacity: 0.45; }
+  }
+
+  &__body--text { display: flex; flex-direction: column; justify-content: center; }
+  &__text-off { font-size: 26rpx; color: rgba(73, 62, 55, 0.55); text-align: center; }
+  &__input-row { display: flex; gap: 16rpx; align-items: center; }
+  &__input {
+    flex: 1;
+    height: 80rpx;
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 0 24rpx;
+    font-size: 28rpx;
+    color: $ink;
+  }
+  &__send {
+    width: 160rpx;
+    height: 80rpx;
+    line-height: 80rpx;
+    background: $red;
+    color: #fff;
+    font-weight: 700;
+    font-size: 28rpx;
+    border-radius: 16rpx;
+    padding: 0;
+
+    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+  }
+}
+
+@keyframes dealer-win-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+</style>

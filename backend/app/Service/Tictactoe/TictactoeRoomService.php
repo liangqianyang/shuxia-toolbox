@@ -447,7 +447,7 @@ final class TictactoeRoomService
             'rps' => $this->serializeRps($room, $myMark),
             'chat' => array_values($room->chat ?? []),
             'chatSeq' => $this->chatSeqOf($room),
-            'sharePath' => '/pages/tictactoe/index?room=' . $room->code,
+            'sharePath' => '/pages-games/tictactoe/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

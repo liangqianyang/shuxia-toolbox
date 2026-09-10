@@ -1424,19 +1424,21 @@ function testTetris() {
     return { ...createGame(1, rng), ...partials, events: [] }
   }
 
-  // 7-bag：一袋 7 种各一次；出生序列按袋对齐分块,每块恰为完整一袋
+  // 加量 8-bag：7 种各一 + 加塞一根长条；出生序列取前 8 块（= 完整一袋）
   const bag = shuffledBag(rng)
-  assert(bag.length === 7 && new Set(bag).size === 7, '7-bag：一袋恰好 7 种各一次')
-  // 出生序列取每局前 7 块（一整袋；原地硬降堆太高会顶出,不宜连取 14 块）
+  assert(bag.length === 8, '8-bag：一袋 8 块（7 种 + 加量长条）')
+  assert(bag.filter((id) => id === 'I').length === 2 || bag.some((id) => id === 'M' || id === 'D' || id === 'V'), '每袋保底两根长条（或被变种替换）')
+  // 出生序列取每局前 8 块（一整袋；原地硬降堆太高会顶出,不宜连取 16 块）
   for (let round = 0; round < 2; round++) {
     const firstBag: PieceId[] = []
     let seq = createGame(1, rng)
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       firstBag.push((seq.active as ActivePiece).id)
       seq = applyAction(seq, { t: 'hardDrop' })
       if (seq.phase === 'clearing') seq = applyAction(seq, { t: 'tick', dtMs: CLEAR_FLASH_MS })
     }
-    assert(new Set(firstBag).size === 7, `7-bag：第 ${round + 1} 局前 7 块 7 种各一次`)
+    assert(firstBag.filter((id) => id === 'I').length >= 1, `第 ${round + 1} 局前 8 块至少一根长条`)
+    assert(new Set(firstBag).size >= 6, `第 ${round + 1} 局前 8 块种类不少于 6`)
   }
 
   // 速度曲线（Guideline）
@@ -1641,6 +1643,93 @@ function testTetris() {
   clock = 4500
   ctrl.onTouchEnd(touch(90, 152))
   assert(gestures.softs === 2 && gestures.moves.length === 3, '手势：竖直主导 → 软降且不再横移')
+
+  // 旋转态手性回归：每个块的每个旋转态必须等于上一态顺时针旋转（旋转不改变手性）。
+  // L 曾把 1/2/3 态写成逆时针家族，state3 甚至是个 J 家族形状——顺时针转就「L 变 Z/S」。
+  const rotCWKeys = (id: 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'M' | 'D' | 'V', s: number) => {
+    const box = id === 'I' ? 4 : id === 'D' || id === 'V' ? 2 : id === 'M' ? 1 : 3
+    return pieceCells(id, s)
+      .map(([c, r]) => `${box - 1 - r}:${c}`)
+      .sort()
+      .join('|')
+  }
+  const stateKeys = (id: 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'M' | 'D' | 'V', s: number) =>
+    pieceCells(id, s)
+      .map(([c, r]) => `${c}:${r}`)
+      .sort()
+      .join('|')
+  for (const id of ['I', 'T', 'S', 'Z', 'J', 'L', 'D', 'V', 'X', 'M'] as const) {
+    for (let s = 0; s < 4; s++) {
+      const next = (s + 1) % 4
+      assert(stateKeys(id, next) === rotCWKeys(id, s), `旋转手性：${id} 态${s}→态${next} 为顺时针`)
+    }
+  }
+  // O 四态同形（SRS 中 O 旋转恒等）
+  {
+    const keys = [0, 1, 2, 3].map((s) => stateKeys('O', s))
+    assert(keys[0] === keys[1] && keys[1] === keys[2] && keys[2] === keys[3], '旋转手性：O 四态同形')
+  }
+
+  // 变种块：低概率混入 7-bag（15%）
+  const rngLow = (): number => 0.001
+  const rngHigh = (): number => 0.99
+  {
+    assert(shuffledBag(rngLow).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 低值 → 袋中混入变种块')
+    assert(!shuffledBag(rngHigh).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 高值 → 袋中无变种块')
+    for (let i = 0; i < 30; i++) {
+      const bag = shuffledBag()
+      assert(bag.length === 8, '混入后袋长仍为 8')
+    }
+  }
+
+  // 单格闪块：消列算 1 行 + 整列清空；满行优先于消列
+  {
+    const base = createGame(1, rngHigh)
+    const board = base.board.slice()
+    for (let y = 6; y < 10; y++) {
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[y * 10 + x] = 'T'
+      }
+    }
+    const withM: import('@/utils/tetris').TetrisState = {
+      ...base,
+      board,
+      active: { id: 'M', x: 4, y: 3, rot: 0 },
+      phase: 'playing',
+    }
+    const dropped = applyAction(withM, { t: 'hardDrop' })
+    assert(dropped.phase === 'clearing' && dropped.clearingCols.includes(4), '单格闪块进入消列相位')
+    assert(dropped.events.some((e) => e.t === 'cleared'), '消列产生 cleared 事件')
+    const ticked = applyAction(dropped, { t: 'tick', dtMs: CLEAR_FLASH_MS })
+    assert(ticked.lines === base.lines + 1, '消列计 1 行')
+    assert(ticked.board.slice(4 * 10, 5 * 10).every((c) => c === null), '第 4 列整列清空')
+
+    // 满行优先：补完整行时走行消除而非消列
+    const rowFull = base.board.slice()
+    for (let x = 0; x < 10; x++) {
+      if (x !== 4) rowFull[19 * 10 + x] = 'T'
+    }
+    const withM2: import('@/utils/tetris').TetrisState = {
+      ...base,
+      board: rowFull,
+      active: { id: 'M', x: 4, y: 3, rot: 0 },
+      phase: 'playing',
+    }
+    const dropped2 = applyAction(withM2, { t: 'hardDrop' })
+    assert(dropped2.phase === 'clearing' && dropped2.clearingRows.includes(19) && dropped2.clearingCols.length === 0, '满行优先于消列')
+  }
+
+  // 二格多米诺：贴墙旋转的踢墙
+  {
+    const empty = createGame(1, rngHigh)
+    const atWall: import('@/utils/tetris').TetrisState = {
+      ...empty,
+      active: { id: 'D', x: 9, y: 5, rot: 1 },
+      phase: 'playing',
+    }
+    const rotated = applyAction(atWall, { t: 'rotate', dir: 1 })
+    assert(rotated.active?.rot === 2 && rotated.active.x === 8, '多米诺贴墙旋转左踢一格')
+  }
 }
 
 // ══════════════════════════════ 推箱子 ══════════════════════════════

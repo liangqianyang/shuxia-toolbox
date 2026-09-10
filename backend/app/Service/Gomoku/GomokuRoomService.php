@@ -579,7 +579,7 @@ final class GomokuRoomService
             'rps' => $this->serializeRps($room, $myRole),
             'chat' => array_values($room->chat ?? []),
             'chatSeq' => $this->chatSeqOf($room),
-            'sharePath' => '/pages/gomoku/index?room=' . $room->code,
+            'sharePath' => '/pages-games/gomoku/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }
