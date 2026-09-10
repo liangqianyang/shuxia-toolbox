@@ -256,7 +256,7 @@
             <text class="jungle__rule-text">等级大的动物可以吃掉等级小或相同的动物。</text>
             <view class="jungle__rank-chain">
               <template v-for="(a, i) in RANK_ORDER" :key="a">
-                <text v-if="i" class="jungle__rank-gt">&gt;</text>
+                <text v-if="i" class="jungle__rank-gt">{{ '>' }}</text>
                 <view class="jungle__rank-chip"><text>{{ ANIMAL_CN[a] }}</text></view>
               </template>
             </view>

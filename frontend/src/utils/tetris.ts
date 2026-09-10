@@ -81,10 +81,8 @@ export type GameAction =
 
 const PIECE_IDS: PieceId[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
 
-/** 变种块（低概率混入 7-bag）：M 单格闪块（锁定后消除所在列）/ D 二格多米诺 / V 三格角块 / X 三格斜阶梯（角相连，两形态）。 */
-const VARIANT_IDS: PieceId[] = ['M', 'D', 'V', 'X']
-/** 每袋混入一枚变种块的概率。 */
-export const VARIANT_CHANCE = 0.4
+/** 变种块出现概率（1 = 每袋必有 2 个变种块；四选一加权：M/D/V 各 2、X 斜块 1）。 */
+export const VARIANT_CHANCE = 1
 
 /**
  * 各块四个旋转态的格子偏移（SRS 包围盒内，(列, 行)，行向下）。
@@ -200,10 +198,10 @@ export function emptyBoard(): Board {
   return new Array<Cell>(BOARD_W * BOARD_H).fill(null)
 }
 
-/** 加量 8-bag：7 种各一 + 每袋加塞一根长条（I 密度 1/7→2/8），杜绝"等不到 I 块"；
- *  每袋 VARIANT_CHANCE 概率把其中一枚替换成变种块（M/D/V）。 */
+/** 加量 9-bag：7 种各一 + 每袋加塞两根长条（I 密度 1/7→1/3），杜绝"等不到 I 块"；
+ *  每袋必有一个变种块，加权四选一：M/D/V 各权重 3、X 斜块权重 1（斜块出现得更少）。 */
 export function shuffledBag(rng: () => number = Math.random): PieceId[] {
-  const bag: PieceId[] = [...PIECE_IDS, 'I']
+  const bag: PieceId[] = [...PIECE_IDS, 'I', 'I']
   for (let i = bag.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
     const tmp = bag[i]
@@ -211,7 +209,39 @@ export function shuffledBag(rng: () => number = Math.random): PieceId[] {
     bag[j] = tmp
   }
   if (rng() < VARIANT_CHANCE) {
-    bag[Math.floor(rng() * bag.length)] = VARIANT_IDS[Math.floor(rng() * VARIANT_IDS.length)]
+    // 每袋 2 个变种块，四选一加权：M/D/V 各 2、X 斜块 1（斜块更稀有，闪块不再霸屏）
+    const weights: Array<[PieceId, number]> = [['M', 2], ['D', 2], ['V', 2], ['X', 1]]
+    const pickVariant = (): PieceId => {
+      let roll = rng() * weights.reduce((sum, [, w]) => sum + w, 0)
+      for (const [id, w] of weights) {
+        roll -= w
+        if (roll < 0) return id
+      }
+      return 'M'
+    }
+    // 两个不相邻的替换槽位（确定性构造，避免种子 rng 死循环）
+    const slotA = Math.floor(rng() * bag.length)
+    const slotB = (slotA + 1 + Math.floor(rng() * (bag.length - 1))) % bag.length
+    bag[slotA] = pickVariant()
+    bag[slotB] = pickVariant()
+  }
+  // 长条不相邻：两根 I 洗到相邻时，把其中一根换到不与 I 相邻的非长条位（两轮收敛，避免连出两根长条）
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < bag.length; k++) {
+      if (bag[k] !== 'I') continue
+      const prev = bag[k - 1]
+      const next = bag[k + 1]
+      if (prev === 'I' || next === 'I') {
+        const j = bag.findIndex(
+          (id, idx) => idx !== k && id !== 'I' && (idx === 0 || bag[idx - 1] !== 'I') && (idx === bag.length - 1 || bag[idx + 1] !== 'I'),
+        )
+        if (j >= 0) {
+          const tmp = bag[k]
+          bag[k] = bag[j]
+          bag[j] = tmp
+        }
+      }
+    }
   }
   return bag
 }
@@ -466,10 +496,10 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
       if (state.phase !== 'playing' || !state.active) return state
       const { active } = state
       if (collides(state.board, active.id, active.x, active.y + 1, active.rot)) return state
+      // 软降不计分：手指滑动会连续触发，+1/行会被无声刷分（Guideline 是 +1/行，休闲端去掉更直观）
       return {
         ...state,
         active: { ...active, y: active.y + 1 },
-        score: state.score + 1,
         gravityMs: 0,
         events: [],
       }

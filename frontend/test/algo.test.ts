@@ -1426,7 +1426,7 @@ function testTetris() {
 
   // 加量 8-bag：7 种各一 + 加塞一根长条；出生序列取前 8 块（= 完整一袋）
   const bag = shuffledBag(rng)
-  assert(bag.length === 8, '8-bag：一袋 8 块（7 种 + 加量长条）')
+  assert(bag.length === 9, '9-bag：一袋 9 块（7 种 + 加塞两根长条）')
   assert(bag.filter((id) => id === 'I').length === 2 || bag.some((id) => id === 'M' || id === 'D' || id === 'V'), '每袋保底两根长条（或被变种替换）')
   // 出生序列取每局前 8 块（一整袋；原地硬降堆太高会顶出,不宜连取 16 块）
   for (let round = 0; round < 2; round++) {
@@ -1570,10 +1570,10 @@ function testTetris() {
   assert(dropped.events.some((e) => e.t === 'hardDropped' && e.cells === 13) && dropped.events.some((e) => e.t === 'locked'), '硬降：立即锁定并盖章（事件链 hardDropped→locked）')
   assert(dropped.board[19 * BOARD_W + 3] === 'I' && dropped.board[19 * BOARD_W + 6] === 'I', '硬降：I 落底占满 cols 3-6')
 
-  // 软降：+1/行
+  // 软降：移动但不计分（手指滑动连续触发，+1/行会被无声刷分）
   const soft = craft({ active: { id: 'T', x: 4, y: 5, rot: 0 } })
   const softed = applyAction(soft, { t: 'softDrop' })
-  assert(softed.active?.y === 6 && softed.score === 1, '软降：下一行 +1 分')
+  assert(softed.active?.y === 6 && softed.score === 0, '软降：下一行但不计分')
 
   // 顶出：出生区被占 → 游戏结束
   const topped = emptyBoard()
@@ -1670,16 +1670,26 @@ function testTetris() {
     assert(keys[0] === keys[1] && keys[1] === keys[2] && keys[2] === keys[3], '旋转手性：O 四态同形')
   }
 
-  // 变种块：低概率混入 7-bag（15%）
+  // 变种块：每袋必有一个（M/D/V/X 四选一）
   const rngLow = (): number => 0.001
   const rngHigh = (): number => 0.99
   {
-    assert(shuffledBag(rngLow).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 低值 → 袋中混入变种块')
-    assert(!shuffledBag(rngHigh).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 高值 → 袋中无变种块')
-    for (let i = 0; i < 30; i++) {
+    assert(shuffledBag(rngLow).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 低值 → 袋中有变种块')
+    assert(shuffledBag(rngHigh).some((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X'), 'rng 高值 → 袋中也有变种块')
+    let xCount = 0
+    let mCount = 0
+    for (let i = 0; i < 500; i++) {
       const bag = shuffledBag()
-      assert(bag.length === 8, '混入后袋长仍为 8')
+      assert(bag.length === 9, '混入后袋长仍为 9')
+      assert(bag.filter((id) => id === 'M' || id === 'D' || id === 'V' || id === 'X').length === 2, '每袋恰好 2 个变种块')
+      assert(bag.filter((id) => id === 'I').length >= 1, '长条保底 1 根（变种可能覆盖长条槽位）')
+      for (let k = 0; k < bag.length - 1; k++) {
+        assert(!(bag[k] === 'I' && bag[k + 1] === 'I'), '长条不相邻（不连出两根长条）')
+      }
+      if (bag.includes('X')) xCount++
+      if (bag.includes('M')) mCount++
     }
+    assert(xCount < mCount, '斜块 X 出现频率低于 M（加权四选一）')
   }
 
   // 单格闪块：消列算 1 行 + 整列清空；满行优先于消列

@@ -178,16 +178,18 @@ function drawRailPanel(
   h: number,
   label: string,
   labelPx: number,
+  highlight = false,
 ): void {
   const rad = Math.max(8, labelPx * 1.1)
   ctx.fillStyle = RAIL_PANEL
   roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, rad)
   ctx.fill()
-  ctx.strokeStyle = BOARD_FRAME
-  ctx.lineWidth = 1
+  // highlight = 即将出生的「下一块」：金框金标，与后面的「后续」拉开视觉层级
+  ctx.strokeStyle = highlight ? '#F4B942' : BOARD_FRAME
+  ctx.lineWidth = highlight ? 1.8 : 1
   roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, rad)
   ctx.stroke()
-  ctx.fillStyle = RAIL_TEXT
+  ctx.fillStyle = highlight ? '#C08A1E' : RAIL_TEXT
   ctx.font = `700 ${labelPx}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
@@ -313,13 +315,11 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
       }
       ctx.restore()
     }
-    // 单格闪块下落时按真实时间闪烁（每 140ms 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
-    const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / 140) % 2 === 0 ? 1 : 0.45) : 1
-    ctx.globalAlpha = monoBlink
+    // 单格闪块下落时按真实时间闪烁（每 130ms 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
+    const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / 130) % 2 === 0 ? 1 : 0.3) : 1
     for (const [cx, cy] of pieceCells(active.id, active.rot)) {
-      drawCell(ctx, boardX + (active.x + cx) * cell + 1.5, boardY + (active.y + cy) * cell + 1.5, cell - 3, active.id)
+      drawCell(ctx, boardX + (active.x + cx) * cell + 1.5, boardY + (active.y + cy) * cell + 1.5, cell - 3, active.id, monoBlink)
     }
-    ctx.globalAlpha = 1
   }
   ctx.restore()
 
@@ -341,7 +341,8 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
   const queue = state.queue.slice(0, 3)
   queue.forEach((id, i) => {
     const boxTop = layout.nextY + i * (layout.boxH + layout.nextGap)
-    drawRailPanel(ctx, layout.nextX, boxTop, railW, layout.boxH, 'NEXT', layout.labelPx)
+    // 第 1 格 = 紧接着要出生的「下一块」（金框强调），后面的只是更远的后续
+    drawRailPanel(ctx, layout.nextX, boxTop, railW, layout.boxH, i === 0 ? '下一块' : '后续', layout.labelPx, i === 0)
     drawPiecePreview(
       ctx,
       id,
