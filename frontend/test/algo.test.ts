@@ -2002,3 +2002,124 @@ function testSokobanLevels() {
     assert(cell?.r === 2 && cell?.c === 1, 'pointToCell 落格正确')
   }
 }
+
+/* ── 象棋规则镜像（与后端 app/Service/Xiangqi/XiangqiRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
+{
+  const x = require('@/utils/xiangqi') as typeof import('@/utils/xiangqi')
+
+  type XP = import('@/types/xiangqi').XiangqiPiece
+  const P = (side: 'red' | 'black', piece: XP['piece']!, r: number, c: number): XP => ({ side, piece, r, c, alive: true })
+  const pseudoOf = (pieces: XP[], r: number, c: number) => new Set(x.pseudoTargets(pieces, r, c).map(([tr, tc]) => `${tr}:${tc}`))
+  const legalOf = (pieces: XP[], side: 'red' | 'black', r: number, c: number) => new Set(x.legalTargets(pieces, side, r, c).map(([tr, tc]) => `${tr}:${tc}`))
+
+  // 开局与地形
+  {
+    const pieces = x.standardPieces()
+    assert(pieces.length === 32, '象棋开局 32 子')
+    assert(pieces.filter((p) => p.side === 'red').length === 16, '红方 16 子')
+    assert(x.pieceAt(pieces, 0, 4)?.piece === 'k', '黑将 (0,4)')
+    assert(x.pieceAt(pieces, 9, 4)?.piece === 'k', '红帅 (9,4)')
+    assert(x.inPalace('black', 0, 3) && !x.inPalace('black', 3, 3) && x.inPalace('red', 9, 5) && !x.inPalace('red', 6, 4), '九宫范围')
+    assert(x.crossedRiver('red', 4) && !x.crossedRiver('red', 5) && !x.crossedRiver('black', 4) && x.crossedRiver('black', 5), '过河判定')
+  }
+
+  // 马：8 日字 + 蹩马腿
+  {
+    const t = pseudoOf([P('red', 'h', 4, 4)], 4, 4)
+    assert(t.size === 8 && t.has('2:3') && t.has('6:5'), '马空盘 8 日字')
+    const leg = [P('red', 'h', 4, 4), P('blue' as never, 'p', 3, 4) as XP]
+    const t2 = pseudoOf(leg, 4, 4)
+    assert(!t2.has('2:3') && !t2.has('2:5') && t2.has('3:2'), '马腿 (3,4) 蹩住上方两跳')
+  }
+
+  // 相：田字 + 塞象眼 + 不过河
+  {
+    const t = pseudoOf([P('black', 'e', 2, 2)], 2, 2)
+    assert(t.size === 4 && t.has('0:0') && t.has('4:4'), '象 4 田字')
+    const eye = [P('black', 'e', 2, 2), P('red', 'p', 3, 3)]
+    assert(!pseudoOf(eye, 2, 2).has('4:4'), '塞象眼 (3,3)')
+    const river = [P('black', 'e', 4, 2)]
+    assert(!pseudoOf(river, 4, 2).has('6:0'), '象不过河')
+  }
+
+  // 仕 / 帅九宫
+  {
+    const t = pseudoOf([P('black', 'a', 1, 4)], 1, 4)
+    assert(t.size === 4 && t.has('0:3') && t.has('2:5') && !t.has('1:3'), '士宫心四斜')
+    const t2 = pseudoOf([P('black', 'k', 0, 4)], 0, 4)
+    assert(t2.size === 3 && t2.has('1:4') && t2.has('0:5'), '将九宫横竖')
+  }
+
+  // 兵过河
+  {
+    const home = pseudoOf([P('red', 'p', 6, 2)], 6, 2)
+    assert(home.size === 1 && home.has('5:2'), '红兵未过河只进')
+    const cross = pseudoOf([P('red', 'p', 4, 2)], 4, 2)
+    assert(cross.has('3:2') && cross.has('4:1') && !cross.has('5:2'), '红兵过河可横不可退')
+    const blackP = pseudoOf([P('black', 'p', 5, 4)], 5, 4)
+    assert(blackP.has('6:4') && blackP.has('5:3') && blackP.has('5:5'), '黑卒过河三向')
+  }
+
+  // 车 + 炮架
+  {
+    const board = [P('red', 'r', 5, 0), P('black', 'p', 5, 3), P('black', 'p', 5, 6)]
+    const t = pseudoOf(board, 5, 0)
+    assert(t.has('5:2') && t.has('5:3') && !t.has('5:4'), '车遇子即止')
+    const cannon = [P('red', 'c', 5, 0), P('black', 'p', 5, 3), P('red', 'p', 5, 7)]
+    const t2 = pseudoOf(cannon, 5, 0)
+    assert(t2.has('5:2') && !t2.has('5:3') && !t2.has('5:7'), '炮遇炮架不吃不穿')
+    const cannonEat = [P('red', 'c', 5, 0), P('blue' as never, 'p', 5, 3) as XP, P('black', 'p', 5, 7)]
+    const t3 = pseudoOf(cannonEat, 5, 0)
+    assert(t3.has('5:2') && t3.has('5:7') && !t3.has('5:6'), '炮隔一炮架吃')
+  }
+
+  // 将帅对脸
+  {
+    const facing = [P('red', 'k', 9, 4), P('black', 'k', 0, 4)]
+    assert(x.kingsFacing(facing) === true, '对脸：同列无隔子')
+    const shield = [P('red', 'k', 9, 4), P('black', 'k', 0, 4), P('red', 'r', 5, 4)]
+    assert(x.kingsFacing(shield) === false, '有隔子不对脸')
+    const t = legalOf(facing, 'red', 9, 4)
+    assert(!t.has('8:4') && t.has('9:3') && t.has('9:5'), '对脸时帅不可直进保持对脸')
+  }
+
+  // 应将过滤
+  {
+    const check = [P('red', 'k', 9, 4), P('black', 'r', 5, 4)]
+    const t = legalOf(check, 'red', 9, 4)
+    assert(t.has('9:3') && t.has('9:5') && !t.has('8:4'), '应将：不能走到仍被将军的格')
+  }
+
+  // 将死
+  {
+    const mate = [P('black', 'k', 0, 4), P('red', 'k', 9, 0), P('red', 'r', 0, 3), P('red', 'r', 7, 3), P('red', 'r', 7, 4), P('red', 'r', 7, 5)]
+    assert(x.inCheck(mate, 'black') === true, '黑将被将军')
+    assert(x.hasAnyLegalMove(mate, 'black') === false, '黑无合法步 → 将死')
+    assert(x.hasAnyLegalMove(mate, 'red') === true, '红方仍有着法')
+    assert(x.hasAnyLegalMove(x.standardPieces(), 'red') && x.hasAnyLegalMove(x.standardPieces(), 'black'), '开局双方都有着法')
+  }
+
+  // applyMove
+  {
+    const applied = x.applyMove([P('red', 'c', 5, 0), P('black', 'p', 2, 0)], 5, 0, 2, 0)
+    assert(applied.captured === 'p' && applied.pieces[0].r === 2 && applied.pieces[1].alive === false, 'applyMove 炮打卒')
+  }
+}
+
+/* ── 井字棋规则镜像（与后端 app/Service/Tictactoe/TictactoeRule.php 双份同步） ── */
+{
+  const t = require('@/utils/tictactoe') as typeof import('@/utils/tictactoe')
+  type TTBoard = import('@/utils/tictactoe').TicTacToeBoard
+  const board = (s: string): TTBoard => Array.from(s).map((ch) => (ch === '.' ? null : (ch as TicTacToeMark)))
+
+  assert(t.LINES.length === 8, '井字棋 8 条胜利线')
+  assert(t.findWin(board('xxx......'), 'x')?.[1] === 0, '首行三连 X')
+  assert(t.findWin(board('......ooo'), 'o')?.[1] === 2, '末行三连 O')
+  assert(t.findWin(board('o.x..x..x'), 'x')?.[1] === 5, '末列三连')
+  assert(t.findWin(board('x...x...x'), 'x')?.[1] === 6, '主对角三连')
+  assert(t.findWin(board('..x.x.x..'), 'x')?.[1] === 7, '副对角三连')
+  assert(t.findWin(board('xxo......'), 'x') === null, '未连线不判胜')
+  assert(t.isFull(board('xoxxooxox')) === true, '棋满判定')
+  assert(t.isFull(board('xo.xxooxo')) === false, '有空格未满')
+  assert(t.emptyCells(board('x.x...o..')).join(',') === '1,3,4,5,7,8', '空格列表')
+}

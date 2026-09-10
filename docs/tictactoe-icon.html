@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>井字棋图标生成器</title>
+<!--
+  出图：
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+    --screenshot=/tmp/ttt-icon.png --window-size=512,512 --default-background-color=00000000 \
+    "file://$(pwd)/docs/tictactoe-icon.html"
+  sips -z 256 256 /tmp/ttt-icon.png --out frontend/cdn-assets/static/icons/tictactoe-1.png
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 512px; height: 512px; background: transparent; display: flex; align-items: center; justify-content: center; font-family: "PingFang SC", sans-serif; }
+  .card {
+    width: 440px; height: 440px; border-radius: 96px;
+    background: #FFFDF8; border: 10px solid #F0E4D7;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; width: 360px; }
+  .cell {
+    aspect-ratio: 1; border-radius: 24px; background: #F7EEDF; border: 4px solid #E8D9C4;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 76px; font-weight: 800;
+  }
+  .cell--win { background: #F4B94226; border-color: #F4B942; }
+  .gx { color: #E85D4A; }
+  .go { color: #5B8FB9; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="grid">
+      <div class="cell cell--win gx">✕</div>
+      <div class="cell cell--win gx">✕</div>
+      <div class="cell cell--win gx">✕</div>
+      <div class="cell"></div>
+      <div class="cell go">◯</div>
+      <div class="cell"></div>
+      <div class="cell go">◯</div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+    </div>
+  </div>
+</body>
+</html>

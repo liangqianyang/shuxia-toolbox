@@ -9,4 +9,6 @@ return [
     App\Listener\GomokuRpsSweepListener::class,
     App\Listener\JungleRpsSweepListener::class,
     App\Listener\JunqiSweepListener::class,
+    App\Listener\XiangqiSweepListener::class,
+    App\Listener\TictactoeSweepListener::class,
 ];

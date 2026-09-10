@@ -99,6 +99,24 @@
       }
     },
     {
+      "path": "pages/xiangqi/index",
+      "style": {
+        "navigationBarTitleText": "象棋",
+        "navigationBarBackgroundColor": "#FFF8F0",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FFF8F0"
+      }
+    },
+    {
+      "path": "pages/tictactoe/index",
+      "style": {
+        "navigationBarTitleText": "井字棋",
+        "navigationBarBackgroundColor": "#FFF8F0",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FFF8F0"
+      }
+    },
+    {
       "path": "pages/tool-library/index",
       "style": {
         "navigationBarTitleText": "首页工具管理"

@@ -19,6 +19,10 @@ use App\Controller\JungleController;
 use App\Controller\JungleWsController;
 use App\Controller\JunqiController;
 use App\Controller\JunqiWsController;
+use App\Controller\TictactoeController;
+use App\Controller\TictactoeWsController;
+use App\Controller\XiangqiController;
+use App\Controller\XiangqiWsController;
 use App\Controller\LudoController;
 use App\Controller\LudoWsController;
 use App\Controller\TravelController;
@@ -126,6 +130,27 @@ Router::addGroup('/api', function (): void {
     Router::post('/junqi/room/{code}/chat', [JunqiController::class, 'chat']);
     Router::post('/junqi/room/{code}/leave', [JunqiController::class, 'leave']);
 
+    // 联机象棋：房间创建/加入、猜拳定红黑、轮询同步（WS 降级通道）、走子（蹩马腿/塞象眼/
+    // 炮架/将帅对脸/应将全在服务端裁决）、再来一局与离开。走子 45s 超时代走。
+    Router::post('/xiangqi/room', [XiangqiController::class, 'create']);
+    Router::post('/xiangqi/room/{code}/join', [XiangqiController::class, 'join']);
+    Router::post('/xiangqi/room/{code}/rps', [XiangqiController::class, 'rps']);
+    Router::get('/xiangqi/room/{code}', [XiangqiController::class, 'state']);
+    Router::post('/xiangqi/room/{code}/move', [XiangqiController::class, 'move']);
+    Router::post('/xiangqi/room/{code}/rematch', [XiangqiController::class, 'rematch']);
+    Router::post('/xiangqi/room/{code}/chat', [XiangqiController::class, 'chat']);
+    Router::post('/xiangqi/room/{code}/leave', [XiangqiController::class, 'leave']);
+
+    // 联机井字棋：三连快局。首局猜拳定 X，再来一局自动换先手；落子 20s 超时代落。
+    Router::post('/tictactoe/room', [TictactoeController::class, 'create']);
+    Router::post('/tictactoe/room/{code}/join', [TictactoeController::class, 'join']);
+    Router::post('/tictactoe/room/{code}/rps', [TictactoeController::class, 'rps']);
+    Router::get('/tictactoe/room/{code}', [TictactoeController::class, 'state']);
+    Router::post('/tictactoe/room/{code}/move', [TictactoeController::class, 'move']);
+    Router::post('/tictactoe/room/{code}/rematch', [TictactoeController::class, 'rematch']);
+    Router::post('/tictactoe/room/{code}/chat', [TictactoeController::class, 'chat']);
+    Router::post('/tictactoe/room/{code}/leave', [TictactoeController::class, 'leave']);
+
     // UNO 联机：房间创建/加入/开局、轮询同步（WS 降级通道）、出牌/摸牌/不出、
     // +4 质疑、喊/举报 UNO、再来一局与离开。回合超时由 Timer 清扫器 + 写操作懒检查推进。
     Router::post('/uno/room', [UnoController::class, 'create']);
@@ -212,4 +237,6 @@ Router::addServer('ws', function (): void {
     Router::get('/adventure/ws', AdventureWsController::class);
     Router::get('/jungle/ws', JungleWsController::class);
     Router::get('/junqi/ws', JunqiWsController::class);
+    Router::get('/xiangqi/ws', XiangqiWsController::class);
+    Router::get('/tictactoe/ws', TictactoeWsController::class);
 });

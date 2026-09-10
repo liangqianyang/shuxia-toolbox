@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>象棋图标生成器</title>
+<!--
+  出图（照 junqi-icon.html 家法）：
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+    --screenshot=/tmp/xiangqi-icon.png --window-size=512,512 --default-background-color=00000000 \
+    "file://$(pwd)/docs/xiangqi-icon.html"
+  sips -z 256 256 /tmp/xiangqi-icon.png --out frontend/cdn-assets/static/icons/xiangqi-1.png
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 512px; height: 512px; background: transparent; display: flex; align-items: center; justify-content: center; font-family: "PingFang SC", "Noto Sans SC", sans-serif; }
+  .card {
+    width: 440px; height: 440px; border-radius: 96px;
+    background: #FFFDF8; border: 10px solid #F0E4D7;
+    position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* 棋盘线（伪棋盘格） */
+  svg.lines { position: absolute; inset: 20px; }
+  .piece {
+    position: absolute; width: 190px; height: 190px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 96px; font-weight: 800; color: #fff; z-index: 2;
+  }
+  .piece::after {
+    content: ''; position: absolute; inset: 16px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.45);
+  }
+  .piece--shuai { background: #E85D4A; border: 9px solid #B8402E; left: 56px; top: 100px; transform: rotate(-10deg); }
+  .piece--jiang { background: #4A3F35; border: 9px solid #2E2620; right: 56px; bottom: 100px; transform: rotate(10deg); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <svg class="lines" viewBox="0 0 400 400" fill="none">
+      <g stroke="#4A3F35" stroke-width="4" opacity=".8">
+        <path d="M20 60 H380 M20 130 H380 M20 270 H380 M20 340 H380"/>
+        <path d="M20 60 V340 M110 60 V200 M110 270 V340 M200 60 V200 M200 270 V340 M290 60 V200 M290 270 V340 M380 60 V340"/>
+        <path d="M110 60 L290 200 M290 60 L110 200 M110 270 L290 340 M290 270 L110 340"/>
+      </g>
+      <rect x="150" y="185" width="100" height="30" rx="8" fill="#E4D5BC"/>
+    </svg>
+    <div class="piece piece--shuai">帅</div>
+    <div class="piece piece--jiang">将</div>
+  </div>
+</body>
+</html>
