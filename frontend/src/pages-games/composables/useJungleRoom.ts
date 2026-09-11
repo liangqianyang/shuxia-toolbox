@@ -1,12 +1,13 @@
 /**
- * 五子棋房间状态机：双通道同步——WebSocket 优先（实时推送），
+ * 斗兽棋房间状态机：双通道同步——WebSocket 优先（实时推送），
  * 连接失败 3 次或异常断开时降级为带版本号的 HTTP 轮询；onShow 启动、onHide 停止。
+ * 走子不做乐观落子（吃子判定复杂）：提交后以服务端权威状态为准，失败拉回权威态。
  */
 
 import { computed, ref } from 'vue'
 import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
-import { chooseGomokuColor, createRoom, fetchRoomState, joinRoom, leaveRoom, placeMove, rematch, requestUndo, respondUndo, rpsRoom, sendGomokuChat } from '@/services/gomoku'
-import type { GomokuColor, GomokuRoomState, GomokuWsFrame } from '@/types/gomoku'
+import { chooseJungleColor, createRoom, fetchRoomState, joinRoom, leaveRoom, movePiece, rematch, rpsRoom, sendJungleChat } from '@/pages-games/services/jungle'
+import type { JungleRoomState, JungleSide, JungleWsFrame } from '@/types/jungle'
 
 const WS_MAX_FAILURES = 3
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000]
@@ -14,15 +15,15 @@ const HEARTBEAT_MS = 25000
 const POLL_INTERVALS = { waiting: 3000, playing: 1500, finished: 4000 } as const
 const POLL_MAX_BACKOFF_MS = 10000
 
-export function useGomokuRoom() {
-  const state = ref<GomokuRoomState | null>(null)
+export function useJungleRoom() {
+  const state = ref<JungleRoomState | null>(null)
   const transport = ref<'ws' | 'polling'>('ws')
-  const placing = ref(false)
+  const moving = ref(false)
   const myCode = ref('')
 
-  const myColor = computed<GomokuColor | null>(() => {
+  const myColor = computed<JungleSide | null>(() => {
     const role = state.value?.myRole
-    return role === 'black' || role === 'white' ? role : null
+    return role === 'red' || role === 'blue' ? role : null
   })
   const isSeated = computed(() => myColor.value !== null)
   const isMyTurn = computed(
@@ -30,29 +31,7 @@ export function useGomokuRoom() {
   )
   const opponent = computed(() => {
     if (!state.value || !isSeated.value) return null
-    return myColor.value === 'black' ? state.value.white : state.value.black
-  })
-
-  /** 我可发起悔棋：对局进行中、轮到我方对面（即最后一手是我落的）、有剩余次数、无未决请求。 */
-  const canRequestUndo = computed(() => {
-    const current = state.value
-    if (!current || current.status !== 'playing' || !isSeated.value || !myColor.value) return false
-    if (current.movesCount === 0 || current.turn !== null && current.turn === myColor.value) return false
-    if (current.undo.pending !== null) return false
-    return current.undo.remaining[myColor.value] > 0
-  })
-
-  /** 对方发了悔棋请求等我处理。 */
-  const undoPendingForMe = computed(() => {
-    const current = state.value
-    if (!current || current.status !== 'playing' || !isSeated.value) return false
-    return current.undo.pending !== null && !current.undo.pendingMine
-  })
-
-  const undoRemaining = computed(() => {
-    const current = state.value
-    if (!current || !myColor.value) return 0
-    return current.undo.remaining[myColor.value]
+    return myColor.value === 'red' ? state.value.blue : state.value.red
   })
 
   let socket: UniApp.SocketTask | null = null
@@ -70,46 +49,14 @@ export function useGomokuRoom() {
     uni.showToast({ title: message, icon: 'none' })
   }
 
-  /** 悔棋决策倒计时（秒），0 表示无未决请求。 */
-  const undoCountdown = ref(0)
-  let undoTimer: ReturnType<typeof setInterval> | null = null
-
-  function clearUndoTimer() {
-    if (undoTimer) {
-      clearInterval(undoTimer)
-      undoTimer = null
-    }
-    undoCountdown.value = 0
-  }
-
-  /** 远端状态落地后同步悔棋倒计时；归零时自动拉权威状态（服务器已惰性过期该请求）。 */
-  function syncUndoCountdown() {
-    clearUndoTimer()
-    const ttl = state.value?.undo.pending !== null && state.value?.undo.pending !== undefined ? state.value.undo.pendingTtl : 0
-    if (!ttl || !myCode.value) return
-    undoCountdown.value = ttl
-    undoTimer = setInterval(() => {
-      undoCountdown.value--
-      if (undoCountdown.value <= 0) {
-        clearUndoTimer()
-        void fetchRoomState(myCode.value, 0)
-          .then((fresh) => {
-            if (fresh.changed) applyState(fresh)
-          })
-          .catch(() => {})
-      }
-    }, 1000)
-  }
-
   /** 应用远端状态；版本更旧的帧直接丢弃（防乱序）。 */
-  function applyState(next: GomokuRoomState) {
+  function applyState(next: JungleRoomState) {
     if (state.value && next.version < state.value.version && next.code === state.value.code) return
     if (state.value && next.code !== state.value.code) return
     state.value = next
-    syncUndoCountdown()
   }
 
-  async function enterRoom(next: GomokuRoomState) {
+  async function enterRoom(next: JungleRoomState) {
     state.value = next
     myCode.value = next.code
     startSync()
@@ -127,34 +74,27 @@ export function useGomokuRoom() {
     await enterRoom(await joinRoom(code))
   }
 
-  async function tapIntersection(x: number, y: number) {
+  async function submitMove(fr: number, fc: number, tr: number, tc: number) {
     const current = state.value
-    if (!current || placing.value) return
-    // 悔棋请求未处理前禁止落子：必须先同意或拒绝
-    if (current.undo.pending !== null) {
-      toast(current.undo.pendingMine ? '等待对方处理悔棋请求' : '对方请求悔棋，请先处理')
-      return
-    }
+    if (!current || moving.value) return
     if (!isMyTurn.value) {
       toast(current.status === 'playing' ? '还没轮到你' : '对局不在进行中')
       return
     }
-    placing.value = true
-    // 乐观渲染：本地先落子，服务端返回后以权威状态为准
-    state.value = { ...current, moves: [...current.moves, { x, y }] }
+    moving.value = true
     try {
-      applyState(await placeMove(current.code, x, y))
+      applyState(await movePiece(current.code, fr, fc, tr, tc))
     } catch (error) {
-      // 回滚：期间可能已有 WS 推送，直接拉权威状态而不是恢复旧快照
+      // 不做本地回滚：期间可能已有 WS 推送，直接拉权威状态
       try {
         const fresh = await fetchRoomState(current.code, 0)
         if (fresh.changed) applyState(fresh)
       } catch {
-        state.value = current
+        /* 网络异常时保留当前展示，等下一次同步 */
       }
-      toast(error instanceof Error ? error.message : '落子失败')
+      toast(error instanceof Error ? error.message : '走子失败')
     } finally {
-      placing.value = false
+      moving.value = false
     }
   }
 
@@ -163,27 +103,6 @@ export function useGomokuRoom() {
     if (!current) return
     try {
       applyState(await rematch(current.code))
-    } catch (error) {
-      toast(error instanceof Error ? error.message : '操作失败')
-    }
-  }
-
-  async function askUndo() {
-    const current = state.value
-    if (!current || !canRequestUndo.value) return
-    try {
-      applyState(await requestUndo(current.code))
-      toast('已发送悔棋请求，等待对方同意')
-    } catch (error) {
-      toast(error instanceof Error ? error.message : '操作失败')
-    }
-  }
-
-  async function answerUndo(accept: boolean) {
-    const current = state.value
-    if (!current || !undoPendingForMe.value) return
-    try {
-      applyState(await respondUndo(current.code, accept))
     } catch (error) {
       toast(error instanceof Error ? error.message : '操作失败')
     }
@@ -215,7 +134,7 @@ export function useGomokuRoom() {
     manuallyClosed = false
     const attempt = ++wsAttempt
     socket = uni.connectSocket({
-      url: gomokuWsUrl('/gomoku/ws', { token, code: myCode.value }),
+      url: gomokuWsUrl('/jungle/ws', { token, code: myCode.value }),
       complete: () => {},
     })
     socket.onOpen(() => {
@@ -227,9 +146,9 @@ export function useGomokuRoom() {
       }, HEARTBEAT_MS)
     })
     socket.onMessage((event) => {
-      let frame: GomokuWsFrame
+      let frame: JungleWsFrame
       try {
-        frame = JSON.parse(String(event.data)) as GomokuWsFrame
+        frame = JSON.parse(String(event.data)) as JungleWsFrame
       } catch {
         return
       }
@@ -325,7 +244,6 @@ export function useGomokuRoom() {
   function stopSync() {
     running = false
     closeWs()
-    clearUndoTimer()
     if (pollTimer) {
       clearTimeout(pollTimer)
       pollTimer = null
@@ -343,7 +261,7 @@ export function useGomokuRoom() {
   async function chooseColor(color: string) {
     const current = state.value
     if (!current) return
-    applyState(await chooseGomokuColor(current.code, color))
+    applyState(await chooseJungleColor(current.code, color))
   }
 
   /** 聊天：不用 busy 锁（不打断对局操作），失败由 toast 提示。 */
@@ -351,7 +269,7 @@ export function useGomokuRoom() {
     const current = state.value
     if (!current) return false
     try {
-      applyState(await sendGomokuChat(current.code, kind, payload))
+      applyState(await sendJungleChat(current.code, kind, payload))
       return true
     } catch (error) {
       toast(error instanceof Error ? error.message : '发送失败')
@@ -365,22 +283,16 @@ export function useGomokuRoom() {
     sendChat,
     state,
     transport,
-    placing,
+    moving,
     myCode,
     isSeated,
     myColor,
     isMyTurn,
     opponent,
-    canRequestUndo,
-    undoPendingForMe,
-    undoRemaining,
-    undoCountdown,
     createAndEnter,
     joinByCode,
-    tapIntersection,
+    submitMove,
     requestRematch,
-    askUndo,
-    answerUndo,
     exitRoom,
     startSync,
     stopSync,

@@ -164,18 +164,18 @@
       </view>
       <text class="junqi__hint">{{ hintText }}</text>
 
-      <!-- 底部聊天条：布阵/猜拳/对局常驻展示最近消息；触发钮统一放左（跨游戏规则） -->
-      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="junqi__chatbar" hover-class="press" @tap="openChat">
-        <view class="junqi__chatbar-trigger" @tap.stop="openChat">
-          <text class="junqi__chatbar-icon">💬</text>
-          <text class="junqi__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="junqi__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
-        </view>
+      <!-- 底部聊天条（家法同 uno:消息 feed 在上,💬 触发钮在左下） -->
+      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="junqi__chatbar">
         <view v-if="feedChats.length" class="junqi__chatbar-feed">
           <view v-for="m in feedChats" :key="m.seq" class="junqi__chatbar-item">
             <text class="junqi__chatbar-name">{{ chatNameOf(m) }}：</text>
             <text class="junqi__chatbar-text" :class="{ 'junqi__chatbar-text--emoji': m.kind === 'emoji' }">{{ chatBodyOf(m) }}</text>
           </view>
+        </view>
+        <view class="junqi__chatbar-trigger" hover-class="press" @tap="openChat">
+          <text class="junqi__chatbar-icon">💬</text>
+          <text class="junqi__chatbar-hint">快捷嘴炮…</text>
+          <text v-if="roomChat.unreadChat.value" class="junqi__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
         </view>
       </view>
     </view>
@@ -348,8 +348,8 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import { useJunqiRoom } from '@/composables/useJunqiRoom'
-import { leaveRoom } from '@/services/junqi'
+import { useJunqiRoom } from '@/pages-games/composables/useJunqiRoom'
+import { leaveRoom } from '@/pages-games/services/junqi'
 import { resolveAvatarUrl } from '@/services/toolbox'
 import { getCanvasNode, getElementRect, getWindowInfo } from '@/utils/canvasAdapter'
 import {
@@ -369,14 +369,14 @@ import {
   reachableTargets,
   validateLayout,
   type JunqiGeometry,
-} from '@/utils/junqi'
+} from '@/pages-games/utils/junqi'
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { JunqiLastMove, JunqiLayoutPiece, JunqiRank, JunqiRoomState, JunqiSide } from '@/types/junqi'
-import GameChatPanel from '@/components/GameChatPanel.vue'
-import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
-import { gamePhraseText } from '@/utils/gameChat'
-import { playJunqiSound } from '@/utils/junqiSound'
+import { gamePhraseText } from '@/pages-games/utils/gameChat'
+import { playJunqiSound } from '@/pages-games/utils/junqiSound'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 军棋六帧，jun-*/dou-* 变量实值） ----------
 const COLOR_LAND = '#F7EEDF'
@@ -418,6 +418,7 @@ const roomChat = useRoomChat({
   chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
   code: () => state.value?.code ?? '',
   send: (kind, payload) => sendChat(kind, payload),
+  nameOf: (m) => chatNameOf(m),
 })
 
 const {
@@ -1508,6 +1509,8 @@ onShareAppMessage(() => ({
     flex-direction: column;
     gap: 8px;
     padding-top: 6px;
+    /* 固定聊天 dock 的避让位 */
+    padding-bottom: calc(140px + env(safe-area-inset-bottom));
   }
 
   &__topbar {
@@ -1925,15 +1928,19 @@ onShareAppMessage(() => ({
 
   /* ── 聊天条 ── */
   &__chatbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    padding: 0 6px;
-    border-radius: 22px;
-    background: #fff;
-    border: 1rpx solid #f0e4d7;
-    overflow: hidden;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(255, 248, 237, 0.95);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 10px rgba(62, 50, 38, 0.08);
   }
 
   &__chatbar-trigger {
@@ -1973,10 +1980,15 @@ onShareAppMessage(() => ({
   }
 
   &__chatbar-feed {
-    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    background: #fff;
+    border: 1rpx solid #f0e4d7;
+    border-radius: 12px;
+    padding: 6px 12px;
     overflow: hidden;
   }
 

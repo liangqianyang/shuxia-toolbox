@@ -1181,7 +1181,7 @@ final class AdventureRoomService
             'scores' => $state['scores'] ?? [],
             'chat' => array_values($state['chat'] ?? []),
             'chatSeq' => (int) ($state['chatSeq'] ?? 0),
-            'sharePath' => '/pages-adventure/index?room=' . $room->code,
+            'sharePath' => '/pages-games/adventure/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

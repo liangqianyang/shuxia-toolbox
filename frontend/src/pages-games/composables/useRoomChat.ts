@@ -8,7 +8,7 @@
  */
 
 import { computed, reactive, ref, watch, type Ref } from 'vue'
-import { GAME_PHRASE_GROUPS, gamePhraseText } from '@/utils/gameChat'
+import { GAME_PHRASE_GROUPS, gamePhraseText } from '@/pages-games/utils/gameChat'
 
 export interface RoomChatMessage {
   seq: number
@@ -29,6 +29,8 @@ export interface UseRoomChatOptions {
   send: (kind: string, payload: { id?: string; text?: string }) => Promise<boolean>
   /** 收到他人新消息时回调（音效等）。 */
   onIncoming?: () => void
+  /** 发送者展示名（页面按座位/角色映射昵称；未提供时兜底「玩家」）。 */
+  nameOf?: (m: RoomChatMessage) => string
 }
 
 const CHAT_COOLDOWN_SECONDS = 3
@@ -59,6 +61,11 @@ export function useRoomChat(options: UseRoomChatOptions) {
   function chatBody(m: RoomChatMessage): string {
     if (m.kind === 'phrase') return gamePhraseText(m.text) ?? m.text
     return m.text
+  }
+
+  /** 发送者展示名（面板消息列表左列用）。 */
+  function chatNameOf(m: RoomChatMessage): string {
+    return options.nameOf?.(m) ?? '玩家'
   }
 
   watch(
@@ -154,6 +161,7 @@ export function useRoomChat(options: UseRoomChatOptions) {
     chatLog,
     phraseGroups,
     chatBody,
+    chatNameOf,
     bubbleKeyOf,
     sendPhrase,
     sendEmoji,

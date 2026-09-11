@@ -5,8 +5,8 @@
  */
 
 import { ref, shallowRef } from 'vue'
-import { applyAction, createGame, type SokobanAction, type SokobanLevel, type SokobanState } from '@/utils/sokoban'
-import { nextPush } from '@/utils/sokobanSolver'
+import { applyAction, createGame, type SokobanAction, type SokobanLevel, type SokobanState } from '@/pages-games/utils/sokoban'
+import { nextPush } from '@/pages-games/utils/sokobanSolver'
 
 export interface UseSokobanOptions {
   onStateChange?: (state: SokobanState) => void

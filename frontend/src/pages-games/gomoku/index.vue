@@ -180,7 +180,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import { useGomokuRoom } from '@/composables/useGomokuRoom'
+import { useGomokuRoom } from '@/pages-games/composables/useGomokuRoom'
 import { getCanvasNode, getElementRect, getWindowInfo } from '@/utils/canvasAdapter'
 import {
   STAR_POINTS,
@@ -188,15 +188,15 @@ import {
   intersectionToPoint,
   pointToIntersection,
   type BoardMetrics,
-} from '@/utils/gomoku'
+} from '@/pages-games/utils/gomoku'
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { GomokuColor } from '@/types/gomoku'
-import { playGomokuPlace, playGomokuWin } from '@/utils/gomokuAudio'
+import { playGomokuPlace, playGomokuWin } from '@/pages-games/utils/gomokuAudio'
 import GameRulesModal from '@/components/GameRulesModal.vue'
-import GameChatPanel from '@/components/GameChatPanel.vue'
-import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
-import { gamePhraseText } from '@/utils/gameChat'
+import { gamePhraseText } from '@/pages-games/utils/gameChat'
 
 const rulesOpen = ref(false)
 
@@ -206,6 +206,7 @@ const roomChat = useRoomChat({
   chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
   code: () => state.value?.code ?? '',
   send: (kind, payload) => sendChat(kind, payload),
+  nameOf: (m) => roleNameOf(m.role ?? 'black'),
 })
 const roleNameOf = (role: string): string =>
   role === 'black' ? (state.value?.black?.nickname ?? '黑方') : (state.value?.white?.nickname ?? '白方')
@@ -1051,7 +1052,22 @@ onShareAppMessage(() => ({
   from { opacity: 0; transform: translateX(-50%) translateY(8rpx); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-.gomoku__chat-zone { padding: 16rpx 0 8rpx; }
+.gomoku__chat-zone {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 248, 237, 0.95);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+}
+
+.gomoku__room {
+  /* 固定聊天 dock 的避让位 */
+  padding-bottom: calc(280rpx + env(safe-area-inset-bottom));
+}
 .gomoku__chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
 .gomoku__chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: $color-card; border: 2rpx solid $color-border; border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
 .gomoku__chat-item { display: flex; align-items: baseline; font-size: 22rpx; }

@@ -3,7 +3,7 @@
  *  开关持久化到 storage（默认开）,页面可切换。
  */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 const SOUND_KEY = 'shuxia-tetris-sound-enabled'
 
 export type TetrisSoundName =

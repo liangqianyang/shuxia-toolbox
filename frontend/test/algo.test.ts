@@ -20,9 +20,9 @@ import {
   validateSpecialGifts,
 } from '@/utils/lottery'
 import { __setPixels, type PixelBuffer } from './stubCanvasAdapter'
-import * as adventureBoard from '@/pages-adventure/utils/adventureBoard'
-import * as advConstants from '@/pages-adventure/utils/adventure'
-import * as adventureChat from '@/pages-adventure/utils/adventureChat'
+import * as adventureBoard from '@/pages-games/adventure/utils/adventureBoard'
+import * as advConstants from '@/pages-games/adventure/utils/adventure'
+import * as adventureChat from '@/pages-games/adventure/utils/adventureChat'
 import {
   BOARD_SIZE,
   CELL_BLACK,
@@ -34,8 +34,8 @@ import {
   intersectionToPoint,
   isLegalMove,
   pointToIntersection,
-} from '@/utils/gomoku'
-import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/utils/uno'
+} from '@/pages-games/utils/gomoku'
+import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/pages-games/utils/uno'
 import {
   BOARD_W,
   CLEAR_FLASH_MS,
@@ -50,9 +50,9 @@ import {
   type ActivePiece,
   type PieceId,
   type TetrisState,
-} from '@/utils/tetris'
-import { computeTetrisLayout } from '@/utils/tetrisRender'
-import { createDragController, defaultDragConfig } from '@/utils/touchGestures'
+} from '@/pages-games/utils/tetris'
+import { computeTetrisLayout } from '@/pages-games/utils/tetrisRender'
+import { createDragController, defaultDragConfig } from '@/pages-games/utils/touchGestures'
 import {
   DIRS,
   applyAction as sokApplyAction,
@@ -62,9 +62,9 @@ import {
   starsFor,
   type SokobanLevelDef,
   type SokobanState,
-} from '@/utils/sokoban'
-import { nextPush, solve as sokSolve } from '@/utils/sokobanSolver'
-import { CHAPTERS, LEVELS, LEVELS_PER_CHAPTER } from '@/utils/sokobanLevels'
+} from '@/pages-games/utils/sokoban'
+import { nextPush, solve as sokSolve } from '@/pages-games/utils/sokobanSolver'
+import { CHAPTERS, LEVELS, LEVELS_PER_CHAPTER } from '@/pages-games/utils/sokobanLevels'
 import {
   CRUSH_CELL,
   FLY_FROM,
@@ -86,7 +86,7 @@ import {
   seatFinished,
   victimsAt,
   type LudoCoreState,
-} from '@/pages-ludo/utils/ludo'
+} from '@/pages-games/ludo/utils/ludo'
 
 function testUno() {
   // 牌编码解析
@@ -1267,7 +1267,7 @@ function testAdventure() {
 
   // 通用房间聊天白名单（与后端 Chat\GameChat 双份同步：20 快捷句 / 27 表情 / 10 贴纸，飞行棋/五子棋共用）
 {
-  const gameChat = require('@/utils/gameChat') as typeof import('@/utils/gameChat')
+  const gameChat = require('@/pages-games/utils/gameChat') as typeof import('@/pages-games/utils/gameChat')
   assert(gameChat.GAME_PHRASE_GROUPS.reduce((s, g) => s + g.phrases.length, 0) === 20, '通用聊天 20 条快捷句')
   assert(gameChat.GAME_EMOJIS.length === 27, '通用聊天 27 个表情')
   assert(Object.keys(gameChat.GAME_STICKERS).length === 10, '通用聊天 10 张贴纸')
@@ -1701,7 +1701,7 @@ function testTetris() {
         if (x !== 4) board[y * 10 + x] = 'T'
       }
     }
-    const withM: import('@/utils/tetris').TetrisState = {
+    const withM: import('@/pages-games/utils/tetris').TetrisState = {
       ...base,
       board,
       active: { id: 'M', x: 4, y: 3, rot: 0 },
@@ -1719,7 +1719,7 @@ function testTetris() {
     for (let x = 0; x < 10; x++) {
       if (x !== 4) rowFull[19 * 10 + x] = 'T'
     }
-    const withM2: import('@/utils/tetris').TetrisState = {
+    const withM2: import('@/pages-games/utils/tetris').TetrisState = {
       ...base,
       board: rowFull,
       active: { id: 'M', x: 4, y: 3, rot: 0 },
@@ -1732,7 +1732,7 @@ function testTetris() {
   // 二格多米诺：贴墙旋转的踢墙
   {
     const empty = createGame(1, rngHigh)
-    const atWall: import('@/utils/tetris').TetrisState = {
+    const atWall: import('@/pages-games/utils/tetris').TetrisState = {
       ...empty,
       active: { id: 'D', x: 9, y: 5, rot: 1 },
       phase: 'playing',
@@ -1878,7 +1878,7 @@ function testSokobanLevels() {
 
 /* ── 斗兽棋规则镜像（与后端 app/Service/Jungle/JungleRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
 {
-  const j = require('@/utils/jungle') as typeof import('@/utils/jungle')
+  const j = require('@/pages-games/utils/jungle') as typeof import('@/pages-games/utils/jungle')
 
   const P = (side: 'red' | 'blue', animal: j.JunglePiece['animal'], r: number, c: number): j.JunglePiece => ({ side, animal, r, c })
 
@@ -1979,7 +1979,7 @@ function testSokobanLevels() {
 
 /* ── 军棋规则镜像（与后端 app/Service/MountainChess/MountainChessRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
 {
-  const q = require('@/utils/junqi') as typeof import('@/utils/junqi')
+  const q = require('@/pages-games/utils/junqi') as typeof import('@/pages-games/utils/junqi')
 
   type QP = import('@/types/junqi').JunqiPiece
   const P = (side: 'red' | 'blue', rank: QP['rank']!, r: number, c: number): QP => ({ side, rank, r, c, alive: true, revealed: false })
@@ -2104,7 +2104,7 @@ function testSokobanLevels() {
 
 /* ── 象棋规则镜像（与后端 app/Service/Xiangqi/XiangqiRule.php 双份同步：PHP 权威，此处锁 TS 侧行为） ── */
 {
-  const x = require('@/utils/xiangqi') as typeof import('@/utils/xiangqi')
+  const x = require('@/pages-games/utils/xiangqi') as typeof import('@/pages-games/utils/xiangqi')
 
   type XP = import('@/types/xiangqi').XiangqiPiece
   const P = (side: 'red' | 'black', piece: XP['piece']!, r: number, c: number): XP => ({ side, piece, r, c, alive: true })
@@ -2207,8 +2207,8 @@ function testSokobanLevels() {
 
 /* ── 井字棋规则镜像（与后端 app/Service/Tictactoe/TictactoeRule.php 双份同步） ── */
 {
-  const t = require('@/utils/tictactoe') as typeof import('@/utils/tictactoe')
-  type TTBoard = import('@/utils/tictactoe').TicTacToeBoard
+  const t = require('@/pages-games/utils/tictactoe') as typeof import('@/pages-games/utils/tictactoe')
+  type TTBoard = import('@/pages-games/utils/tictactoe').TicTacToeBoard
   const board = (s: string): TTBoard => Array.from(s).map((ch) => (ch === '.' ? null : (ch as TicTacToeMark)))
 
   assert(t.LINES.length === 8, '井字棋 8 条胜利线')

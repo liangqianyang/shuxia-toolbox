@@ -4,7 +4,7 @@
  * 几何与机关定义全部来自 adventureBoard.ts（唯一真相，与后端双份同步）。
  * 山脚起点（pos=0）在棋盘底边下方，由页面层留白容纳，画布本身保持正方形。
  */
-import { canvasToFile, createDrawingCanvas } from '../../utils/canvasAdapter'
+import { canvasToFile, createDrawingCanvas } from '@/utils/canvasAdapter'
 import { CELLS, cellToPoint, type CellType } from './adventureBoard'
 
 /** 品牌底色（奶油白/墨绿/枫叶红/金黄，同枫趣牌局色板）。 */

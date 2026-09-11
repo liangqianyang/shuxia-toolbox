@@ -25,8 +25,8 @@ import {
   rematch,
   sendChatMessage,
   startGame,
-} from '@/services/uno'
-import { canPlay } from '@/utils/uno'
+} from '@/pages-games/services/uno'
+import { canPlay } from '@/pages-games/utils/uno'
 import type { UnoColor, UnoRoomState, UnoWsFrame } from '@/types/uno'
 
 const WS_MAX_FAILURES = 3

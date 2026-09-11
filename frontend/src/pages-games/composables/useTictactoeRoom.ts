@@ -1,13 +1,13 @@
 /**
- * 象棋房间状态机：双通道同步——WebSocket 优先（实时推送），
+ * 井字棋房间状态机：双通道同步——WebSocket 优先（实时推送），
  * 连接失败 3 次或异常断开时降级为带版本号的 HTTP 轮询；onShow 启动、onHide 停止。
- * 走子不做乐观提交（应将/将死在服务端裁决）：提交后以服务端权威状态为准，失败拉回权威态。
+ * 落子不做乐观提交（胜负在服务端裁决）：提交后以服务端权威状态为准，失败拉回权威态。
  */
 
 import { computed, ref } from 'vue'
 import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
-import { createRoom, fetchRoomState, joinRoom, leaveRoom, movePiece, rematch, rpsRoom, sendXiangqiChat } from '@/services/xiangqi'
-import type { XiangqiRoomState, XiangqiSide, XiangqiWsFrame } from '@/types/xiangqi'
+import { createRoom, fetchRoomState, joinRoom, leaveRoom, moveAt, rematch, rpsRoom, sendTictactoeChat } from '@/pages-games/services/tictactoe'
+import type { TicTacToeMark, TicTacToeRoomState, TicTacToeWsFrame } from '@/types/tictactoe'
 
 const WS_MAX_FAILURES = 3
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000]
@@ -15,23 +15,20 @@ const HEARTBEAT_MS = 25000
 const POLL_INTERVALS = { waiting: 3000, rps: 1500, playing: 1500, finished: 4000 } as const
 const POLL_MAX_BACKOFF_MS = 10000
 
-export function useXiangqiRoom() {
-  const state = ref<XiangqiRoomState | null>(null)
+export function useTictactoeRoom() {
+  const state = ref<TicTacToeRoomState | null>(null)
   const transport = ref<'ws' | 'polling'>('ws')
   const moving = ref(false)
   const myCode = ref('')
 
-  const myColor = computed<XiangqiSide | null>(() => {
-    const role = state.value?.myRole
-    return role === 'red' || role === 'black' ? role : null
-  })
-  const isSeated = computed(() => myColor.value !== null)
+  const myMark = computed<TicTacToeMark | null>(() => state.value?.myMark ?? null)
+  const isSeated = computed(() => myMark.value !== null)
   const isMyTurn = computed(
-    () => state.value?.status === 'playing' && state.value.turn !== null && state.value.turn === myColor.value,
+    () => state.value?.status === 'playing' && state.value.turn !== null && state.value.turn === myMark.value,
   )
   const opponent = computed(() => {
     if (!state.value || !isSeated.value) return null
-    return myColor.value === 'red' ? state.value.black : state.value.red
+    return myMark.value === 'x' ? state.value.oPlayer : state.value.xPlayer
   })
 
   let socket: UniApp.SocketTask | null = null
@@ -49,14 +46,13 @@ export function useXiangqiRoom() {
     uni.showToast({ title: message, icon: 'none' })
   }
 
-  /** 应用远端状态；版本更旧的帧直接丢弃（防乱序）。 */
-  function applyState(next: XiangqiRoomState) {
+  function applyState(next: TicTacToeRoomState) {
     if (state.value && next.version < state.value.version && next.code === state.value.code) return
     if (state.value && next.code !== state.value.code) return
     state.value = next
   }
 
-  async function enterRoom(next: XiangqiRoomState) {
+  async function enterRoom(next: TicTacToeRoomState) {
     state.value = next
     myCode.value = next.code
     startSync()
@@ -74,7 +70,7 @@ export function useXiangqiRoom() {
     await enterRoom(await joinRoom(code))
   }
 
-  async function submitMove(fr: number, fc: number, tr: number, tc: number) {
+  async function submitMove(index: number) {
     const current = state.value
     if (!current || moving.value) return
     if (!isMyTurn.value) {
@@ -83,16 +79,15 @@ export function useXiangqiRoom() {
     }
     moving.value = true
     try {
-      applyState(await movePiece(current.code, fr, fc, tr, tc))
+      applyState(await moveAt(current.code, index))
     } catch (error) {
-      // 不做本地回滚：期间可能已有 WS 推送，直接拉权威状态
       try {
         const fresh = await fetchRoomState(current.code, 0)
         if (fresh.changed) applyState(fresh)
       } catch {
-        /* 网络异常时保留当前展示，等下一次同步 */
+        /* 网络异常时保留当前展示 */
       }
-      toast(error instanceof Error ? error.message : '走子失败')
+      toast(error instanceof Error ? error.message : '落子失败')
     } finally {
       moving.value = false
     }
@@ -118,7 +113,7 @@ export function useXiangqiRoom() {
     try {
       await leaveRoom(current.code)
     } catch {
-      // 离开是尽力而为：房已关/网断都无需提示
+      /* 离开是尽力而为 */
     }
   }
 
@@ -134,7 +129,7 @@ export function useXiangqiRoom() {
     manuallyClosed = false
     const attempt = ++wsAttempt
     socket = uni.connectSocket({
-      url: gomokuWsUrl('/xiangqi/ws', { token, code: myCode.value }),
+      url: gomokuWsUrl('/tictactoe/ws', { token, code: myCode.value }),
       complete: () => {},
     })
     socket.onOpen(() => {
@@ -146,16 +141,15 @@ export function useXiangqiRoom() {
       }, HEARTBEAT_MS)
     })
     socket.onMessage((event) => {
-      let frame: XiangqiWsFrame
+      let frame: TicTacToeWsFrame
       try {
-        frame = JSON.parse(String(event.data)) as XiangqiWsFrame
+        frame = JSON.parse(String(event.data)) as TicTacToeWsFrame
       } catch {
         return
       }
       if (frame.type === 'state') applyState(frame.state)
       if (frame.type === 'error') toast(frame.message)
     })
-    // 连接看门狗：部分平台连不上时既不回调 onError 也不回调 onClose，超时按失败处理
     connectWatchdog = setTimeout(() => handleWsFailure(attempt), 6000)
     socket.onClose(() => handleWsFailure(attempt))
     socket.onError(() => {
@@ -248,19 +242,17 @@ export function useXiangqiRoom() {
     }
   }
 
-  /** 猜拳出拳（rps 阶段）。 */
   async function rps(pick: string) {
     const current = state.value
     if (!current) return
     applyState(await rpsRoom(current.code, pick))
   }
 
-  /** 聊天：不用 busy 锁（不打断对局操作），失败由 toast 提示。 */
   async function sendChat(kind: string, payload: { id?: string; text?: string }): Promise<boolean> {
     const current = state.value
     if (!current) return false
     try {
-      applyState(await sendXiangqiChat(current.code, kind, payload))
+      applyState(await sendTictactoeChat(current.code, kind, payload))
       return true
     } catch (error) {
       toast(error instanceof Error ? error.message : '发送失败')
@@ -276,7 +268,7 @@ export function useXiangqiRoom() {
     moving,
     myCode,
     isSeated,
-    myColor,
+    myMark,
     isMyTurn,
     opponent,
     createAndEnter,

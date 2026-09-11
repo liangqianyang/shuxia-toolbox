@@ -3,7 +3,7 @@
  *  开关持久化到 storage（默认开）。
  */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 const SOUND_KEY = 'shuxia-sokoban-sound-enabled'
 
 export type SokobanSoundName =

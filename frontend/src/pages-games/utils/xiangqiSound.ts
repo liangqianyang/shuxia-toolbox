@@ -1,6 +1,6 @@
 /** 象棋音效：CDN wav（frontend/scripts/gen_xiangqi_sounds.py 程序合成后上传），模块级 InnerAudioContext 缓存。 */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 const SOUND_KEY = 'shuxia-xiangqi-sound-enabled'
 
 export type XiangqiSoundName = 'select' | 'move' | 'capture' | 'check' | 'win' | 'lose' | 'rps'

@@ -117,18 +117,18 @@
       </view>
       <text class="xiangqi__hint">{{ hintText }}</text>
 
-      <!-- 底部聊天条 -->
-      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="xiangqi__chatbar" hover-class="press" @tap="openChat">
-        <view class="xiangqi__chatbar-trigger" @tap.stop="openChat">
-          <text class="xiangqi__chatbar-icon">💬</text>
-          <text class="xiangqi__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="xiangqi__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
-        </view>
+      <!-- 底部聊天条（家法同 uno:消息 feed 在上,💬 触发钮在左下） -->
+      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="xiangqi__chatbar">
         <view v-if="feedChats.length" class="xiangqi__chatbar-feed">
           <view v-for="m in feedChats" :key="m.seq" class="xiangqi__chatbar-item">
             <text class="xiangqi__chatbar-name">{{ chatNameOf(m) }}：</text>
             <text class="xiangqi__chatbar-text" :class="{ 'xiangqi__chatbar-text--emoji': m.kind === 'emoji' }">{{ chatBodyOf(m) }}</text>
           </view>
+        </view>
+        <view class="xiangqi__chatbar-trigger" hover-class="press" @tap="openChat">
+          <text class="xiangqi__chatbar-icon">💬</text>
+          <text class="xiangqi__chatbar-hint">快捷嘴炮…</text>
+          <text v-if="roomChat.unreadChat.value" class="xiangqi__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
         </view>
       </view>
     </view>
@@ -252,18 +252,18 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import { useXiangqiRoom } from '@/composables/useXiangqiRoom'
-import { leaveRoom } from '@/services/xiangqi'
+import { useXiangqiRoom } from '@/pages-games/composables/useXiangqiRoom'
+import { leaveRoom } from '@/pages-games/services/xiangqi'
 import { resolveAvatarUrl } from '@/services/toolbox'
 import { getCanvasNode, getElementRect, getWindowInfo } from '@/utils/canvasAdapter'
-import { PIECE_NAMES, legalTargets, pieceAt, opponent as opponentOf } from '@/utils/xiangqi'
+import { PIECE_NAMES, legalTargets, pieceAt, opponent as opponentOf } from '@/pages-games/utils/xiangqi'
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { XiangqiLastMove, XiangqiPieceType, XiangqiRoomState, XiangqiSide } from '@/types/xiangqi'
-import GameChatPanel from '@/components/GameChatPanel.vue'
-import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
-import { gamePhraseText } from '@/utils/gameChat'
-import { playXiangqiSound } from '@/utils/xiangqiSound'
+import { gamePhraseText } from '@/pages-games/utils/gameChat'
+import { playXiangqiSound } from '@/pages-games/utils/xiangqiSound'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 象棋三帧） ----------
 const COLOR_BOARD = '#FFFDF8'
@@ -298,6 +298,7 @@ const roomChat = useRoomChat({
   chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
   code: () => state.value?.code ?? '',
   send: (kind, payload) => sendChat(kind, payload),
+  nameOf: (m) => chatNameOf(m),
 })
 
 const {
@@ -1060,6 +1061,8 @@ onShareAppMessage(() => ({
     flex-direction: column;
     gap: 8px;
     padding-top: 6px;
+    /* 固定聊天 dock 的避让位 */
+    padding-bottom: calc(140px + env(safe-area-inset-bottom));
   }
 
   &__topbar {
@@ -1351,15 +1354,19 @@ onShareAppMessage(() => ({
   }
 
   &__chatbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    padding: 0 6px;
-    border-radius: 22px;
-    background: #fff;
-    border: 1rpx solid #f0e4d7;
-    overflow: hidden;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(255, 248, 237, 0.95);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 10px rgba(62, 50, 38, 0.08);
   }
 
   &__chatbar-trigger {
@@ -1399,10 +1406,15 @@ onShareAppMessage(() => ({
   }
 
   &__chatbar-feed {
-    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    background: #fff;
+    border: 1rpx solid #f0e4d7;
+    border-radius: 12px;
+    padding: 6px 12px;
     overflow: hidden;
   }
 

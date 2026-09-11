@@ -5,7 +5,7 @@
  * 每次状态变化整幅重绘（clearRect 清全幅——右栏透明区不清屏会残留旧帧叠成马赛克）。
  */
 
-import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/utils/tetris'
+import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/pages-games/utils/tetris'
 
 /** 经典 7 色（柔和版）。 */
 export const PIECE_COLORS: Record<PieceId, string> = {
@@ -31,6 +31,8 @@ const RAIL_TEXT = '#7D6F60'
 const ACTION_COLOR = '#1E9DBE'
 /** 消行闪烁色:浅底上白色闪不出来,用品牌金。 */
 const CLEAR_FLASH = '#F4B942'
+/** 单格闪块（M）明暗翻转间隔:每相位 300ms（过快会闪眼）。 */
+const MONO_BLINK_MS = 300
 
 export interface TetrisLayout {
   /** 整个 canvas 的 css 尺寸（棋盘 + 右栏）。 */
@@ -315,8 +317,8 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
       }
       ctx.restore()
     }
-    // 单格闪块下落时按真实时间闪烁（每 130ms 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
-    const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / 130) % 2 === 0 ? 1 : 0.3) : 1
+    // 单格闪块下落时按真实时间闪烁（每 MONO_BLINK_MS 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
+    const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / MONO_BLINK_MS) % 2 === 0 ? 1 : 0.3) : 1
     for (const [cx, cy] of pieceCells(active.id, active.rot)) {
       drawCell(ctx, boardX + (active.x + cx) * cell + 1.5, boardY + (active.y + cy) * cell + 1.5, cell - 3, active.id, monoBlink)
     }

@@ -1,30 +1,29 @@
 /**
- * 军棋房间状态机：双通道同步——WebSocket 优先（实时推送），
+ * 象棋房间状态机：双通道同步——WebSocket 优先（实时推送），
  * 连接失败 3 次或异常断开时降级为带版本号的 HTTP 轮询；onShow 启动、onHide 停止。
- * 走子/布阵都不做乐观提交（战斗裁决与约束校验在服务端）：提交后以服务端权威状态为准，
- * 失败拉回权威态。
+ * 走子不做乐观提交（应将/将死在服务端裁决）：提交后以服务端权威状态为准，失败拉回权威态。
  */
 
 import { computed, ref } from 'vue'
 import { AUTH_STORAGE_KEY, gomokuWsUrl } from '@/services/toolbox'
-import { createRoom, fetchRoomState, joinRoom, leaveRoom, movePiece, rematch, rpsRoom, sendJunqiChat, submitLayout } from '@/services/junqi'
-import type { JunqiLayoutPiece, JunqiRoomState, JunqiSide, JunqiWsFrame } from '@/types/junqi'
+import { createRoom, fetchRoomState, joinRoom, leaveRoom, movePiece, rematch, rpsRoom, sendXiangqiChat } from '@/pages-games/services/xiangqi'
+import type { XiangqiRoomState, XiangqiSide, XiangqiWsFrame } from '@/types/xiangqi'
 
 const WS_MAX_FAILURES = 3
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000]
 const HEARTBEAT_MS = 25000
-const POLL_INTERVALS = { waiting: 3000, layout: 2500, rps: 1500, playing: 1500, finished: 4000 } as const
+const POLL_INTERVALS = { waiting: 3000, rps: 1500, playing: 1500, finished: 4000 } as const
 const POLL_MAX_BACKOFF_MS = 10000
 
-export function useJunqiRoom() {
-  const state = ref<JunqiRoomState | null>(null)
+export function useXiangqiRoom() {
+  const state = ref<XiangqiRoomState | null>(null)
   const transport = ref<'ws' | 'polling'>('ws')
   const moving = ref(false)
   const myCode = ref('')
 
-  const myColor = computed<JunqiSide | null>(() => {
+  const myColor = computed<XiangqiSide | null>(() => {
     const role = state.value?.myRole
-    return role === 'red' || role === 'blue' ? role : null
+    return role === 'red' || role === 'black' ? role : null
   })
   const isSeated = computed(() => myColor.value !== null)
   const isMyTurn = computed(
@@ -32,7 +31,7 @@ export function useJunqiRoom() {
   )
   const opponent = computed(() => {
     if (!state.value || !isSeated.value) return null
-    return myColor.value === 'red' ? state.value.blue : state.value.red
+    return myColor.value === 'red' ? state.value.black : state.value.red
   })
 
   let socket: UniApp.SocketTask | null = null
@@ -51,13 +50,13 @@ export function useJunqiRoom() {
   }
 
   /** 应用远端状态；版本更旧的帧直接丢弃（防乱序）。 */
-  function applyState(next: JunqiRoomState) {
+  function applyState(next: XiangqiRoomState) {
     if (state.value && next.version < state.value.version && next.code === state.value.code) return
     if (state.value && next.code !== state.value.code) return
     state.value = next
   }
 
-  async function enterRoom(next: JunqiRoomState) {
+  async function enterRoom(next: XiangqiRoomState) {
     state.value = next
     myCode.value = next.code
     startSync()
@@ -73,26 +72,6 @@ export function useJunqiRoom() {
       return
     }
     await enterRoom(await joinRoom(code))
-  }
-
-  /** 提交布阵并就绪（layout 阶段）。 */
-  async function readyLayout(pieces: JunqiLayoutPiece[]) {
-    const current = state.value
-    if (!current || moving.value) return
-    moving.value = true
-    try {
-      applyState(await submitLayout(current.code, pieces))
-    } catch (error) {
-      try {
-        const fresh = await fetchRoomState(current.code, 0)
-        if (fresh.changed) applyState(fresh)
-      } catch {
-        /* 网络异常时保留当前展示，等下一次同步 */
-      }
-      toast(error instanceof Error ? error.message : '布阵提交失败')
-    } finally {
-      moving.value = false
-    }
   }
 
   async function submitMove(fr: number, fc: number, tr: number, tc: number) {
@@ -155,7 +134,7 @@ export function useJunqiRoom() {
     manuallyClosed = false
     const attempt = ++wsAttempt
     socket = uni.connectSocket({
-      url: gomokuWsUrl('/junqi/ws', { token, code: myCode.value }),
+      url: gomokuWsUrl('/xiangqi/ws', { token, code: myCode.value }),
       complete: () => {},
     })
     socket.onOpen(() => {
@@ -167,9 +146,9 @@ export function useJunqiRoom() {
       }, HEARTBEAT_MS)
     })
     socket.onMessage((event) => {
-      let frame: JunqiWsFrame
+      let frame: XiangqiWsFrame
       try {
-        frame = JSON.parse(String(event.data)) as JunqiWsFrame
+        frame = JSON.parse(String(event.data)) as XiangqiWsFrame
       } catch {
         return
       }
@@ -179,7 +158,6 @@ export function useJunqiRoom() {
     // 连接看门狗：部分平台连不上时既不回调 onError 也不回调 onClose，超时按失败处理
     connectWatchdog = setTimeout(() => handleWsFailure(attempt), 6000)
     socket.onClose(() => handleWsFailure(attempt))
-    // onError 后 onClose 不保证触发（连接从未建立时部分平台不回调）——失败处理不能只挂在 onClose 上
     socket.onError(() => {
       socket?.close({})
       handleWsFailure(attempt)
@@ -193,7 +171,6 @@ export function useJunqiRoom() {
     }
   }
 
-  /** 统一 WS 失败处理：计数 → 重试或降级轮询；attempt 防陈旧回调/重复计数。 */
   function handleWsFailure(attempt: number) {
     if (attempt !== wsAttempt || !running || manuallyClosed || transport.value !== 'ws') return
     clearHeartbeat()
@@ -283,7 +260,7 @@ export function useJunqiRoom() {
     const current = state.value
     if (!current) return false
     try {
-      applyState(await sendJunqiChat(current.code, kind, payload))
+      applyState(await sendXiangqiChat(current.code, kind, payload))
       return true
     } catch (error) {
       toast(error instanceof Error ? error.message : '发送失败')
@@ -304,7 +281,6 @@ export function useJunqiRoom() {
     opponent,
     createAndEnter,
     joinByCode,
-    readyLayout,
     submitMove,
     requestRematch,
     exitRoom,

@@ -6,6 +6,6 @@ onLoad((query) => {
   const qs = query && Object.keys(query).length
     ? '?' + Object.entries(query).map(([k, v]) => `${k}=${v}`).join('&')
     : ''
-  uni.redirectTo({ url: '/pages-games/tetris/index${qs}', fail: () => {} })
+  uni.redirectTo({ url: `/pages-games/tetris/index${qs}`, fail: () => {} })
 })
 </script>

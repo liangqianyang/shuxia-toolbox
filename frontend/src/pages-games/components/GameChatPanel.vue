@@ -9,9 +9,8 @@
       </view>
       <scroll-view class="gcp-log" scroll-y :show-scrollbar="false">
         <view v-for="m in c.chatLog" :key="m.seq" class="gcp-log-row">
-          <text class="gcp-log-seq">{{ m.kind === 'sticker' ? '🎁' : c.chatBody(m).slice(0, 18) }}</text>
-          <text v-if="m.kind === 'sticker'" class="gcp-log-sticker"><image class="gcp-sticker-img" :src="stickerUrl(m.text)" mode="aspectFit" /></text>
-          <text v-else class="gcp-log-text" :class="{ 'gcp-log-emoji': m.kind === 'emoji' }">{{ c.chatBody(m) }}</text>
+          <text class="gcp-log-name">{{ c.chatNameOf(m) }}：</text>
+          <text class="gcp-log-text" :class="{ 'gcp-log-emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : c.chatBody(m) }}</text>
         </view>
       </scroll-view>
       <view v-if="c.chatTab === 'quick'" class="gcp-groups">
@@ -32,11 +31,6 @@
       <view v-else-if="c.chatTab === 'emoji'" class="gcp-emoji-grid">
         <view v-for="e in emojis" :key="e" class="gcp-emoji" :class="{ disabled: c.chatCooling }" hover-class="press" @tap="c.sendEmoji(e)">{{ e }}</view>
       </view>
-      <view v-else-if="c.chatTab === 'sticker'" class="gcp-sticker-grid">
-        <view v-for="(path, id) in stickers" :key="id" class="gcp-sticker" :class="{ disabled: c.chatCooling }" hover-class="press" @tap="c.sendSticker(id)">
-          <image class="gcp-sticker-item" :src="cdnUrl(path)" mode="aspectFit" />
-        </view>
-      </view>
       <view v-else class="gcp-text-row">
         <template v-if="textEnabled">
           <input
@@ -53,7 +47,7 @@
             {{ c.chatCooling ? `${c.chatCooldown}s` : '发送' }}
           </button>
         </template>
-        <view v-else class="gcp-text-off">文字聊天维护中，快捷句/表情/贴纸仍可用</view>
+        <view v-else class="gcp-text-off">文字聊天维护中，先用快捷句和表情斗图吧</view>
       </view>
     </view>
   </view>
@@ -61,14 +55,13 @@
 
 <script setup lang="ts">
 /**
- * 通用房间聊天面板（飞行棋/五子棋共用）：底部抽屉四 tab（快捷/表情/贴纸/文字）。
- * 状态机来自 useRoomChat（页面把返回的控制器整包传入）；文字 tab 受全局开关控制
- * （feature.uno_chat_text，前端读 unoChatTextEnabled）。
+ * 通用房间聊天面板（飞行棋/五子棋/军棋/象棋/井字棋/斗兽棋共用）：底部抽屉三 tab（快捷/表情/文字）。
+ * 状态机来自 useRoomChat（页面把返回的控制器整包传入，nameOf 提供发送者昵称）；文字 tab 受全局开关控制
+ * （feature.uno_chat_text，前端读 unoChatTextEnabled）。贴纸已下线（历史贴纸消息在日志里显示 [贴纸] 占位）。
  */
 import { reactive } from 'vue'
-import { cdnUrl } from '@/utils/cdn'
-import { GAME_EMOJIS, GAME_STICKERS, gameStickerUrl } from '@/utils/gameChat'
-import type { useRoomChat } from '@/composables/useRoomChat'
+import { GAME_EMOJIS } from '@/pages-games/utils/gameChat'
+import type { useRoomChat } from '@/pages-games/composables/useRoomChat'
 
 const props = defineProps<{
   ctrl: ReturnType<typeof useRoomChat>
@@ -81,16 +74,10 @@ const c = reactive(props.ctrl)
 const tabs = [
   { key: 'quick', label: '快捷' },
   { key: 'emoji', label: '表情' },
-  { key: 'sticker', label: '贴纸' },
   { key: 'text', label: '文字' },
 ] as const
 
 const emojis = GAME_EMOJIS
-const stickers = GAME_STICKERS
-
-function stickerUrl(id: string): string {
-  return gameStickerUrl(id)
-}
 </script>
 
 <style lang="scss" scoped>
@@ -110,12 +97,10 @@ $gold: #f4b942;
 .gcp-tab.active { color: $ink; font-weight: 800; border-bottom-color: $maple; }
 .gcp-close { margin-left: auto; font-size: 32rpx; color: $muted; padding: 8rpx; }
 .gcp-log { max-height: 260rpx; background: rgba(255, 255, 255, 0.7); border-radius: 16rpx; padding: 12rpx 20rpx; }
-.gcp-log-row { display: flex; gap: 12rpx; padding: 6rpx 0; align-items: center; }
-.gcp-log-seq { font-size: 20rpx; color: $muted; white-space: nowrap; }
-.gcp-log-text { font-size: 24rpx; color: $ink; }
-.gcp-log-emoji { font-size: 40rpx; }
-.gcp-log-sticker { display: inline-flex; }
-.gcp-sticker-img { width: 96rpx; height: 96rpx; }
+.gcp-log-row { display: flex; gap: 8rpx; padding: 6rpx 0; align-items: baseline; }
+.gcp-log-name { font-size: 22rpx; color: $muted; white-space: nowrap; flex-shrink: 0; }
+.gcp-log-text { font-size: 24rpx; color: $ink; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gcp-log-emoji { font-size: 40rpx; flex-shrink: 0; }
 .gcp-groups { max-height: 320rpx; overflow-y: auto; }
 .gcp-group { margin-bottom: 16rpx; }
 .gcp-group-title { font-size: 22rpx; color: $muted; margin-bottom: 8rpx; }
@@ -124,12 +109,9 @@ $gold: #f4b942;
   font-size: 24rpx; color: $ink; background: #fff; border-radius: 999rpx; padding: 10rpx 24rpx;
   border: 2rpx solid rgba(33, 72, 61, 0.12);
 }
-.gcp-phrase.disabled, .gcp-emoji.disabled, .gcp-sticker.disabled { opacity: 0.4; }
+.gcp-phrase.disabled, .gcp-emoji.disabled { opacity: 0.4; }
 .gcp-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12rpx; max-height: 320rpx; overflow-y: auto; }
 .gcp-emoji { font-size: 48rpx; text-align: center; padding: 12rpx 0; background: #fff; border-radius: 14rpx; }
-.gcp-sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; max-height: 320rpx; overflow-y: auto; }
-.gcp-sticker { background: #fff; border-radius: 14rpx; padding: 8rpx; }
-.gcp-sticker-item { width: 100%; height: 140rpx; }
 .gcp-text-row { display: flex; gap: 12rpx; align-items: center; }
 .gcp-input { flex: 1; height: 72rpx; background: #fff; border-radius: 14rpx; padding: 0 24rpx; font-size: 26rpx; }
 .gcp-send {

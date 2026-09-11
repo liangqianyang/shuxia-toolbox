@@ -693,7 +693,7 @@ final class LudoRoomService
             'scores' => $state['scores'] ?? [],
             'chat' => array_values($state['chat'] ?? []),
             'chatSeq' => (int) ($state['chatSeq'] ?? 0),
-            'sharePath' => '/pages-ludo/index?room=' . $room->code,
+            'sharePath' => '/pages-games/ludo/index?room=' . $room->code,
             'updatedAt' => (string) $room->updated_at,
         ];
     }

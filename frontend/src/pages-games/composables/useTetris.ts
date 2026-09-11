@@ -6,7 +6,7 @@
  */
 
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
-import { applyAction, createGame, type GameAction, type TetrisState } from '@/utils/tetris'
+import { applyAction, createGame, type GameAction, type TetrisState } from '@/pages-games/utils/tetris'
 
 const TICK_MS = 33
 const DT_CLAMP_MS = 250

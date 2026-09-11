@@ -86,7 +86,13 @@
             <text class="tetris__lb-count">{{ leaderboard.entries.length }} 人</text>
           </view>
           <view v-if="leaderboard.mine" class="tetris__lb-mine">
-            <text class="tetris__lb-mine-name">我的成绩{{ myNickname ? ' · ' + myNickname : '' }}</text>
+            <view class="tetris__lb-left">
+              <view class="tetris__lb-avatar">
+                <image v-if="myAvatar" class="tetris__lb-avatar-img" :src="myAvatar" mode="aspectFill" />
+                <text v-else class="tetris__lb-avatar-char">{{ (myNickname || '我').slice(0, 1) }}</text>
+              </view>
+              <text class="tetris__lb-mine-name">我的成绩{{ myNickname ? ' · ' + myNickname : '' }}</text>
+            </view>
             <text class="tetris__lb-mine-val">第 {{ leaderboard.mine.rank }} 名 · {{ formatScore(leaderboard.mine.score) }}</text>
           </view>
           <view
@@ -98,7 +104,8 @@
             <view class="tetris__lb-left">
               <text class="tetris__lb-rank" :style="{ color: rankColor(entry.rank) }">{{ rankBadge(entry.rank) }}</text>
               <view class="tetris__lb-avatar">
-                <text class="tetris__lb-avatar-char">{{ entry.nickname.slice(0, 1) }}</text>
+                <image v-if="entry.avatarUrl" class="tetris__lb-avatar-img" :src="resolveAvatarUrl(entry.avatarUrl)" mode="aspectFill" />
+                <text v-else class="tetris__lb-avatar-char">{{ entry.nickname.slice(0, 1) }}</text>
               </view>
               <text class="tetris__lb-name">{{ entry.nickname }}</text>
             </view>
@@ -253,14 +260,14 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import { onHide, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import GameRulesModal from '@/components/GameRulesModal.vue'
-import { useTetris } from '@/composables/useTetris'
-import { storedUser } from '@/services/toolbox'
-import { fetchTetrisLeaderboard, submitTetrisScore, type TetrisLeaderboard } from '@/services/tetris'
+import { useTetris } from '@/pages-games/composables/useTetris'
+import { resolveAvatarUrl, storedUser } from '@/services/toolbox'
+import { fetchTetrisLeaderboard, submitTetrisScore, type TetrisLeaderboard } from '@/pages-games/services/tetris'
 import { getCanvasNode, getWindowInfo, type CanvasNode } from '@/utils/canvasAdapter'
-import { computeTetrisLayout, drawTetrisFrame, type TetrisLayout } from '@/utils/tetrisRender'
-import { createDragController, defaultDragConfig } from '@/utils/touchGestures'
-import { playTetrisSound, setTetrisSoundEnabled, tetrisSoundEnabled } from '@/utils/tetrisSound'
-import type { TetrisState } from '@/utils/tetris'
+import { computeTetrisLayout, drawTetrisFrame, type TetrisLayout } from '@/pages-games/utils/tetrisRender'
+import { createDragController, defaultDragConfig } from '@/pages-games/utils/touchGestures'
+import { playTetrisSound, setTetrisSoundEnabled, tetrisSoundEnabled } from '@/pages-games/utils/tetrisSound'
+import type { TetrisState } from '@/pages-games/utils/tetris'
 
 const BEST_KEY = 'shuxia_tetris_best_v1'
 const LEVEL_KEY = 'shuxia_tetris_start_level'
@@ -302,6 +309,10 @@ const leaderboard = ref<TetrisLeaderboard | null>(null)
 const leaderboardLoading = ref(false)
 const leaderboardError = ref('')
 const myNickname = computed(() => storedUser()?.nickname ?? '')
+const myAvatar = computed(() => {
+  const url = storedUser()?.avatarUrl ?? ''
+  return url ? resolveAvatarUrl(url) : ''
+})
 const mineRankText = computed(() => {
   const mine = leaderboard.value?.mine
   return mine ? `第 ${mine.rank} 名` : '未上榜'
@@ -964,6 +975,12 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+
+    &-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+    }
 
     &-char {
       font-size: $font-caption;

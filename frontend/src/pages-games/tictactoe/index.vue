@@ -61,9 +61,13 @@
         <button v-if="state.status === 'waiting'" class="ttt__invite" open-type="share">邀请</button>
       </view>
 
-      <!-- 棋盘卡（3×3 纯 DOM 网格） -->
+      <!-- 棋盘卡（白卡 + 米白面板 + 四道深色 # 网格线,照原型 01-对局;网格线在格子层之下不挡点击） -->
       <view class="ttt__board-card" :style="{ width: cardWidth + 'px' }">
-        <view class="ttt__grid" :style="{ width: boardSize + 'px', height: boardSize + 'px' }">
+        <view class="ttt__board" :style="{ width: boardSize + 'px', height: boardSize + 'px' }">
+          <view class="ttt__line ttt__line--v" :style="{ left: cellSize - 3 + 'px' }"></view>
+          <view class="ttt__line ttt__line--v" :style="{ left: cellSize * 2 - 3 + 'px' }"></view>
+          <view class="ttt__line ttt__line--h" :style="{ top: cellSize - 3 + 'px' }"></view>
+          <view class="ttt__line ttt__line--h" :style="{ top: cellSize * 2 - 3 + 'px' }"></view>
           <view
             v-for="(cell, i) in cells"
             :key="i"
@@ -82,7 +86,6 @@
             <view v-else-if="cell === 'o'" class="ttt__mark-o"></view>
           </view>
         </view>
-        <view class="ttt__board-hit" @tap="onBoardTap"></view>
       </view>
 
       <!-- 我的栏（X 方在下） -->
@@ -114,18 +117,18 @@
       </view>
       <text class="ttt__hint">{{ hintText }}</text>
 
-      <!-- 聊天条 -->
-      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="ttt__chatbar" hover-class="press" @tap="openChat">
-        <view class="ttt__chatbar-trigger" @tap.stop="openChat">
-          <text class="ttt__chatbar-icon">💬</text>
-          <text class="ttt__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="ttt__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
-        </view>
+      <!-- 聊天条（家法同 uno:消息 feed 在上,💬 触发钮在左下） -->
+      <view v-if="state.status !== 'waiting' && state.status !== 'finished'" class="ttt__chatbar">
         <view v-if="feedChats.length" class="ttt__chatbar-feed">
           <view v-for="m in feedChats" :key="m.seq" class="ttt__chatbar-item">
             <text class="ttt__chatbar-name">{{ chatNameOf(m) }}：</text>
             <text class="ttt__chatbar-text" :class="{ 'ttt__chatbar-text--emoji': m.kind === 'emoji' }">{{ chatBodyOf(m) }}</text>
           </view>
+        </view>
+        <view class="ttt__chatbar-trigger" hover-class="press" @tap="openChat">
+          <text class="ttt__chatbar-icon">💬</text>
+          <text class="ttt__chatbar-hint">快捷嘴炮…</text>
+          <text v-if="roomChat.unreadChat.value" class="ttt__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
         </view>
       </view>
     </view>
@@ -224,7 +227,7 @@
                 class="ttt__mini-cell"
                 :class="{ 'ttt__mini-cell--win': [0, 4, 8].includes(i) }"
               >
-                <text v-if="cell" :class="cell === 'x' ? 'ttt__mini-x' : 'ttt__mini-o'">✕</text>
+                <text v-if="cell" class="ttt__mini-x">✕</text>
               </view>
             </view>
             <text class="ttt__rule-note">对角三连 · 金色高亮即获胜线</text>
@@ -249,17 +252,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import { useTictactoeRoom } from '@/composables/useTictactoeRoom'
-import { leaveRoom } from '@/services/tictactoe'
+import { useTictactoeRoom } from '@/pages-games/composables/useTictactoeRoom'
+import { leaveRoom } from '@/pages-games/services/tictactoe'
 import { resolveAvatarUrl } from '@/services/toolbox'
 import { getWindowInfo } from '@/utils/canvasAdapter'
-import { LINES } from '@/utils/tictactoe'
+import { LINES } from '@/pages-games/utils/tictactoe'
 import type { TicTacToeMark } from '@/types/tictactoe'
-import GameChatPanel from '@/components/GameChatPanel.vue'
-import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
-import { gamePhraseText } from '@/utils/gameChat'
-import { playTictactoeSound } from '@/utils/tictactoeSound'
+import { gamePhraseText } from '@/pages-games/utils/gameChat'
+import { playTictactoeSound } from '@/pages-games/utils/tictactoeSound'
 
 const rulesOpen = ref(false)
 
@@ -269,6 +272,7 @@ const roomChat = useRoomChat({
   chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
   code: () => state.value?.code ?? '',
   send: (kind, payload) => sendChat(kind, payload),
+  nameOf: (m) => chatNameOf(m),
 })
 
 const {
@@ -301,7 +305,8 @@ const chatBodyOf = (m: RoomChatMessage): string =>
 
 // ---------- 派生数据 ----------
 const WIN_LINES = LINES
-const MINI_BOARD: Array<'x' | null> = ['x', null, null, null, 'x', null, null, null, 'x']
+/** 三连示意照原型 03-规则:对角 0/4/8 金圈 + 右上角 2 一颗未连线 X。 */
+const MINI_BOARD: Array<'x' | null> = ['x', null, 'x', null, 'x', null, null, null, 'x']
 
 const windowWidth = getWindowInfo().windowWidth
 const cardWidth = Math.min(windowWidth - 16, 343)
@@ -696,6 +701,8 @@ onShareAppMessage(() => ({
     flex-direction: column;
     gap: 8px;
     padding-top: 6px;
+    /* 固定聊天 dock 的避让位 */
+    padding-bottom: calc(140px + env(safe-area-inset-bottom));
   }
 
   &__topbar {
@@ -903,12 +910,35 @@ onShareAppMessage(() => ({
     position: relative;
   }
 
-  &__grid {
+  &__board {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
+    border-radius: 12px;
+    background: #fffdf8;
+  }
+
+  /* 四道 # 网格线:绝对定位且先于格子渲染,格子在层上照常收点击(线不挡落子) */
+  &__line {
+    position: absolute;
+    border-radius: 3px;
+    background: #4a3f35;
+
+    &--v {
+      top: 0;
+      bottom: 0;
+      width: 6px;
+    }
+
+    &--h {
+      left: 0;
+      right: 0;
+      height: 6px;
+    }
   }
 
   &__cell {
+    position: relative;
     width: 33.33%;
     height: 33.33%;
     display: flex;
@@ -917,30 +947,26 @@ onShareAppMessage(() => ({
     box-sizing: border-box;
 
     &--hint {
-      background: #f4b94226;
+      background: #f4b94214;
     }
 
     &--win {
       background: #f4b94226;
     }
-
-    &--hint {
-      background: #f4b94214;
-    }
   }
 
   &__mark-x {
     position: relative;
-    width: 52%;
-    height: 52%;
+    width: 38%;
+    height: 38%;
   }
 
   &__x-bar {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: 130%;
-    height: 14%;
+    width: 120%;
+    height: 20%;
     border-radius: 999rpx;
     background: #e85d4a;
 
@@ -954,15 +980,10 @@ onShareAppMessage(() => ({
   }
 
   &__mark-o {
-    width: 56%;
-    height: 56%;
+    width: 48%;
+    height: 48%;
     border-radius: 50%;
-    border: 7px solid #5b8fb9;
-  }
-
-  &__board-hit {
-    position: absolute;
-    inset: 0;
+    border: 6px solid #5b8fb9;
   }
 
   &__actions {
@@ -992,15 +1013,19 @@ onShareAppMessage(() => ({
   }
 
   &__chatbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    padding: 0 6px;
-    border-radius: 22px;
-    background: #fff;
-    border: 1rpx solid #f0e4d7;
-    overflow: hidden;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(255, 248, 237, 0.95);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 10px rgba(62, 50, 38, 0.08);
   }
 
   &__chatbar-trigger {
@@ -1040,10 +1065,15 @@ onShareAppMessage(() => ({
   }
 
   &__chatbar-feed {
-    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    background: #fff;
+    border: 1rpx solid #f0e4d7;
+    border-radius: 12px;
+    padding: 6px 12px;
     overflow: hidden;
   }
 
@@ -1417,11 +1447,13 @@ onShareAppMessage(() => ({
   &__mini-grid {
     display: flex;
     flex-wrap: wrap;
-    width: 114px;
-    gap: 4px;
+    /* 容器放宽到 122px:3×(34px 含边框) + 2×5px = 112px,留足余量防子像素取整挤成每行 2 格 */
+    width: 122px;
+    gap: 5px;
   }
 
   &__mini-cell {
+    box-sizing: border-box;
     width: 34px;
     height: 34px;
     border-radius: 6px;
@@ -1441,10 +1473,6 @@ onShareAppMessage(() => ({
     font-size: 16px;
     font-weight: 700;
     color: #e85d4a;
-  }
-
-  &__mini-o {
-    display: none;
   }
 
   &__sp-row {

@@ -1,7 +1,7 @@
 /** UNO 牌面图片仓库：模块级共享缓存（Q版渲染 → 临时图片），页面用 <image> 引用。 */
 
 import { ref } from 'vue'
-import { ALL_CARD_KEYS, unoCardImage } from '@/utils/unoCards'
+import { ALL_CARD_KEYS, unoCardImage } from '@/pages-games/utils/unoCards'
 
 const images = ref<Record<string, string>>({})
 

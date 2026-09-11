@@ -8,7 +8,7 @@
  * 入口箭头指向跑道、中心四色三角（各对准本色的臂）。
  * 全程序化不贴素材（早期贴 tiles 素材包效果杂乱已弃用）；几何全部来自 ludoBoard.ts（唯一真相）。
  */
-import { canvasToFile, createDrawingCanvas } from '../../utils/canvasAdapter'
+import { canvasToFile, createDrawingCanvas } from '@/utils/canvasAdapter'
 import {
   GRID,
   RING,

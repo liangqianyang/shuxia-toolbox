@@ -83,17 +83,6 @@
   ],
   "subPackages": [
     {
-      "root": "pages-adventure",
-      "pages": [
-        {
-          "path": "index",
-          "style": {
-            "navigationBarTitleText": "枫趣冒险"
-          }
-        }
-      ]
-    },
-    {
       "root": "pages-ludo",
       "pages": [
         {
@@ -105,8 +94,31 @@
       ]
     },
     {
+      "root": "pages-adventure",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "枫趣冒险"
+          }
+        }
+      ]
+    },
+    {
       "root": "pages-games",
       "pages": [
+        {
+          "path": "adventure/index",
+          "style": {
+            "navigationBarTitleText": "枫趣冒险"
+          }
+        },
+        {
+          "path": "ludo/index",
+          "style": {
+            "navigationBarTitleText": "飞行棋"
+          }
+        },
         {
           "path": "jungle/index",
           "style": {

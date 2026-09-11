@@ -2,7 +2,7 @@
  *  开关持久化到 storage（默认开），资源缺失时静默。
  */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 const SOUND_KEY = 'shuxia-junqi-sound-enabled'
 
 export type JunqiSoundName = 'select' | 'move' | 'capture' | 'reveal' | 'win' | 'lose' | 'rps'

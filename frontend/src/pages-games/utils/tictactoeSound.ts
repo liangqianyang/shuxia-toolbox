@@ -1,6 +1,6 @@
 /** 井字棋音效：CDN wav（frontend/scripts/gen_tictactoe_sounds.py 程序合成后上传），模块级 InnerAudioContext 缓存。 */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 const SOUND_KEY = 'shuxia-tictactoe-sound-enabled'
 
 export type TictactoeSoundName = 'place' | 'win' | 'lose'

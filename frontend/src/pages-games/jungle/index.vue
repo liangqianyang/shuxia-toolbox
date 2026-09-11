@@ -118,18 +118,18 @@
       </view>
       <text class="jungle__hint">{{ hintText }}</text>
 
-      <!-- 底部聊天条（照 UNO）：对局中常驻展示最近消息，点按展开完整面板；触发钮统一放左（跨游戏规则） -->
-      <view v-if="state.status === 'playing'" class="jungle__chatbar" hover-class="press" @tap="openChat">
-        <view class="jungle__chatbar-trigger" @tap.stop="openChat">
-          <text class="jungle__chatbar-icon">💬</text>
-          <text class="jungle__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="jungle__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
-        </view>
+      <!-- 底部聊天条（家法同 uno:消息 feed 在上,💬 触发钮在左下） -->
+      <view v-if="state.status === 'playing'" class="jungle__chatbar">
         <view v-if="feedChats.length" class="jungle__chatbar-feed">
           <view v-for="m in feedChats" :key="m.seq" class="jungle__chatbar-item">
             <text class="jungle__chatbar-name">{{ chatNameOf(m) }}：</text>
             <text class="jungle__chatbar-text" :class="{ 'jungle__chatbar-text--emoji': m.kind === 'emoji' }">{{ chatBodyOf(m) }}</text>
           </view>
+        </view>
+        <view class="jungle__chatbar-trigger" hover-class="press" @tap="openChat">
+          <text class="jungle__chatbar-icon">💬</text>
+          <text class="jungle__chatbar-hint">快捷嘴炮…</text>
+          <text v-if="roomChat.unreadChat.value" class="jungle__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
         </view>
       </view>
     </view>
@@ -315,8 +315,8 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import { useJungleRoom } from '@/composables/useJungleRoom'
-import { leaveRoom } from '@/services/jungle'
+import { useJungleRoom } from '@/pages-games/composables/useJungleRoom'
+import { leaveRoom } from '@/pages-games/services/jungle'
 import { resolveAvatarUrl } from '@/services/toolbox'
 import { getCanvasNode, getElementRect, getWindowInfo } from '@/utils/canvasAdapter'
 import {
@@ -334,13 +334,13 @@ import {
   pointToCell,
   type JungleBoardMetrics,
   type JungleHint,
-} from '@/utils/jungle'
+} from '@/pages-games/utils/jungle'
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { JungleAnimal, JungleLastMove, JungleRoomState, JungleSide } from '@/types/jungle'
-import GameChatPanel from '@/components/GameChatPanel.vue'
-import { useRoomChat, type RoomChatMessage } from '@/composables/useRoomChat'
+import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
-import { gamePhraseText } from '@/utils/gameChat'
+import { gamePhraseText } from '@/pages-games/utils/gameChat'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 斗兽棋四帧，dou-* 变量实值） ----------
 const COLOR_LAND = '#F7EEDF'
@@ -370,6 +370,7 @@ const roomChat = useRoomChat({
   chat: () => (state.value?.chat ?? []) as RoomChatMessage[],
   code: () => state.value?.code ?? '',
   send: (kind, payload) => sendChat(kind, payload),
+  nameOf: (m) => chatNameOf(m),
 })
 
 const {
@@ -1402,22 +1403,37 @@ onShareAppMessage(() => ({
   }
 
   /* ── 底部聊天条（照 UNO；触发钮在左） ── */
+  &__room {
+    /* 固定聊天 dock 的避让位 */
+    padding-bottom: calc(280rpx + env(safe-area-inset-bottom));
+  }
+
   &__chatbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
     display: flex;
-    align-items: center;
-    gap: 16rpx;
-    margin-top: 16rpx;
-    background: #fff;
-    border: 2rpx solid #f0e4d7;
-    border-radius: 48rpx;
-    padding: 12rpx 20rpx;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12rpx;
+    padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+    background: rgba(255, 248, 237, 0.95);
+    border-radius: 24rpx 24rpx 0 0;
+    box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
 
     &-feed {
-      flex: 1;
-      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
       display: flex;
       flex-direction: column;
       gap: 4rpx;
+      background: #fff;
+      border: 2rpx solid #f0e4d7;
+      border-radius: 18rpx;
+      padding: 10rpx 20rpx;
+      overflow: hidden;
     }
 
     &-item {

@@ -3,7 +3,7 @@
  * 首次播放前懒创建实例；播放失败静默吞掉（无声不影响对局）。
  */
 
-import { cdnUrl } from './cdn'
+import { cdnUrl } from '@/utils/cdn'
 let placeCtx: UniApp.InnerAudioContext | null = null
 let winCtx: UniApp.InnerAudioContext | null = null
 

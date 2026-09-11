@@ -5,7 +5,7 @@
  */
 
 import { canvasToFile, createDrawingCanvas } from '@/utils/canvasAdapter'
-import { COLOR_META, cardColor, cardValue, isWild } from '@/utils/uno'
+import { COLOR_META, cardColor, cardValue, isWild } from '@/pages-games/utils/uno'
 import type { UnoColor } from '@/types/uno'
 
 /** 逻辑尺寸（渲染时乘 SCALE）。 */
