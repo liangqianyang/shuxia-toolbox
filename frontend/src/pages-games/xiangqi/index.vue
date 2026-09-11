@@ -42,18 +42,18 @@
         </view>
       </view>
 
-      <!-- 对手栏（黑方在上） -->
+      <!-- 对手栏（对手在上） -->
       <view class="xiangqi__bar">
-        <view v-if="roomChat.chatBubbles['black']" class="xiangqi__bubble" :class="{ 'xiangqi__bubble--emoji': roomChat.chatBubbles['black'].isEmoji }">{{ roomChat.chatBubbles['black'].text }}</view>
-        <view class="xiangqi__avatar xiangqi__avatar--black">
-          <image v-if="state.black?.avatarUrl" class="xiangqi__avatar-img" :src="avatarOf(state.black.avatarUrl)" mode="aspectFill" />
+        <view v-if="roomChat.chatBubbles[opponentSide]" class="xiangqi__bubble" :class="{ 'xiangqi__bubble--emoji': roomChat.chatBubbles[opponentSide].isEmoji }">{{ roomChat.chatBubbles[opponentSide].text }}</view>
+        <view class="xiangqi__avatar" :class="opponentSide === 'red' ? 'xiangqi__avatar--red' : 'xiangqi__avatar--black'">
+          <image v-if="opponentCard?.avatarUrl" class="xiangqi__avatar-img" :src="avatarOf(opponentCard.avatarUrl)" mode="aspectFill" />
           <text v-else class="xiangqi__avatar-hint">👤</text>
         </view>
         <view class="xiangqi__bar-info">
           <view class="xiangqi__bar-row">
-            <text class="xiangqi__bar-name">{{ state.black?.nickname || '等待加入' }}</text>
-            <view class="xiangqi__pill xiangqi__pill--black"><text>黑方</text></view>
-            <text v-if="state.black" class="xiangqi__dot" :class="{ 'xiangqi__dot--off': !state.black.online }"></text>
+            <text class="xiangqi__bar-name">{{ opponentCard?.nickname || '等待加入' }}</text>
+            <view class="xiangqi__pill" :class="opponentSide === 'red' ? 'xiangqi__pill--red' : 'xiangqi__pill--black'"><text>{{ opponentLabel }}</text></view>
+            <text v-if="opponentCard" class="xiangqi__dot" :class="{ 'xiangqi__dot--off': !opponentCard.online }"></text>
           </view>
           <text class="xiangqi__bar-status">{{ opponentStatusText }}</text>
         </view>
@@ -78,19 +78,19 @@
         <view class="xiangqi__board-hit" @tap="onBoardTap"></view>
       </view>
 
-      <!-- 我的栏（红方在下） -->
+      <!-- 我的栏（我在下） -->
       <view class="xiangqi__bar xiangqi__bar--me">
-        <view v-if="roomChat.chatBubbles['red']" class="xiangqi__bubble" :class="{ 'xiangqi__bubble--emoji': roomChat.chatBubbles['red'].isEmoji }">{{ roomChat.chatBubbles['red'].text }}</view>
+        <view v-if="roomChat.chatBubbles[mySide]" class="xiangqi__bubble" :class="{ 'xiangqi__bubble--emoji': roomChat.chatBubbles[mySide].isEmoji }">{{ roomChat.chatBubbles[mySide].text }}</view>
         <view v-if="isMyTurn" class="xiangqi__turn-bar"></view>
-        <view class="xiangqi__avatar xiangqi__avatar--red">
-          <image v-if="state.red?.avatarUrl" class="xiangqi__avatar-img" :src="avatarOf(state.red.avatarUrl)" mode="aspectFill" />
+        <view class="xiangqi__avatar" :class="mySide === 'red' ? 'xiangqi__avatar--red' : 'xiangqi__avatar--black'">
+          <image v-if="myCard?.avatarUrl" class="xiangqi__avatar-img" :src="avatarOf(myCard.avatarUrl)" mode="aspectFill" />
           <text v-else class="xiangqi__avatar-hint">👤</text>
         </view>
         <view class="xiangqi__bar-info">
           <view class="xiangqi__bar-row">
-            <text class="xiangqi__bar-name">{{ state.red?.nickname || '等待加入' }}</text>
-            <view class="xiangqi__pill xiangqi__pill--red"><text>红方</text></view>
-            <text v-if="state.red" class="xiangqi__dot" :class="{ 'xiangqi__dot--off': !state.red.online }"></text>
+            <text class="xiangqi__bar-name">{{ myCard?.nickname || '等待加入' }}</text>
+            <view class="xiangqi__pill" :class="mySide === 'red' ? 'xiangqi__pill--red' : 'xiangqi__pill--black'"><text>{{ myLabel }}</text></view>
+            <text v-if="myCard" class="xiangqi__dot" :class="{ 'xiangqi__dot--off': !myCard.online }"></text>
           </view>
           <text class="xiangqi__bar-status" :class="{ 'xiangqi__bar-status--mine': isMyTurn }">{{ myStatusText }}</text>
         </view>
@@ -334,6 +334,11 @@ const chatBodyOf = (m: RoomChatMessage): string =>
 const roundCount = computed(() => Math.ceil((state.value?.ply ?? 0) / 2))
 const mySide = computed<XiangqiSide>(() => myColor.value ?? 'red')
 const opponentSide = computed<XiangqiSide>(() => (mySide.value === 'red' ? 'black' : 'red'))
+/** 上下栏卡片按我的颜色动态取（不能写死黑上红下：黑方玩家会看到自己和对手互换）。 */
+const myCard = computed(() => (state.value ? state.value[mySide.value] : null))
+const opponentCard = computed(() => (state.value ? state.value[opponentSide.value] : null))
+const myLabel = computed(() => (mySide.value === 'red' ? '红方' : '黑方'))
+const opponentLabel = computed(() => (opponentSide.value === 'red' ? '红方' : '黑方'))
 /** 对方吃到 = 我方阵亡；我吃到 = 对方阵亡。 */
 const capturedByOpponent = computed<XiangqiPieceType[]>(() => state.value?.trays[mySide.value] ?? [])
 const capturedByMe = computed<XiangqiPieceType[]>(() => state.value?.trays[opponentSide.value] ?? [])
@@ -561,7 +566,7 @@ function drawBoard() {
       // 落子动画期间跳过终点上的移动子，改为插值位置绘制
       if (anim.value && piece.r === anim.value.tr && piece.c === anim.value.tc && piece.side === anim.value.side) continue
       const pos = absToScreen(piece.r, piece.c)
-      drawPieceCenter(ctx, pos.c, pos.r, piece.piece, piece.side)
+      drawPiece(ctx, pos.r, pos.c, piece.piece, piece.side)
     }
   }
 
@@ -604,8 +609,10 @@ function drawBoard() {
     ctx.stroke()
   }
   for (const hint of hints.value) {
-    const cx = pointX(hint.c)
-    const cy = pointY(hint.r)
+    // 提示存的是绝对坐标,绘制要走视角翻转（黑方视角否则镜像到红方半场）
+    const sp = absToScreen(hint.r, hint.c)
+    const cx = pointX(sp.c)
+    const cy = pointY(sp.r)
     if (current && pieceAt(current.pieces, hint.r, hint.c)) {
       ctx.strokeStyle = COLOR_ATTACK
       ctx.lineWidth = 2.5 * s
