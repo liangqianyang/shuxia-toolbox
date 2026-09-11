@@ -324,7 +324,7 @@ const busy = ref(false)
 const avatarOf = (url: string) => resolveAvatarUrl(url)
 
 // ---------- 底部聊天条 ----------
-const feedChats = computed(() => roomChat.recentChats.value.slice(-3))
+const feedChats = computed(() => roomChat.recentChats.value)
 const chatNameOf = (m: RoomChatMessage): string =>
   m.role === 'red' ? (state.value?.red?.nickname ?? '红方') : (state.value?.black?.nickname ?? '黑方')
 const chatBodyOf = (m: RoomChatMessage): string =>
@@ -1061,8 +1061,8 @@ onShareAppMessage(() => ({
     flex-direction: column;
     gap: 8px;
     padding-top: 6px;
-    /* 固定聊天 dock 的避让位 */
-    padding-bottom: calc(140px + env(safe-area-inset-bottom));
+    /* 固定聊天 dock（6 行 feed）的避让位 */
+    padding-bottom: calc(200px + env(safe-area-inset-bottom));
   }
 
   &__topbar {

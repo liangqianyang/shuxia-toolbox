@@ -1065,8 +1065,8 @@ onShareAppMessage(() => ({
 }
 
 .gomoku__room {
-  /* 固定聊天 dock 的避让位 */
-  padding-bottom: calc(280rpx + env(safe-area-inset-bottom));
+  /* 固定聊天 dock（6 行 feed）的避让位 */
+  padding-bottom: calc(380rpx + env(safe-area-inset-bottom));
 }
 .gomoku__chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
 .gomoku__chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: $color-card; border: 2rpx solid $color-border; border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }

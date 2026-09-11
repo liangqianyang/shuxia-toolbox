@@ -48,7 +48,7 @@ export function useRoomChat(options: UseRoomChatOptions) {
   let lastChatSeq = 0
   let chatSynced = false
 
-  const recentChats = computed(() => options.chat().slice(-5))
+  const recentChats = computed(() => options.chat().slice(-6))
   const chatLog = computed(() => [...options.chat()].reverse().slice(0, 30))
   const phraseGroups = computed(() => GAME_PHRASE_GROUPS)
 

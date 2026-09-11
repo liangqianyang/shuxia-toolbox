@@ -903,7 +903,7 @@ const chatLog = computed<UnoChatMessage[]>(() => {
 })
 
 /** 底部聊天条常驻显示的最近几条消息（新的在底部，超过 CHAT_FEED_KEEP 条顶部的消失）。 */
-const CHAT_FEED_KEEP = 5
+const CHAT_FEED_KEEP = 6
 const chatFeed = computed<UnoChatMessage[]>(() => {
   return (state.value?.chat ?? []).slice(-CHAT_FEED_KEEP)
 })
