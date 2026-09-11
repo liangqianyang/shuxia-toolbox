@@ -43,18 +43,18 @@
         </view>
       </view>
 
-      <!-- 对手栏（蓝方在上） -->
+      <!-- 对手栏（对手在上） -->
       <view class="junqi__bar">
-        <view v-if="roomChat.chatBubbles['blue']" class="junqi__bubble" :class="{ 'junqi__bubble--emoji': roomChat.chatBubbles['blue'].isEmoji }">{{ roomChat.chatBubbles['blue'].text }}</view>
-        <view class="junqi__avatar junqi__avatar--blue">
-          <image v-if="state.blue?.avatarUrl" class="junqi__avatar-img" :src="avatarOf(state.blue.avatarUrl)" mode="aspectFill" />
+        <view v-if="roomChat.chatBubbles[opponentSide]" class="junqi__bubble" :class="{ 'junqi__bubble--emoji': roomChat.chatBubbles[opponentSide].isEmoji }">{{ roomChat.chatBubbles[opponentSide].text }}</view>
+        <view class="junqi__avatar" :class="opponentSide === 'red' ? 'junqi__avatar--red' : 'junqi__avatar--blue'">
+          <image v-if="opponentCard?.avatarUrl" class="junqi__avatar-img" :src="avatarOf(opponentCard.avatarUrl)" mode="aspectFill" />
           <text v-else class="junqi__avatar-hint">👤</text>
         </view>
         <view class="junqi__bar-info">
           <view class="junqi__bar-row">
-            <text class="junqi__bar-name">{{ state.blue?.nickname || '等待加入' }}</text>
-            <view class="junqi__pill junqi__pill--blue"><text>蓝方</text></view>
-            <text v-if="state.blue" class="junqi__dot" :class="{ 'junqi__dot--off': !state.blue.online }"></text>
+            <text class="junqi__bar-name">{{ opponentCard?.nickname || '等待加入' }}</text>
+            <view class="junqi__pill" :class="opponentSide === 'red' ? 'junqi__pill--red' : 'junqi__pill--blue'"><text>{{ opponentSide === 'red' ? '红方' : '蓝方' }}</text></view>
+            <text v-if="opponentCard" class="junqi__dot" :class="{ 'junqi__dot--off': !opponentCard.online }"></text>
           </view>
           <text class="junqi__bar-status">{{ opponentStatusText }}</text>
         </view>
@@ -118,19 +118,19 @@
         </scroll-view>
       </view>
 
-      <!-- 我的栏（红方在下） -->
+      <!-- 我的栏（我在下） -->
       <view class="junqi__bar junqi__bar--me">
-        <view v-if="roomChat.chatBubbles['red']" class="junqi__bubble" :class="{ 'junqi__bubble--emoji': roomChat.chatBubbles['red'].isEmoji }">{{ roomChat.chatBubbles['red'].text }}</view>
+        <view v-if="roomChat.chatBubbles[mySide]" class="junqi__bubble" :class="{ 'junqi__bubble--emoji': roomChat.chatBubbles[mySide].isEmoji }">{{ roomChat.chatBubbles[mySide].text }}</view>
         <view v-if="isMyTurn" class="junqi__turn-bar"></view>
-        <view class="junqi__avatar junqi__avatar--red">
-          <image v-if="state.red?.avatarUrl" class="junqi__avatar-img" :src="avatarOf(state.red.avatarUrl)" mode="aspectFill" />
+        <view class="junqi__avatar" :class="mySide === 'red' ? 'junqi__avatar--red' : 'junqi__avatar--blue'">
+          <image v-if="myCard?.avatarUrl" class="junqi__avatar-img" :src="avatarOf(myCard.avatarUrl)" mode="aspectFill" />
           <text v-else class="junqi__avatar-hint">👤</text>
         </view>
         <view class="junqi__bar-info">
           <view class="junqi__bar-row">
-            <text class="junqi__bar-name">{{ state.red?.nickname || '等待加入' }}</text>
-            <view class="junqi__pill junqi__pill--red"><text>红方</text></view>
-            <text v-if="state.red" class="junqi__dot" :class="{ 'junqi__dot--off': !state.red.online }"></text>
+            <text class="junqi__bar-name">{{ myCard?.nickname || '等待加入' }}</text>
+            <view class="junqi__pill" :class="mySide === 'red' ? 'junqi__pill--red' : 'junqi__pill--blue'"><text>{{ mySide === 'red' ? '红方' : '蓝方' }}</text></view>
+            <text v-if="myCard" class="junqi__dot" :class="{ 'junqi__dot--off': !myCard.online }"></text>
           </view>
           <text class="junqi__bar-status" :class="{ 'junqi__bar-status--mine': isMyTurn }">{{ myStatusText }}</text>
         </view>
@@ -455,6 +455,9 @@ const chatBodyOf = (m: RoomChatMessage): string =>
 const roundCount = computed(() => Math.ceil((state.value?.ply ?? 0) / 2))
 const mySide = computed<JunqiSide>(() => myColor.value ?? 'red')
 const opponentSide = computed<JunqiSide>(() => (mySide.value === 'red' ? 'blue' : 'red'))
+/** 上下栏卡片按我的颜色动态取（不能写死蓝上红下：蓝方玩家会看到自己和对手互换）。 */
+const myCard = computed(() => (state.value ? state.value[mySide.value] : null))
+const opponentCard = computed(() => (state.value ? state.value[opponentSide.value] : null))
 const isLayoutPhase = computed(() => state.value?.status === 'layout')
 /** 我吃到 = 对方阵亡（trays 公示）；对方吃到 = 我方阵亡。 */
 const capturedByMe = computed<JunqiRank[]>(() => state.value?.trays[opponentSide.value] ?? [])
@@ -904,16 +907,18 @@ function drawBoard() {
     }
   }
 
-  // 选中金圈 + 落点金点 / 进攻红圈（screen 坐标）
+  // 选中金框 + 落点金点 / 进攻红圈（存的是绝对坐标,绘制要走视角翻转,否则蓝方视角镜像到对方半场）
   if (selected.value) {
-    const rect = cellRect(selected.value.r, selected.value.c, geo)
+    const sel = absToScreen(selected.value.r, selected.value.c)
+    const rect = cellRect(sel.r, sel.c, geo)
     ctx.strokeStyle = COLOR_GOLD
     ctx.lineWidth = 2.5 * s
     roundRectPath(ctx, rect.x - 1.5 * s, rect.y - 1.5 * s, rect.size + 3 * s, rect.size + 3 * s, 5 * s)
     ctx.stroke()
   }
   for (const hint of hints.value) {
-    const rect = cellRect(hint.r, hint.c, geo)
+    const hPos = absToScreen(hint.r, hint.c)
+    const rect = cellRect(hPos.r, hPos.c, geo)
     const cx = rect.x + rect.size / 2
     const cy = rect.y + rect.size / 2
     if (pieceAt(current?.pieces ?? [], hint.r, hint.c)) {
