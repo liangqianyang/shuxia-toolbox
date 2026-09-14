@@ -23,8 +23,16 @@ export interface SokobanSubmitResult {
   rank: number
 }
 
-export function submitSokobanScore(score: number, levels: number): Promise<SokobanSubmitResult> {
-  return requestUserApi<SokobanSubmitResult>('/api/sokoban/score', 'POST', { score, levels })
+/** 每关进度明细 {关卡id: {stars, bestSteps}}——云端存档,本机存储被清后恢复。 */
+export type SokobanProgressMap = Record<string, { stars: number; bestSteps: number }>
+
+export function submitSokobanScore(score: number, levels: number, progress?: SokobanProgressMap): Promise<SokobanSubmitResult> {
+  return requestUserApi<SokobanSubmitResult>('/api/sokoban/score', 'POST', { score, levels, progress })
+}
+
+/** 我的每关进度明细（登录态,静默失败由本地进度兜底）。 */
+export function fetchSokobanProgress(): Promise<SokobanProgressMap> {
+  return requestUserApi<SokobanProgressMap>('/api/sokoban/progress', 'GET')
 }
 
 export function fetchSokobanLeaderboard(limit = 50): Promise<SokobanLeaderboard> {

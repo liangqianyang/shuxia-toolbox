@@ -159,7 +159,7 @@
             :key="tok.seat"
             class="token"
             :class="{ 'token-me': tok.isMe, 'token-current': tok.isCurrent, 'token-finished': tok.finished }"
-            :style="{ left: tok.x + '%', top: tok.y + '%', background: tok.color }"
+            :style="{ width: tok.size + 'px', height: tok.size + 'px', left: tok.x + '%', top: tok.y + '%', background: tok.color }"
           >
             <text class="token-face">{{ tok.isMe ? '我' : tok.initial }}</text>
           </view>
@@ -277,7 +277,7 @@
                 <view class="duel-name">{{ p.nickname }}</view>
                 <view v-if="diceRolling && p.seat === current.mySeat" class="open-dice">🎲 掷骰中…</view>
                 <view v-else-if="openingRollOf(p.seat)" class="open-dice">
-                  🎲 {{ openingRollOf(p.seat)![0] }}+{{ openingRollOf(p.seat)![1] }} = <text class="open-sum">{{ openingRollOf(p.seat)![0] + openingRollOf(p.seat)![1] }}</text>
+                  🎲 {{ openingRollText(p.seat) }}
                 </view>
                 <view v-else-if="current.opening.pending.includes(p.seat)" class="open-wait">待掷…</view>
                 <view v-else class="open-wait muted">本轮轮空</view>
@@ -546,9 +546,9 @@ const GAME_RULES: { heading?: string; lines: string[] }[] = [
     heading: '🎯 目标与移动',
     lines: [
       '2-6 人登山竞速，率先精确走到登顶格者夺冠，整局打满全部名次',
-      '开局全员各掷一次双骰定先手，点数最大者先行；最大点并列的重新掷',
+      '开局全员各掷一枚骰子定先手，点数最大者先行；最大点并列的重新掷',
       '房主开局前可选路线长度：枫林 40 / 溪谷 60 / 岩壁 80 / 枫顶 100 格，短局时云雾之后的区域不开放',
-      '每回合掷两颗骰子，按点数之和前进；双骰同点额外捡 2 枫叶',
+      '每回合掷一枚骰子，按点数前进',
       '步数超过登顶格会反弹；枫叶够差额时自动「补票」登顶',
       '棋盘分五段：山脚草原 → 枫叶林 → 清溪谷 → 岩壁 → 雪线',
     ],
@@ -755,6 +755,7 @@ const tokens = computed(() => {
   const counts = new Map<number, number>()
   for (const p of present) counts.set(p.pos, (counts.get(p.pos) ?? 0) + 1)
   const seen = new Map<number, number>()
+  const tokenSize = boardCssSize.value * 0.07
   return present.map((p) => {
     const point = cellToPoint(p.pos)
     const index = seen.get(p.pos) ?? 0
@@ -763,6 +764,8 @@ const tokens = computed(() => {
     const dx = (index - (total - 1) / 2) * 4.2
     return {
       seat: p.seat,
+      // 显式像素宽高：WXSS 的 aspect-ratio + 百分比宽在真机上过场动画后会被渲染器拉成竖条（变形 bug）
+      size: tokenSize,
       x: point.x * 100 + dx,
       y: (point.y / BOARD_H_RATIO) * 100,
       color: seatColor(p.seat),
@@ -780,13 +783,14 @@ const tokens = computed(() => {
 const diceShaking = ref(false)
 /** 我点击掷骰后的滚动动画：点击瞬间即开始随机翻面，权威点数到达（或超时）定格。 */
 const diceRolling = ref(false)
-const rollingFaces = ref<[number, number]>([1, 1])
+const rollingFaces = ref<number[]>([1])
 let diceRollTimer: ReturnType<typeof setInterval> | null = null
 let diceRollTimeout: ReturnType<typeof setTimeout> | null = null
 
-const displayDice = computed<[number, number]>(() => {
+const displayDice = computed<number[]>(() => {
   if (diceRolling.value) return rollingFaces.value
-  return current.value?.roll ?? [0, 0]
+  const roll = current.value?.roll
+  return roll && roll.length ? roll : [0]
 })
 
 function randomFace(): number {
@@ -796,10 +800,10 @@ function randomFace(): number {
 function startDiceRolling() {
   if (diceRolling.value) return
   diceRolling.value = true
-  rollingFaces.value = [randomFace(), randomFace()]
+  rollingFaces.value = [randomFace()]
   if (diceRollTimer) clearInterval(diceRollTimer)
   diceRollTimer = setInterval(() => {
-    rollingFaces.value = [randomFace(), randomFace()]
+    rollingFaces.value = [randomFace()]
   }, 110)
   // 兜底：回包丢失/请求失败也不至于永远转
   if (diceRollTimeout) clearTimeout(diceRollTimeout)
@@ -839,7 +843,7 @@ const slowAhead = computed(() => current.value?.players.find((p) => p.seat === c
 const previewSteps = computed(() => {
   const st = current.value
   if (!st?.roll) return 0
-  const sum = st.roll[0] + st.roll[1]
+  const sum = st.roll.reduce((a, b) => a + Number(b), 0) // 单骰 [d]；旧存档双骰 [d1,d2] 同样兼容
   return Math.max(1, sum - slowAhead.value) + resolveBonus.value
 })
 const huntwindOn = computed(() => current.value?.weather.current === 'huntwind')
@@ -931,9 +935,16 @@ const choiceWaitingText = computed(() => {
 
 const openingView = computed(() => current.value?.opening ?? null)
 
-function openingRollOf(seat: number): [number, number] | null {
+function openingRollOf(seat: number): number[] | null {
   const roll = openingView.value?.rolls[String(seat)]
   return roll ?? null
+}
+
+/** 定先手点数展示：单骰「4」、旧存档双骰「3 + 6 = 9」。 */
+function openingRollText(seat: number): string {
+  const roll = openingRollOf(seat)
+  if (!roll) return ''
+  return roll.length > 1 ? `${roll.join(' + ')} = ${roll.reduce((a, b) => a + b, 0)}` : String(roll[0])
 }
 
 /** 定先手结果定格：最后一轮全员点数 + 先手者，浮层多停留一会儿再收起。 */
@@ -1420,7 +1431,7 @@ $muted: #9aa79e;
 .board-img { width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 20rpx; }
 .board-fallback { width: 100%; aspect-ratio: 1 / 1; border-radius: 20rpx; background: #f2ead9; }
 .token {
-  position: absolute; width: 7%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%);
+  position: absolute; border-radius: 50%; transform: translate(-50%, -50%);
   display: flex; align-items: center; justify-content: center; border: 4rpx solid #fff;
   box-shadow: 0 4rpx 10rpx rgba(33,72,61,0.35);
   transition: left 0.45s cubic-bezier(0.34, 1.3, 0.64, 1), top 0.45s cubic-bezier(0.34, 1.3, 0.64, 1);

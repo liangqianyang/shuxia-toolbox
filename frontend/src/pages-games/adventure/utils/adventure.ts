@@ -21,7 +21,7 @@ export interface ItemDef {
 }
 
 export const ITEMS: Record<string, ItemDef> = {
-  pickaxe: { name: '登山镐', when: 'resolve', target: false, desc: '本回合骰和 +2', icon: '⛏️' },
+  pickaxe: { name: '登山镐', when: 'resolve', target: false, desc: '本回合点数 +2', icon: '⛏️' },
   skis: { name: '滑雪板', when: 'any', target: false, desc: '免疫下一次滑坡/落石', icon: '🎿' },
   gale: { name: '大风咒', when: 'resolve', target: true, desc: '指定玩家退 4 格', icon: '🌪️' },
   snowball: { name: '雪球', when: 'resolve', target: true, desc: '指定玩家下回合 -3', icon: '❄️' },

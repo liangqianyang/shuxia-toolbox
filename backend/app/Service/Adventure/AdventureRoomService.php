@@ -42,7 +42,7 @@ final class AdventureRoomService
     /** 掷骰后道具+确认窗口（秒）。 */
     public const int RESOLVE_SECONDS = 10;
 
-    /** 定先手阶段时限（秒）：全员掷双骰点大者先手，超时自动代掷。 */
+    /** 定先手阶段时限（秒）：全员各掷一枚骰子点大者先手，超时自动代掷。 */
     public const int OPENING_SECONDS = 10;
 
     /** 选择窗（岔路/埋伏/商店/山神/擂台）时限（秒）。 */
@@ -258,8 +258,8 @@ final class AdventureRoomService
     // ---------------------------------------------------------------- 回合动作
 
     /**
-     * 掷骰：opening 阶段全员各掷一次定先手；act 阶段轮到本人掷双骰。
-     * 双骰之和同点（双骰同点）额外 +2 枚枫叶（仅正常回合）。
+     * 掷骰：opening 阶段全员各掷一枚骰子定先手；act 阶段轮到本人掷一枚骰子。
+     * （2026-09-14 由双骰改单骰：roll 保持数组形态 [d]，兼容旧存档中的双骰局；双骰同点+2 枫叶村规随之取消。）
      *
      * @return array<string, mixed>
      */
@@ -296,16 +296,11 @@ final class AdventureRoomService
 
             [$seat, $state] = $this->requireMyPhase($room, $userId, 'act');
 
-            $dice = [random_int(1, 6), random_int(1, 6)];
+            $dice = [random_int(1, 6)];
             $state['roll'] = $dice;
             $state['phase'] = 'resolve';
             $state['idleStrikes'][(string) $userId] = 0;
             $state = $this->pushEvent($state, ['t' => 'roll', 'seat' => $seat, 'v' => $dice]);
-            if ($dice[0] === $dice[1]) {
-                $uid = (string) $userId;
-                $state['leaves'][$uid] = (int) ($state['leaves'][$uid] ?? 0) + 2;
-                $state = $this->pushEvent($state, ['t' => 'doubles', 'seat' => $seat]);
-            }
 
             $room->state = $state;
             $room->turn_deadline_at = $this->nextDeadline($state, $room->seats);
@@ -1387,15 +1382,10 @@ final class AdventureRoomService
         $seats = $room->seats;
         $seat = (int) $state['currentSeat'];
         if (($state['phase'] ?? 'act') === 'act') {
-            $dice = [random_int(1, 6), random_int(1, 6)];
+            $dice = [random_int(1, 6)];
             $state['roll'] = $dice;
             $state['phase'] = 'resolve';
             $state = $this->pushEvent($state, ['t' => 'roll', 'seat' => $seat, 'v' => $dice, 'auto' => true]);
-            if ($dice[0] === $dice[1]) {
-                $uid = (string) $seats[$seat];
-                $state['leaves'][$uid] = (int) ($state['leaves'][$uid] ?? 0) + 2;
-                $state = $this->pushEvent($state, ['t' => 'doubles', 'seat' => $seat]);
-            }
         }
         $state['turnCtx'] = ['seat' => $seat, 'duelDone' => false];
         $steps = AdventureRule::computeMoveSteps($state, $seat);

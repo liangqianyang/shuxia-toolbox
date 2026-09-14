@@ -23,6 +23,9 @@ final class FeatureFlagService
 
     private const ADVENTURE_CHAT_TEXT_KEY = 'feature.adventure_chat_text';
 
+    /** 游戏榜单总开关（俄罗斯方块/推箱子等所有 game_scores 榜单）：默认关，运营台打开才可见。 */
+    private const GAME_RANK_ENABLED_KEY = 'feature.game_rank_enabled';
+
     public function aiEnabled(): bool
     {
         $value = Db::table('app_configs')->where('config_key', self::AI_ENABLED_KEY)->value('config_value');
@@ -94,6 +97,34 @@ final class FeatureFlagService
     {
         if (! $this->adventureChatTextEnabled()) {
             throw new BizException(403, '文字聊天维护中，快捷句、表情和贴纸仍可用');
+        }
+    }
+
+    /**
+     * 游戏榜单总开关：与 AI 开关同款「默认关」——榜单公开曝光玩家昵称头像，合规敏感，
+     * 运营台打开才可见；关闭时榜单接口服务端硬拦截（不能只靠前端隐藏入口），
+     * 成绩上报不受影响（重开后历史在，榜单秒恢复）。
+     */
+    public function gameRankEnabled(): bool
+    {
+        $value = Db::table('app_configs')->where('config_key', self::GAME_RANK_ENABLED_KEY)->value('config_value');
+        return $value === '1';
+    }
+
+    public function setGameRankEnabled(bool $enabled): bool
+    {
+        Db::table('app_configs')->updateOrInsert(
+            ['config_key' => self::GAME_RANK_ENABLED_KEY],
+            ['config_value' => $enabled ? '1' : '0', 'updated_at' => new Expression('CURRENT_TIMESTAMP')],
+        );
+        return $enabled;
+    }
+
+    /** 榜单查询入口统一调用：关闭时抛 403，前端按 message 原样提示。 */
+    public function requireGameRankEnabled(): void
+    {
+        if (! $this->gameRankEnabled()) {
+            throw new BizException(403, '排行榜维护中，暂不可用');
         }
     }
 }

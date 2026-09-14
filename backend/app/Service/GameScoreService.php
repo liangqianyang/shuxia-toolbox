@@ -124,10 +124,13 @@ final class GameScoreService
 
     /**
      * 提交推箱子进度：score=总星数、levels=通关关数（列 lines_cleared 复用,关卡制的通用成绩表）。
+     * $progress=每关明细 {关卡id: {stars, bestSteps}}（存 progress_detail,客户端本机存储被清后恢复进度用）；
+     * 总分只升不降（max），明细以最新一次上报为准（客户端已做本地/云端合并）。
      *
+     * @param array<string, array{stars: int, bestSteps: int}>|null $progress
      * @return array{best: int, isNewBest: bool, rank: int}
      */
-    public function submitSokoban(int $userId, int $score, int $levels): array
+    public function submitSokoban(int $userId, int $score, int $levels, ?array $progress = null): array
     {
         $this->assertSokobanPlausible($score, $levels);
 
@@ -137,10 +140,19 @@ final class GameScoreService
             ->where('user_id', $userId)
             ->first();
         $isNewBest = $row === null || $score > (int) $row->score;
-        if ($isNewBest) {
+        if ($isNewBest || $progress !== null) {
+            $payload = [
+                // 总分只升不降：低分上报不覆盖历史最好（明细仍刷新）
+                'score' => $isNewBest ? $score : (int) $row->score,
+                'lines_cleared' => $isNewBest ? $levels : max($levels, (int) $row->lines_cleared),
+                'level' => 1,
+            ];
+            if ($progress !== null) {
+                $payload['progress_detail'] = json_encode($progress, JSON_UNESCAPED_UNICODE);
+            }
             GameScore::query()->updateOrCreate(
                 ['game_key' => self::GAME_SOKOBAN, 'user_id' => $userId],
-                ['score' => $score, 'lines_cleared' => $levels, 'level' => 1],
+                $payload,
             );
         }
 
@@ -150,6 +162,21 @@ final class GameScoreService
             'isNewBest' => $isNewBest,
             'rank' => $this->rankOf(self::GAME_SOKOBAN, $best),
         ];
+    }
+
+    /** 我的推箱子每关进度明细（本机存储丢失后恢复用）。@return array<string, array{stars: int, bestSteps: int}> */
+    public function sokobanProgress(int $userId): array
+    {
+        /** @var null|GameScore $row */
+        $row = GameScore::query()
+            ->where('game_key', self::GAME_SOKOBAN)
+            ->where('user_id', $userId)
+            ->first();
+        if ($row === null || (string) $row->progress_detail === '') {
+            return [];
+        }
+        $decoded = json_decode((string) $row->progress_detail, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

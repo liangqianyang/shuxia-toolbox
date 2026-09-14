@@ -12,6 +12,8 @@ import { fetchFeatures } from '@/services/toolbox'
 const aiEnabled = ref(false)
 const unoChatTextEnabled = ref(true)
 const adventureChatTextEnabled = ref(true)
+/** 游戏榜单总开关：默认关=安全默认（榜单公开曝光昵称头像,合规敏感;服务端同时硬拦截榜单接口）。 */
+const gameRankEnabled = ref(false)
 const featuresReady = ref(false)
 
 export function useFeatures() {
@@ -26,6 +28,9 @@ export function useFeatures() {
       if (typeof flags.adventureChatTextEnabled === 'boolean') {
         adventureChatTextEnabled.value = flags.adventureChatTextEnabled
       }
+      if (typeof flags.gameRankEnabled === 'boolean') {
+        gameRankEnabled.value = flags.gameRankEnabled
+      }
     } catch {
       // 拉取失败保持现状；首次失败维持关闭（安全默认）。
     } finally {
@@ -33,5 +38,5 @@ export function useFeatures() {
     }
   }
 
-  return { aiEnabled, unoChatTextEnabled, adventureChatTextEnabled, featuresReady, refreshFeatures }
+  return { aiEnabled, unoChatTextEnabled, adventureChatTextEnabled, gameRankEnabled, featuresReady, refreshFeatures }
 }

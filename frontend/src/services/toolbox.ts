@@ -100,6 +100,8 @@ export interface FeatureFlags {
   unoChatTextEnabled?: boolean
   /** 冒险棋房间自由文字聊天（快捷句/表情/贴纸不受影响）；旧后端未返回时按 true 处理 */
   adventureChatTextEnabled?: boolean
+  /** 游戏榜单总开关（默认关=安全默认）；旧后端未返回时保持 false */
+  gameRankEnabled?: boolean
 }
 
 /** 公开的全局功能开关（无需登录）：决定 AI 入口是否展示，服务端另有硬拦截兜底。 */
@@ -113,6 +115,10 @@ export async function fetchAdminFeatures(): Promise<FeatureFlags> {
 
 export async function setAdminAiEnabled(aiEnabled: boolean): Promise<FeatureFlags> {
   return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'POST', { aiEnabled }, true))
+}
+
+export async function setAdminGameRankEnabled(gameRankEnabled: boolean): Promise<FeatureFlags> {
+  return requestWithSession(() => request<FeatureFlags>('/api/admin/features', 'POST', { gameRankEnabled }, true))
 }
 
 export async function setAdminUnoChatTextEnabled(unoChatTextEnabled: boolean): Promise<FeatureFlags> {

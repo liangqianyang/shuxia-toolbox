@@ -218,6 +218,7 @@ Router::addGroup('/api', function (): void {
 
     // 推箱子：总星数上报（保最好）与收星总榜（未登录可看榜单）。
     Router::post('/sokoban/score', [SokobanScoreController::class, 'submit']);
+    Router::get('/sokoban/progress', [SokobanScoreController::class, 'progress']);
     Router::get('/sokoban/leaderboard', [SokobanScoreController::class, 'leaderboard']);
 
     // AI 旅行攻略：地点搜索、生成/局部重写行程，以及云保存分享码。

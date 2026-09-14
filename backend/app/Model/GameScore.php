@@ -27,6 +27,7 @@ final class GameScore extends Model
         'score',
         'lines_cleared',
         'level',
+        'progress_detail',
     ];
 
     protected array $casts = [

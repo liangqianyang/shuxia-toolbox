@@ -29,6 +29,7 @@ final class AdminFeatureController extends AbstractController
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
             'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
+            'gameRankEnabled' => $this->flags->gameRankEnabled(),
         ]);
     }
 
@@ -46,10 +47,14 @@ final class AdminFeatureController extends AbstractController
         if ($request->input('adventureChatTextEnabled') !== null) {
             $result['adventureChatTextEnabled'] = $this->flags->setAdventureChatTextEnabled(filter_var($request->input('adventureChatTextEnabled'), FILTER_VALIDATE_BOOL));
         }
+        if ($request->input('gameRankEnabled') !== null) {
+            $result['gameRankEnabled'] = $this->flags->setGameRankEnabled(filter_var($request->input('gameRankEnabled'), FILTER_VALIDATE_BOOL));
+        }
         return $this->ok($result === [] ? [
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
             'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
+            'gameRankEnabled' => $this->flags->gameRankEnabled(),
         ] : $result);
     }
 

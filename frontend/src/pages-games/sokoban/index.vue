@@ -15,7 +15,7 @@
         </view>
         <view class="sok__title-row">
           <text class="sok__title">推箱子</text>
-          <view class="sok__star-pill" hover-class="press" @tap="openRank">
+          <view v-if="gameRankEnabled" class="sok__star-pill" hover-class="press" @tap="openRank">
             <text class="sok__star-pill-icon">★</text>
             <text class="sok__star-pill-num">{{ totalStars }} / {{ maxStars }}</text>
           </view>
@@ -278,7 +278,8 @@ import { onShareAppMessage, onUnload } from '@dcloudio/uni-app'
 import GameRulesModal from '@/components/GameRulesModal.vue'
 import { useSokoban } from '@/pages-games/composables/useSokoban'
 import { storedUser } from '@/services/toolbox'
-import { fetchSokobanLeaderboard, submitSokobanScore, type SokobanLeaderboard } from '@/pages-games/services/sokoban'
+import { fetchSokobanLeaderboard, fetchSokobanProgress, submitSokobanScore, type SokobanLeaderboard, type SokobanProgressMap } from '@/pages-games/services/sokoban'
+import { useFeatures } from '@/composables/useFeatures'
 import { getCanvasNode, getWindowInfo, type CanvasNode } from '@/utils/canvasAdapter'
 import { computeSokobanLayout, drawSokobanFrame, type SokobanLayout } from '@/pages-games/utils/sokobanRender'
 import { createSwipeController, type SokobanDir } from '@/pages-games/utils/sokobanGestures'
@@ -596,15 +597,60 @@ function onWin(state: SokobanState): void {
   }
 }
 
-/** 得星/通关后 fire-and-forget 上报（未登录静默失败,本地进度兜底）。 */
+/** 每关进度明细快照（云端存档用）。 */
+function progressDetail(): SokobanProgressMap {
+  const detail: SokobanProgressMap = {}
+  for (const [k, v] of Object.entries(progress.value.levels)) {
+    detail[k] = { stars: v.stars, bestSteps: v.bestSteps }
+  }
+  return detail
+}
+
+/** 得星/通关后 fire-and-forget 上报（未登录静默失败,本地进度兜底）；带每关明细供云端存档。 */
 async function submitProgress(): Promise<void> {
   const stars = totalStars.value
   const levels = totalCleared.value
   if (stars <= 0) return
   try {
-    await submitSokobanScore(stars, levels)
+    await submitSokobanScore(stars, levels, progressDetail())
   } catch (error) {
     console.warn('[sokoban] submit score failed:', error)
+  }
+}
+
+/**
+ * 启动恢复：拉云端每关进度与本机合并（stars 取大、步数取小），再自动续关到当前关。
+ * 本机存储被微信清理/换设备后,进度不再从第一关重玩。
+ */
+const resumeDone = ref(false)
+async function restoreAndResume(): Promise<void> {
+  if (resumeDone.value) return
+  resumeDone.value = true
+  try {
+    const remote = await fetchSokobanProgress()
+    let changed = false
+    const merged = { ...progress.value.levels }
+    for (const [k, v] of Object.entries(remote)) {
+      const id = Number(k)
+      if (!Number.isFinite(id) || !v || typeof v.stars !== 'number' || typeof v.bestSteps !== 'number') continue
+      const local = merged[id]
+      const stars = Math.max(v.stars, local?.stars ?? 0)
+      const bestSteps = Math.min(v.bestSteps, local?.bestSteps ?? Number.POSITIVE_INFINITY)
+      if (!local || stars !== local.stars || bestSteps !== local.bestSteps) {
+        merged[id] = { stars, bestSteps: Number.isFinite(bestSteps) ? bestSteps : v.bestSteps }
+        changed = true
+      }
+    }
+    if (changed) {
+      progress.value = { levels: merged }
+      saveProgress()
+    }
+  } catch {
+    // 未登录/网络失败：本地进度兜底,照常续关
+  }
+  // 自动续关：有进度才进（新玩家留在主页第一关）
+  if (totalCleared.value > 0 && panel.value === 'home') {
+    void startLevel(currentLevelId.value)
   }
 }
 
@@ -650,12 +696,14 @@ const footerText = computed(() => {
 
 // ---------- 排行榜 ----------
 
+const { gameRankEnabled, refreshFeatures } = useFeatures()
 const rank = ref<SokobanLeaderboard | null>(null)
 const rankLoading = ref(false)
 const rankError = ref('')
 const myNickname = computed(() => storedUser()?.nickname ?? '')
 
 async function loadRank(): Promise<void> {
+  if (!gameRankEnabled.value) return // 榜单总开关关闭：不发请求（服务端同样硬拦截兜底）
   rankLoading.value = true
   rankError.value = ''
   try {
@@ -668,6 +716,7 @@ async function loadRank(): Promise<void> {
 }
 
 function openRank(): void {
+  if (!gameRankEnabled.value) return
   showRank.value = true
   loadRank()
 }
@@ -689,6 +738,8 @@ function toggleSound(): void {
 
 onMounted(() => {
   rebuildSwipe()
+  void refreshFeatures() // 拉游戏榜单总开关（默认关）
+  void restoreAndResume() // 云端进度恢复 + 自动续关
   // #ifdef H5
   setTimeout(() => { startLevel(63) }, 300)
   // #endif

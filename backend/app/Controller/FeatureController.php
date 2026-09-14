@@ -21,6 +21,7 @@ final class FeatureController extends AbstractController
             'aiEnabled' => $this->flags->aiEnabled(),
             'unoChatTextEnabled' => $this->flags->unoChatTextEnabled(),
             'adventureChatTextEnabled' => $this->flags->adventureChatTextEnabled(),
+            'gameRankEnabled' => $this->flags->gameRankEnabled(),
         ]);
     }
 }

@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Exception\BizException;
 use App\Middleware\ApiKeyMiddleware;
+use App\Service\FeatureFlagService;
 use App\Service\GameScoreService;
 use App\Service\WechatUserService;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -17,6 +18,7 @@ final class TetrisScoreController extends AbstractController
     public function __construct(
         private readonly GameScoreService $scores,
         private readonly WechatUserService $users,
+        private readonly FeatureFlagService $flags,
     ) {}
 
     #[RateLimit(create: 6, capacity: 12, key: [ApiKeyMiddleware::class, 'bucketKey'])]
@@ -35,6 +37,8 @@ final class TetrisScoreController extends AbstractController
     #[RateLimit(create: 20, capacity: 40, key: [ApiKeyMiddleware::class, 'bucketKey'])]
     public function leaderboard(RequestInterface $request): array
     {
+        // 榜单总开关关闭时硬拦截（前端同时隐藏入口,双保险）
+        $this->flags->requireGameRankEnabled();
         $limit = (int) $request->input('limit', 50);
         // 未带有效 token 时仅看榜单;带 token 附我的名次
         $userId = $this->users->userIdByToken((string) $request->header('X-User-Token', ''));

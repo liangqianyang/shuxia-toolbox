@@ -36,6 +36,20 @@
           <text class="admin__status" :class="{ 'admin__status--off': !unoChatTextEnabled }">{{ unoChatTextEnabled ? '已开启' : '已关闭' }}</text>
         </view>
       </view>
+
+      <view class="admin__tool">
+        <view class="admin__tool-top">
+          <view class="admin__icon">🏆</view>
+          <view class="admin__copy">
+            <text class="admin__name">游戏排行榜总开关</text>
+            <text class="admin__desc">控制俄罗斯方块/推箱子等全部游戏榜单；关闭后榜单入口隐藏、榜单接口立即不可用，成绩仍正常记录</text>
+          </view>
+          <switch :checked="gameRankEnabled" color="#c64f3d" @change="changeGameRankEnabled" />
+        </view>
+        <view class="admin__tool-bottom">
+          <text class="admin__status" :class="{ 'admin__status--off': !gameRankEnabled }">{{ gameRankEnabled ? '已开启' : '已关闭' }}</text>
+        </view>
+      </view>
     </view>
 
     <view v-if="groups.length" class="admin__list">
@@ -73,7 +87,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { AdminTool, ToolCategory } from '@/types/toolbox'
 import ToolIcon from '@/components/ToolIcon.vue'
-import { fetchAdminFeatures, fetchAdminTools, saveAdminToolOrder, setAdminAiEnabled, setAdminUnoChatTextEnabled, setAdminToolPublication } from '@/services/toolbox'
+import { fetchAdminFeatures, fetchAdminTools, saveAdminToolOrder, setAdminAiEnabled, setAdminGameRankEnabled, setAdminUnoChatTextEnabled, setAdminToolPublication } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
 
@@ -82,6 +96,7 @@ const CATEGORY_TITLES: Record<ToolCategory, string> = { tool: '工具', game: '�
 const tools = ref<AdminTool[]>([])
 const aiEnabled = ref(false)
 const unoChatTextEnabled = ref(true)
+const gameRankEnabled = ref(false)
 const accessError = ref('')
 
 /** 按 工具/游戏 分组展示；排序仍在全量列表上进行（sort_order 全局），组内相邻即全局同分类相邻 */
@@ -106,8 +121,21 @@ async function loadTools() {
     tools.value = toolList
     aiEnabled.value = features.aiEnabled
     if (typeof features.unoChatTextEnabled === 'boolean') unoChatTextEnabled.value = features.unoChatTextEnabled
+    if (typeof features.gameRankEnabled === 'boolean') gameRankEnabled.value = features.gameRankEnabled
   } catch (error) {
     accessError.value = error instanceof Error ? error.message : '读取运营工具失败'
+  }
+}
+
+async function changeGameRankEnabled(event: Event) {
+  const next = (event as unknown as SwitchEvent).detail.value
+  try {
+    const features = await setAdminGameRankEnabled(next)
+    if (typeof features.gameRankEnabled === 'boolean') gameRankEnabled.value = features.gameRankEnabled
+    uni.showToast({ title: features.gameRankEnabled ? '游戏排行榜已开启' : '游戏排行榜已关闭', icon: 'none' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '更新失败', icon: 'none' })
+    await loadTools()
   }
 }
 

@@ -164,6 +164,38 @@
             <AppEmpty v-else inline title="没有找到匹配的纪念日" />
           </template>
 
+          <!-- 全部：三组记录扁平铺开（今天 → 7 天内 → 更晚 → 正计时 → 倒数中 → 今年已过 → 已完成） -->
+          <template v-else-if="activeTab === 'all'">
+            <AppEmpty v-if="allRows.length === 0" inline icon="🍁" title="还没有任何记录" />
+            <AppSection v-else title="全部记录" :count="allRows.length + ' 个'">
+              <view
+                v-for="row in allShown"
+                :key="`all-${row.event.id}`"
+                class="anniversary__event card"
+                hover-class="press"
+                @tap="openCard(row.event)"
+              >
+                <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + row.event.sceneType" />
+                <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + row.event.sceneType">
+                  <text class="anniversary__date-badge-month">{{ badgeMonth(row.event) }}</text>
+                  <text class="anniversary__date-badge-day">{{ badgeDay(row.event) }}</text>
+                </view>
+                <view class="anniversary__event-body">
+                  <view class="anniversary__event-title-row">
+                    <text class="anniversary__event-title">{{ row.event.title }}</text>
+                    <text v-if="row.event.shared" class="anniversary__event-shared-badge">👥 {{ row.event.memberCount }}</text>
+                    <text v-else-if="row.event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                  </view>
+                  <text class="caption">{{ allCaption(row.event) }}</text>
+                </view>
+                <text class="anniversary__event-count" :class="'anniversary__event-count--' + row.event.sceneType">{{ row.right }}</text>
+              </view>
+              <view v-if="allRows.length > allShown.length" class="anniversary__loadmore">
+                <text>已显示 {{ allShown.length }} / {{ allRows.length }} · 继续下滑自动加载</text>
+              </view>
+            </AppSection>
+          </template>
+
           <!-- 即将到来：今天 / 7 天内 / 更晚 / 正计时 -->
           <template v-else-if="activeTab === 'soon'">
             <AppEmpty v-if="groups.counts.soon === 0" inline icon="🍁" title="近期没有待到来的日子" />
@@ -817,11 +849,11 @@ const previewUnit = computed(() => {
   return daysUntil === 0 ? '今天' : '天'
 })
 // 列表：时间状态 tab 分组（即将到来 / 今年已过 / 不重复）+ 搜索跨组
-type TimeTab = 'soon' | 'past' | 'once'
-const TIME_TAB_NAMES: Record<TimeTab, string> = { soon: '即将到来', past: '今年已过', once: '不重复' }
+type TimeTab = 'soon' | 'past' | 'once' | 'all'
+const TIME_TAB_NAMES: Record<TimeTab, string> = { all: '全部', soon: '即将到来', past: '今年已过', once: '不重复' }
 const TAB_RENDER_BATCH = 30
 const activeTab = ref<TimeTab>('soon')
-const tabRenderLimit = reactive<Record<TimeTab, number>>({ soon: TAB_RENDER_BATCH, past: TAB_RENDER_BATCH, once: TAB_RENDER_BATCH })
+const tabRenderLimit = reactive<Record<TimeTab, number>>({ soon: TAB_RENDER_BATCH, past: TAB_RENDER_BATCH, once: TAB_RENDER_BATCH, all: TAB_RENDER_BATCH })
 const searchQuery = ref('')
 const filterScene = ref('')
 const filterSceneOptions = computed(() => [{ key: '' as '', name: '全部' }, ...SCENE_OPTIONS])
@@ -843,10 +875,38 @@ const groups = computed(() => {
   return groupAnniversaryEvents(list)
 })
 const timeTabs = computed(() => [
+  { key: 'all' as TimeTab, name: TIME_TAB_NAMES.all, count: groups.value.counts.soon + groups.value.counts.past + groups.value.counts.once },
   { key: 'soon' as TimeTab, name: TIME_TAB_NAMES.soon, count: groups.value.counts.soon },
   { key: 'past' as TimeTab, name: TIME_TAB_NAMES.past, count: groups.value.counts.past },
   { key: 'once' as TimeTab, name: TIME_TAB_NAMES.once, count: groups.value.counts.once },
 ])
+/**
+ * 全部 tab：跨三组的所有记录按 tab 顺序扁平铺开（组内排序沿用既有规则：
+ * 今天 → 7 天内近的在前 → 更晚/倒数由远到近 → 今年已过刚过的在前 → 已完成）。
+ */
+const allRows = computed(() => {
+  const g = groups.value
+  const out: Array<{ event: AnniversaryEvent, right: string }> = []
+  const add = (list: AnniversaryEvent[], right: (event: AnniversaryEvent) => string) => {
+    for (const event of list) out.push({ event, right: right(event) })
+  }
+  add(g.today, () => '今天')
+  add(g.week, (event) => `${occOf(event).daysUntil} 天`)
+  add(g.later, (event) => `${occOf(event).daysUntil} 天`)
+  add(g.counting, (event) => `第 ${occOf(event).elapsedDays} 天`)
+  add(g.onceActive, (event) => (occOf(event).daysUntil === 0 ? '今天' : `${occOf(event).daysUntil} 天`))
+  add(g.past, (event) => passedDaysText(event))
+  add(g.onceDone, () => '已完成')
+  return out
+})
+const allShown = computed(() => allRows.value.slice(0, tabRenderLimit.all))
+/** 全部行的副标题：按时间状态给对应说明（已过=明年日期、正计时=起始、一次性、其余=公历/农历日期）。 */
+function allCaption(event: AnniversaryEvent): string {
+  if (timeStatusOf(event) === 'past') return nextOccurrenceLabel(event)
+  if (event.repeatType !== 'yearly' && event.countMode === 'countup') return `${eventDateLabel(event)} · ${occOf(event).label}`
+  if (event.repeatType === 'none') return `${eventDateLabel(event)} · 一次性`
+  return `${eventDateLabel(event)} · ${occOf(event).detail}`
+}
 const laterShown = computed(() => groups.value.later.slice(0, tabRenderLimit.soon))
 const pastShown = computed(() => groups.value.past.slice(0, tabRenderLimit.past))
 const onceActiveShown = computed(() => groups.value.onceActive.slice(0, tabRenderLimit.once))
@@ -877,6 +937,7 @@ onReachBottom(() => {
     soon: groups.value.later.length,
     past: groups.value.past.length,
     once: Math.max(groups.value.onceActive.length, groups.value.onceDone.length),
+    all: allRows.value.length,
   }
   if (totals[key] > tabRenderLimit[key]) tabRenderLimit[key] += TAB_RENDER_BATCH
 })

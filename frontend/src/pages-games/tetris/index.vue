@@ -44,7 +44,7 @@
           <text class="tetris__best-num">{{ best ? best.level : 1 }}</text>
           <text class="tetris__best-label">最高等级</text>
         </view>
-        <view class="tetris__rank-badge">
+        <view v-if="gameRankEnabled" class="tetris__rank-badge">
           <text class="tetris__rank-trophy">🏆</text>
           <text class="tetris__rank-text">{{ mineRankText }}</text>
         </view>
@@ -69,7 +69,7 @@
         </view>
       </view>
 
-      <view class="tetris__board-list">
+      <view v-if="gameRankEnabled" class="tetris__board-list">
         <view v-if="leaderboardLoading" class="tetris__lb-hint">
           <text>加载中…</text>
         </view>
@@ -234,12 +234,12 @@
           </view>
           <text class="tetris__over-score">{{ formatScore(view?.score ?? 0) }}</text>
           <text class="tetris__over-sub">{{ view?.lines ?? 0 }} 行 · 等级 {{ view?.level ?? 1 }}</text>
-          <view v-if="submitRank !== null" class="tetris__over-rank">
+          <view v-if="gameRankEnabled && submitRank !== null" class="tetris__over-rank">
             <text class="tetris__over-rank-trophy">🏆</text>
             <text class="tetris__over-rank-text">全服第 {{ submitRank }} 名</text>
           </view>
           <view class="tetris__mask-btn tetris__mask-btn--primary" hover-class="press" @tap="restartGame"><text>再来一局</text></view>
-          <view class="tetris__mask-btn" hover-class="press" @tap="viewLeaderboard"><text>看排行榜</text></view>
+          <view v-if="gameRankEnabled" class="tetris__mask-btn" hover-class="press" @tap="viewLeaderboard"><text>看排行榜</text></view>
           <view class="tetris__mask-btn" hover-class="press" @tap="exitToMenu"><text>回菜单</text></view>
         </view>
       </view>
@@ -261,6 +261,7 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'v
 import { onHide, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import GameRulesModal from '@/components/GameRulesModal.vue'
 import { useTetris } from '@/pages-games/composables/useTetris'
+import { useFeatures } from '@/composables/useFeatures'
 import { resolveAvatarUrl, storedUser } from '@/services/toolbox'
 import { fetchTetrisLeaderboard, submitTetrisScore, type TetrisLeaderboard } from '@/pages-games/services/tetris'
 import { getCanvasNode, getWindowInfo, type CanvasNode } from '@/utils/canvasAdapter'
@@ -294,6 +295,7 @@ const OVER_DECO: { cells: Array<[number, number]>; color: string }[] = [
 ]
 
 const instance = getCurrentInstance()
+const { gameRankEnabled, refreshFeatures } = useFeatures()
 const panel = ref<'menu' | 'game'>('menu')
 const showRules = ref(false)
 const startLevel = ref(readStartLevel())
@@ -319,6 +321,7 @@ const mineRankText = computed(() => {
 })
 
 async function loadLeaderboard(): Promise<void> {
+  if (!gameRankEnabled.value) return // 榜单总开关关闭：不发请求（服务端同样硬拦截兜底）
   leaderboardLoading.value = true
   leaderboardError.value = ''
   try {
@@ -534,6 +537,7 @@ function exitToMenu(): void {
 }
 
 function viewLeaderboard(): void {
+  if (!gameRankEnabled.value) return
   exitToMenu()
   loadLeaderboard()
 }
@@ -605,7 +609,9 @@ function readBest(): BestRecord | null {
 // ---------- 生命周期 ----------
 
 onMounted(() => {
-  loadLeaderboard()
+  void refreshFeatures().then(() => {
+    if (gameRankEnabled.value) loadLeaderboard()
+  })
 })
 
 onShow(() => {

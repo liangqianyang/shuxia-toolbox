@@ -151,14 +151,14 @@ final class AdventureRule
      */
     public static function rollOpening(array &$state, array $seats, int $seat): array
     {
-        $dice = [random_int(1, 6), random_int(1, 6)];
+        $dice = [random_int(1, 6)];
         $state['opening']['rolls'][(string) $seat] = $dice;
         $events = [['t' => 'openRoll', 'seat' => $seat, 'v' => $dice]];
         return array_merge($events, self::resolveOpeningIfNeeded($state, $seats));
     }
 
     /**
-     * 全员掷完后结算：双骰之和大者先手；最大点并列只由并列者重掷；
+     * 全员掷完后结算：点数大者先手（array_sum 兼容旧存档的双骰 roll）；最大点并列只由并列者重掷；
      * 并列超过 OPENING_MAX_ROUNDS 轮改随机定（兜底）。
      *
      * @param array<string, mixed> $state
@@ -174,7 +174,7 @@ final class AdventureRule
         $best = PHP_INT_MIN;
         $sums = [];
         foreach ($opening['rolls'] as $seatKey => $dice) {
-            $sum = (int) $dice[0] + (int) $dice[1];
+            $sum = (int) array_sum((array) $dice);
             $sums[(int) $seatKey] = $sum;
             $best = max($best, $sum);
         }
@@ -206,12 +206,11 @@ final class AdventureRule
     // ---------------------------------------------------------------- 位移与落格
 
     /**
-     * 掷骰有效步数：骰和 - 雪球减速（最低 1，消费减速）+ 登山镐加成。
+     * 掷骰有效步数：骰点（array_sum 兼容旧双骰存档）- 雪球减速（最低 1，消费减速）+ 登山镐加成。
      */
     public static function computeMoveSteps(array &$state, int $seat): int
     {
-        [$d1, $d2] = $state['roll'];
-        $sum = (int) $d1 + (int) $d2;
+        $sum = (int) array_sum((array) ($state['roll'] ?? [0]));
         $slow = (int) ($state['slowNext'][$seat] ?? 0);
         unset($state['slowNext'][$seat]);
         $steps = max(1, $sum - $slow) + (int) ($state['turnBonus'] ?? 0);
@@ -1062,7 +1061,7 @@ final class AdventureRule
 
     /**
      * 开局状态：全员山脚（pos=0）、3 枫叶、天气牌库洗好、预报公开；
-     * 先手由「定先手」掷骰仪式决定（phase=opening，全员掷双骰点大者先手）。
+     * 先手由「定先手」掷骰仪式决定（phase=opening，全员各掷一枚骰子点大者先手）。
      * $goal 登顶格（房主设定，默认 100）。
      *
      * @param array<int, int> $seats
