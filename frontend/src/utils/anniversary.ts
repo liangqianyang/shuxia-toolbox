@@ -185,7 +185,7 @@ export function timeStatusOf(event: AnniversaryEvent, now = new Date()): Anniver
  * 时间状态分组：
  * - 周年事件（yearly）今年未到 → 即将到来的今天/7天内/更晚；今年过完（下次在明年）→ 今年已过；
  * - 一次性倒数（none+countdown）未到 → 不重复·倒数中（同时也出现在即将到来的分段里），过了 → 不重复·已完成；
- * - 正计时（none+countup）已开始 → 即将到来·正计时；未开始按剩余天数进即将到来的分段。
+ * - 正计时（none+countup）已开始 → counting 分组（页面渲染在「已过」tab 的「在一起的日子」,2026-09-14 起不再放「近期」）；未开始按剩余天数进近期分段。
  * 段内排序沿用既有规则：7 天内近的在前（原「即将到来」段行为）；更晚/倒数中/正计时由远到近、
  * 今年已过/已完成刚过的在前（原 sortAnniversaryEvents 主规则，daysUntil 降序）。
  */

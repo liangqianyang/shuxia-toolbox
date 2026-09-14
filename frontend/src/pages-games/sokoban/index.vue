@@ -619,8 +619,8 @@ async function submitProgress(): Promise<void> {
 }
 
 /**
- * 启动恢复：拉云端每关进度与本机合并（stars 取大、步数取小），再自动续关到当前关。
- * 本机存储被微信清理/换设备后,进度不再从第一关重玩。
+ * 启动恢复：拉云端每关进度与本机合并（stars 取大、步数取小）,用于选关页展示已玩关卡。
+ * 本机存储被微信清理/换设备后,星星和已通关的关卡不丢;重进停在选关页,不自动跳关。
  */
 const resumeDone = ref(false)
 async function restoreAndResume(): Promise<void> {
@@ -646,11 +646,7 @@ async function restoreAndResume(): Promise<void> {
       saveProgress()
     }
   } catch {
-    // 未登录/网络失败：本地进度兜底,照常续关
-  }
-  // 自动续关：有进度才进（新玩家留在主页第一关）
-  if (totalCleared.value > 0 && panel.value === 'home') {
-    void startLevel(currentLevelId.value)
+    // 未登录/网络失败：本地进度兜底
   }
 }
 

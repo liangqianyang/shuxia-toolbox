@@ -196,9 +196,9 @@
             </AppSection>
           </template>
 
-          <!-- 即将到来：今天 / 7 天内 / 更晚 / 正计时 -->
+          <!-- 近期：今天 / 7 天内 / 更晚 / 在一起的日子(正计时) -->
           <template v-else-if="activeTab === 'soon'">
-            <AppEmpty v-if="groups.counts.soon === 0" inline icon="🍁" title="近期没有待到来的日子" />
+            <AppEmpty v-if="soonCount === 0" inline icon="🍁" title="近期没有待到来的日子" />
             <template v-else>
               <AppSection v-if="groups.today.length" title="今天" :count="groups.today.length + ' 个'">
                 <view
@@ -278,37 +278,13 @@
                 </view>
               </AppSection>
 
-              <AppSection v-if="groups.counting.length" title="在一起的日子" :count="groups.counting.length + ' 个'">
-                <view
-                  v-for="event in groups.counting"
-                  :key="`counting-${event.id}`"
-                  class="anniversary__event card"
-                  hover-class="press"
-                  @tap="openCard(event)"
-                >
-                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
-                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
-                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
-                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
-                  </view>
-                  <view class="anniversary__event-body">
-                    <view class="anniversary__event-title-row">
-                      <text class="anniversary__event-title">{{ event.title }}</text>
-                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
-                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
-                    </view>
-                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).label }}</text>
-                  </view>
-                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">第 {{ occOf(event).elapsedDays }} 天</text>
-                </view>
-              </AppSection>
             </template>
           </template>
 
-          <!-- 今年已过：周年事件等明年，附明年日期 -->
+          <!-- 已过：周年事件等明年（附明年日期）+ 在一起的日子（正计时,已开始就一直数） -->
           <template v-else-if="activeTab === 'past'">
-            <AppEmpty v-if="groups.past.length === 0" inline icon="🍂" title="今年还没有过完的日子" />
-            <AppSection v-else title="今年已过" :count="groups.past.length + ' 个 · 刚过的在前'">
+            <AppEmpty v-if="groups.past.length === 0 && groups.counting.length === 0" inline icon="🍂" title="还没有已过的日子" />
+            <AppSection v-if="groups.past.length" title="今年已过" :count="groups.past.length + ' 个 · 刚过的在前'">
               <view
                 v-for="event in pastShown"
                 :key="`past-${event.id}`"
@@ -335,6 +311,30 @@
                 <text>已显示 {{ pastShown.length }} / {{ groups.past.length }} · 继续下滑自动加载</text>
               </view>
             </AppSection>
+              <AppSection v-if="groups.counting.length" title="在一起的日子" :count="groups.counting.length + ' 个'">
+                <view
+                  v-for="event in groups.counting"
+                  :key="`counting-${event.id}`"
+                  class="anniversary__event card"
+                  hover-class="press"
+                  @tap="openCard(event)"
+                >
+                  <view class="anniversary__event-bar" :class="'anniversary__event-bar--' + event.sceneType" />
+                  <view class="anniversary__date-badge" :class="'anniversary__date-badge--' + event.sceneType">
+                    <text class="anniversary__date-badge-month">{{ badgeMonth(event) }}</text>
+                    <text class="anniversary__date-badge-day">{{ badgeDay(event) }}</text>
+                  </view>
+                  <view class="anniversary__event-body">
+                    <view class="anniversary__event-title-row">
+                      <text class="anniversary__event-title">{{ event.title }}</text>
+                      <text v-if="event.shared" class="anniversary__event-shared-badge">👥 {{ event.memberCount }}</text>
+                      <text v-else-if="event.calendarAddedAt" class="anniversary__event-reminder-badge">已加入提醒</text>
+                    </view>
+                    <text class="caption">{{ eventDateLabel(event) }} · {{ occOf(event).label }}</text>
+                  </view>
+                  <text class="anniversary__event-count" :class="'anniversary__event-count--' + event.sceneType">第 {{ occOf(event).elapsedDays }} 天</text>
+                </view>
+              </AppSection>
           </template>
 
           <!-- 不重复：倒数中 / 已完成 -->
@@ -848,9 +848,9 @@ const previewUnit = computed(() => {
   if (cardEvent.value?.countMode === 'countup') return '天'
   return daysUntil === 0 ? '今天' : '天'
 })
-// 列表：时间状态 tab 分组（即将到来 / 今年已过 / 不重复）+ 搜索跨组
+// 列表：时间状态 tab 分组（全部 / 近期 / 今年已过 / 不重复）+ 搜索跨组
 type TimeTab = 'soon' | 'past' | 'once' | 'all'
-const TIME_TAB_NAMES: Record<TimeTab, string> = { all: '全部', soon: '即将到来', past: '今年已过', once: '不重复' }
+const TIME_TAB_NAMES: Record<TimeTab, string> = { all: '全部', soon: '近期', past: '已过', once: '不重复' }
 const TAB_RENDER_BATCH = 30
 const activeTab = ref<TimeTab>('soon')
 const tabRenderLimit = reactive<Record<TimeTab, number>>({ soon: TAB_RENDER_BATCH, past: TAB_RENDER_BATCH, once: TAB_RENDER_BATCH, all: TAB_RENDER_BATCH })
@@ -874,10 +874,13 @@ const groups = computed(() => {
   const list = filterScene.value ? events.value.filter((event) => event.sceneType === filterScene.value) : events.value
   return groupAnniversaryEvents(list)
 })
+/** 近期 = 纯将来的日子（counts.soon 含正计时,扣除）；已过 = 今年已过 + 在一起的日子(正计时)。 */
+const soonCount = computed(() => groups.value.counts.soon - groups.value.counting.length)
+const pastCount = computed(() => groups.value.counts.past + groups.value.counting.length)
 const timeTabs = computed(() => [
   { key: 'all' as TimeTab, name: TIME_TAB_NAMES.all, count: groups.value.counts.soon + groups.value.counts.past + groups.value.counts.once },
-  { key: 'soon' as TimeTab, name: TIME_TAB_NAMES.soon, count: groups.value.counts.soon },
-  { key: 'past' as TimeTab, name: TIME_TAB_NAMES.past, count: groups.value.counts.past },
+  { key: 'soon' as TimeTab, name: TIME_TAB_NAMES.soon, count: soonCount.value },
+  { key: 'past' as TimeTab, name: TIME_TAB_NAMES.past, count: pastCount.value },
   { key: 'once' as TimeTab, name: TIME_TAB_NAMES.once, count: groups.value.counts.once },
 ])
 /**
