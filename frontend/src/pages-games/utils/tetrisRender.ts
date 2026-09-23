@@ -25,6 +25,8 @@ export const PIECE_COLORS: Record<PieceId, string> = {
 export const BOARD_BG = '#F2F6F9'
 export const BOARD_GRID = '#EAF0F4'
 export const BOARD_FRAME = '#DDE6EC'
+/** 页面底色（variables.scss $bg）——整幅打底用,不留透明帧。 */
+const PAGE_BG = '#F6F9FB'
 /** 空格白块 + 发丝线描边（原型 .tgrid i）。 */
 const EMPTY_CELL = '#FFFFFF'
 /** 右栏白色面板（v4：白面板 + 发丝线 + 冷调标签）。 */
@@ -34,8 +36,8 @@ const RAIL_TEXT = '#A4B3C0'
 const ACTION_COLOR = '#3B86B8'
 /** 消行闪烁色:浅底上白色闪不出来,用品牌金（内容特效点缀）。 */
 const CLEAR_FLASH = '#F4B942'
-/** 单格闪块（M）明暗翻转间隔:每相位 300ms（过快会闪眼）。 */
-const MONO_BLINK_MS = 300
+/** 单格闪块（M）明暗翻转间隔:每相位 300ms（过快会闪眼）。导出供页面重绘签名用。 */
+export const MONO_BLINK_MS = 300
 
 export interface TetrisLayout {
   /** 整个 canvas 的 css 尺寸（棋盘 + 右栏）。 */
@@ -259,7 +261,10 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
   const boardW = cell * BOARD_W
   const boardH = cell * BOARD_H
 
-  ctx.clearRect(0, 0, layout.totalW, layout.totalH)
+  // 整幅先铺不透明页面底色（而非 clearRect 清成透明）：同层 canvas 在 DevTools/低端机上
+  // 「透明清屏 → 重绘」会被合成出中间帧,画布占大半个界面,每次下落/锁定重绘都被感知为整屏抖动。
+  ctx.fillStyle = PAGE_BG
+  ctx.fillRect(0, 0, layout.totalW, layout.totalH)
 
   // 棋盘底 + 空格白块（原型 .tgrid：fill 底 + 白格发丝线,格线由空格描边提供） + 边框
   ctx.fillStyle = BOARD_BG

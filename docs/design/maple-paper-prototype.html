@@ -1262,13 +1262,6 @@ function buildLobbies(){
           <div class="flabel">好友房间</div>
           <div class="joingroup"><input class="inp" placeholder="输入 4 位房间码">${join}</div>
           <div class="fnote">把房间码发给好友，或直接微信分享房间链接</div>
-        </div>
-        <div class="seclabel">在这个游戏里</div>
-        <div class="gfeat">
-          <span class="gf" data-toast="原型演示 · 对局规则"><span class="gt"><i data-lucide="book-open"></i>对局规则</span><span class="gs">图解玩法与胜负判定</span></span>
-          <span class="gf" data-toast="原型演示 · 房间聊天"><span class="gt"><i data-lucide="message-circle"></i>房间聊天</span><span class="gs">快捷句 · 表情</span></span>
-          <span class="gf" data-toast="原型演示 · 邀请微信好友"><span class="gt"><i data-lucide="user-plus"></i>邀请好友</span><span class="gs">微信卡片直达房间</span></span>
-          <span class="gf" data-toast="原型演示 · 本局结束后房内快速重开"><span class="gt"><i data-lucide="rotate-ccw"></i>再来一局</span><span class="gs">房间保留，直接重开</span></span>
         </div>`;
     } else if(key==="tetris"){
       body=`<div class="card fcard" style="gap:9px">
@@ -1316,6 +1309,7 @@ function buildLobbies(){
             <span class="itile" style="background:${p[0]};color:${p[1]}"><i data-lucide="${icon}"></i></span>
             <div><div class="kick">${mode==="online"?"派对联机 · 房间码同玩":"单机消遣 · 离线可玩"}</div><h1 style="font-size:19px">${name}</h1><div class="sub">${desc}</div></div>
           </div>
+          ${mode==="online"?`<span data-rules="${name}" style="width:34px;height:34px;border-radius:50%;background:var(--card);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--ink2);cursor:pointer;flex:none"><i data-lucide="info"></i></span>`:""}
         </div>
         ${actions}
         ${body}
@@ -1485,6 +1479,11 @@ document.addEventListener("click",e=>{
       <div class="btn tonal" onclick="document.getElementById('modal-mask').classList.remove('show')">关闭</div>`);
     return;
   }
+  const rb=t.closest("[data-rules]");
+  if(rb){modalOpen(`<b style="font-size:15px">${rb.dataset.rules} · 玩法说明</b>
+      <div class="fnote">图解玩法与胜负判定。房间聊天 / 邀请好友 / 再来一局在创建房间后于房内使用。</div>
+      <div class="btn tonal" onclick="document.getElementById('modal-mask').classList.remove('show')">关闭</div>`);
+    return}
   const tt=t.closest("[data-toast]"); if(tt){toast(tt.dataset.toast);return}
 });
 window.addEventListener("hashchange",()=>{const s=SCREENS.find(x=>("#"+x[0])===location.hash);if(s&&s[0]!==currentScr)show(s[0])});

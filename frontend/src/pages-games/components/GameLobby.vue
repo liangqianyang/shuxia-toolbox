@@ -1,19 +1,28 @@
 <!-- 游戏大厅（枫糖纸面模板）—— 8 款联机游戏共用的大厅面板。
      规格来源：docs/design/maple-paper-system.md「游戏大厅模板」+ maple-paper-prototype.html buildLobbies()。
-     结构：Hero 图标块 → 创建房间/输入房码 双按钮 → 好友房间卡 → 「在这个游戏里」四宫格。
+     结构：Hero 图标块（右侧 ⓘ 开对局规则）→ 创建房间/输入房码 双按钮 → 好友房间卡。
      页面级差异内容（如枫趣冒险的「我的对局」续局列表）放 #extra 插槽。
-     事件全是自定义名（create/join/rules/chat/rematch），勿改成 tap——原生事件名会被父级
+     2026-09-23 用户拍板：原「在这个游戏里」四宫格（对局规则/房间聊天/邀请好友/再来一局）整体下线——
+     聊天/邀请/再来一局只在房间创建好后可用（房内聊天 dock、胶囊菜单分享、房内重开），规则改成
+     tetris 菜单同款 hero ⓘ 圆钮弹出 GameRulesModal。
+     组件自身不带页边距——页面必须提供左右 padding（包一层 .lobby 或页面根加
+     `padding: 0 $space-4`），否则按钮/卡片贴屏幕边（uno/ludo/adventure 曾踩）。
+     事件全是自定义名（create/join/rules），勿改成 tap——原生事件名会被父级
      bindtap 双重接收（见 ToolCard 的 .stop 注释）。 -->
 <template>
   <view class="g-lobby">
     <view class="g-lobby__head">
       <view class="g-lobby__tile" :style="{ backgroundColor: pair.tint, color: pair.fg }">
-        <ToolIcon :icon="icon" />
+        <ToolIcon class="g-lobby__tile-icon" :icon="icon" />
       </view>
       <view class="g-lobby__titles">
         <text class="g-lobby__kick">派对联机 · 房间码同玩</text>
         <text class="g-lobby__name">{{ name }}</text>
         <text class="g-lobby__desc">{{ description }}</text>
+      </view>
+      <view class="g-lobby__flex"></view>
+      <view class="g-lobby__rules-btn" hover-class="press" @tap="$emit('rules')">
+        <text>ⓘ</text>
       </view>
     </view>
 
@@ -42,38 +51,6 @@
       </view>
       <text class="g-lobby__note">把房间码发给好友，或直接微信分享房间链接</text>
     </view>
-
-    <text class="g-lobby__seclabel">在这个游戏里</text>
-    <view class="g-lobby__grid">
-      <view class="g-lobby__feat" hover-class="press" @tap="$emit('rules')">
-        <view class="g-lobby__feat-top">
-          <text class="g-lobby__feat-icon">📖</text>
-          <text class="g-lobby__feat-name">对局规则</text>
-        </view>
-        <text class="g-lobby__feat-desc">图解玩法与胜负判定</text>
-      </view>
-      <view class="g-lobby__feat" hover-class="press" @tap="$emit('chat')">
-        <view class="g-lobby__feat-top">
-          <text class="g-lobby__feat-icon">💬</text>
-          <text class="g-lobby__feat-name">房间聊天</text>
-        </view>
-        <text class="g-lobby__feat-desc">快捷句 · 表情</text>
-      </view>
-      <button class="g-lobby__feat g-lobby__feat--share" open-type="share" hover-class="press">
-        <view class="g-lobby__feat-top">
-          <text class="g-lobby__feat-icon">👋</text>
-          <text class="g-lobby__feat-name">邀请好友</text>
-        </view>
-        <text class="g-lobby__feat-desc">微信卡片直达房间</text>
-      </button>
-      <view class="g-lobby__feat" hover-class="press" @tap="$emit('rematch')">
-        <view class="g-lobby__feat-top">
-          <text class="g-lobby__feat-icon">🔁</text>
-          <text class="g-lobby__feat-name">再来一局</text>
-        </view>
-        <text class="g-lobby__feat-desc">房间保留，直接重开</text>
-      </view>
-    </view>
   </view>
 </template>
 
@@ -99,8 +76,6 @@ const emit = defineEmits<{
   create: []
   join: [code: string]
   rules: []
-  chat: []
-  rematch: []
 }>()
 void emit
 
@@ -119,16 +94,15 @@ function submit() {
 </script>
 
 <style lang="scss" scoped>
-/* 原型 px → rpx ×2；间距/字阶/圆角优先取 token，不在刻度上的取原型实值 */
+/* 间距一律用 margin，不用 flex gap：DevTools 旧基础库/旧 WebView 不渲染 flex gap
+   （grid gap 支持更早，原四宫格已下线）。原型 px → rpx ×2，token 优先。 */
 .g-lobby {
   display: flex;
   flex-direction: column;
-  gap: $space-3;
 
   &__head {
     display: flex;
     align-items: center;
-    gap: $space-3;
     padding: $space-2 $space-1 0;
   }
 
@@ -144,11 +118,17 @@ function submit() {
     overflow: hidden;
   }
 
+  /* ToolIcon 宿主必须由父级 class 定尺寸（见 ToolIcon 注释），否则图标块渲染成纯色空块 */
+  &__tile-icon {
+    width: 100%;
+    height: 100%;
+  }
+
   &__titles {
     display: flex;
     flex-direction: column;
-    gap: 4rpx;
     min-width: 0;
+    margin-left: $space-3;
   }
 
   &__kick {
@@ -172,9 +152,28 @@ function submit() {
     margin-top: 6rpx;
   }
 
+  &__flex {
+    flex: 1;
+  }
+
+  /* 对局规则 ⓘ（tetris 菜单同款圆钮） */
+  &__rules-btn {
+    flex-shrink: 0;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: $card;
+    border: 2rpx solid $line-strong;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $ink2;
+    font-size: $font-body;
+  }
+
   &__actions {
     display: flex;
-    gap: 18rpx;
+    margin-top: $space-3;
   }
 
   &__btn {
@@ -184,9 +183,12 @@ function submit() {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12rpx;
     font-size: $font-body;
     font-weight: 600;
+
+    & + & {
+      margin-left: $space-3;
+    }
 
     &--primary {
       background: $blue;
@@ -197,6 +199,7 @@ function submit() {
       background: $card;
       border: 2rpx solid $line-strong;
       color: $ink;
+      box-shadow: $shadow-card;
     }
 
     &--disabled {
@@ -209,9 +212,7 @@ function submit() {
     border-radius: $radius-lg;
     box-shadow: $shadow-card;
     padding: $space-3 + 4rpx;
-    display: flex;
-    flex-direction: column;
-    gap: 18rpx;
+    margin-top: $space-3;
   }
 
   &__label {
@@ -222,7 +223,7 @@ function submit() {
 
   &__join {
     display: flex;
-    gap: $space-2;
+    margin-top: 18rpx;
   }
 
   &__inp {
@@ -252,6 +253,7 @@ function submit() {
     align-items: center;
     border-radius: $radius-md;
     padding: 0 30rpx;
+    margin-left: $space-2;
     font-size: $font-caption;
     font-weight: 600;
     color: $blue-deep;
@@ -265,65 +267,7 @@ function submit() {
     font-size: 20rpx;
     color: $ink3;
     line-height: 1.6;
-  }
-
-  &__seclabel {
-    font-size: $font-micro;
-    font-weight: 600;
-    color: $ink3;
-    letter-spacing: 3rpx;
-    padding: 4rpx $space-1 0;
-  }
-
-  &__grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18rpx;
-  }
-
-  &__feat {
-    background: $card;
-    border: 2rpx solid $line;
-    border-radius: 28rpx;
-    padding: 22rpx 24rpx;
-    display: flex;
-    flex-direction: column;
-    gap: 4rpx;
-    text-align: left;
-    line-height: inherit;
-
-    &--share {
-      margin: 0;
-      padding: 22rpx 24rpx;
-      width: auto;
-      font-size: inherit;
-      background: $card;
-
-      &::after {
-        border: none;
-      }
-    }
-  }
-
-  &__feat-top {
-    display: flex;
-    align-items: center;
-    gap: 10rpx;
-  }
-
-  &__feat-icon {
-    font-size: 26rpx;
-  }
-
-  &__feat-name {
-    font-size: $font-caption;
-    font-weight: 600;
-    color: $ink;
-  }
-
-  &__feat-desc {
-    font-size: 18rpx;
-    color: $ink3;
+    margin-top: 18rpx;
   }
 }
 </style>

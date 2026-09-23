@@ -186,7 +186,7 @@
         </view>
       </view>
 
-      <view class="tetris__stage">
+      <view id="tetris-stage" class="tetris__stage">
         <view class="tetris__stage-inner" :style="{ width: layout.totalW + 'px', height: layout.totalH + 'px' }">
           <!-- 遮罩弹出时整体隐藏（v-show 保住 canvas 上下文）——根绝原生层级/遮挡变量 -->
           <canvas
@@ -311,8 +311,8 @@ import { useTetris } from '@/pages-games/composables/useTetris'
 import { useFeatures } from '@/composables/useFeatures'
 import { resolveAvatarUrl, storedUser } from '@/services/toolbox'
 import { fetchTetrisLeaderboard, submitTetrisScore, type TetrisLeaderboard } from '@/pages-games/services/tetris'
-import { getCanvasNode, getWindowInfo, type CanvasNode } from '@/utils/canvasAdapter'
-import { computeTetrisLayout, drawTetrisFrame, type TetrisLayout } from '@/pages-games/utils/tetrisRender'
+import { getCanvasNode, getElementRect, getWindowInfo, type CanvasNode } from '@/utils/canvasAdapter'
+import { computeTetrisLayout, drawTetrisFrame, MONO_BLINK_MS, type TetrisLayout } from '@/pages-games/utils/tetrisRender'
 import { createDragController, defaultDragConfig } from '@/pages-games/utils/touchGestures'
 import { playTetrisSound, setTetrisSoundEnabled, tetrisSoundEnabled } from '@/pages-games/utils/tetrisSound'
 import type { SpeedMode, TetrisState } from '@/pages-games/utils/tetris'
@@ -431,15 +431,37 @@ const win = getWindowInfo()
 const SIDE_PAD_PX = 12
 const HUD_PX = 148
 const PAD_PX = 210
-const layout: TetrisLayout = computeTetrisLayout(
-  win.windowWidth - SIDE_PAD_PX * 2,
-  Math.max(300, win.windowHeight - HUD_PX - PAD_PX),
+// 先按窗口估算兜底；进对局后 initCanvas 实测 stage 真实可用区再重算——
+// 估算常数一旦与页面实际结构脱节，棋盘就会偏小、四周留白（已翻过车）
+const layout = ref<TetrisLayout>(
+  computeTetrisLayout(
+    win.windowWidth - SIDE_PAD_PX * 2,
+    Math.max(300, win.windowHeight - HUD_PX - PAD_PX),
+  ),
 )
 let boardNode: CanvasNode | null = null
 
+/**
+ * 重绘视觉签名：引擎 tick 每 33ms 必产新状态（gravityMs/lockMs 在涨）,但这两个计时器
+ * 没有任何视觉呈现——不拦的话 drawTetrisFrame 会以 30fps 整幅空转,大画布持续合成抖动
+ * 被感知为「整个界面抖一下」。画面真正随时间变的只有 M 闪块明暗与消行动画,按时间桶进签名。
+ */
+let lastDrawSig: string | null = null
+
+function visualSig(state: TetrisState): string {
+  const active = state.active
+  const activePart = active ? `${active.id}:${active.x}:${active.y}:${active.rot}` : '-'
+  const clearPart = state.phase === 'clearing' ? Math.ceil(state.clearTimerMs / 40) : '-'
+  const monoPart = active?.id === 'M' ? Math.floor(Date.now() / MONO_BLINK_MS) : '-'
+  return `${activePart}|${state.phase}|${clearPart}|${monoPart}|${state.level}|${state.hold ?? '-'}:${state.holdUsed ? 1 : 0}|${state.queue.slice(0, 3).join('')}|${state.board.join(',')}`
+}
+
 function drawState(state: TetrisState): void {
   if (!boardNode) return
-  drawTetrisFrame(boardNode.ctx, layout, state)
+  const sig = visualSig(state)
+  if (sig === lastDrawSig) return
+  lastDrawSig = sig
+  drawTetrisFrame(boardNode.ctx, layout.value, state)
 }
 
 // ---------- 游戏循环与特效 ----------
@@ -465,7 +487,7 @@ watch(gameState, (s) => {
 function handleStateChange(state: TetrisState): void {
   safeCall(() => drawState(state), 'draw')
   for (const event of state.events) {
-    // 每个副作用独立兜底:音效/振动任一抛错都不能打断事件循环,否则 gameOver 分支永远走不到
+    // 每个副作用独立兜底:音效抛错不能打断事件循环,否则 gameOver 分支永远走不到
     safeCall(() => {
       switch (event.t) {
         case 'moved':
@@ -479,11 +501,9 @@ function handleStateChange(state: TetrisState): void {
           break
         case 'cleared':
           playTetrisSound(event.rows === 4 ? 'tetris' : 'clear')
-          vibrate()
           break
         case 'hardDropped':
           playTetrisSound('harddrop')
-          vibrate()
           break
         case 'levelUp':
           playTetrisSound('levelup')
@@ -508,13 +528,7 @@ function safeCall(fn: () => void, label: string): void {
   }
 }
 
-function vibrate(): void {
-  try {
-    uni.vibrateShort({})
-  } catch {
-    // H5 可能无振动
-  }
-}
+// 振动反馈已整体移除（2026-09-23 用户拍板）：直落/消行只留音效,不再 vibrateShort。
 
 function onGameOver(state: TetrisState): void {
   if (gameOver.value) return // 事件路径 + 相位兜底双入口,防重复提交
@@ -537,7 +551,8 @@ function onGameOver(state: TetrisState): void {
 
 // ---------- 手势（棋盘区） ----------
 
-const drag = createDragController(defaultDragConfig(layout.cell), {
+const dragConfig = defaultDragConfig(layout.value.cell)
+const drag = createDragController(dragConfig, {
   onMove: (dx) => input({ t: 'move', dx }),
   onSoftDrop: () => input({ t: 'softDrop' }),
   onTap: () => input({ t: 'rotate', dir: 1 }),
@@ -599,6 +614,7 @@ function beginRound(): void {
   gameOver.value = false
   isNewBest.value = false
   submitRank.value = null
+  lastDrawSig = null // 新对局可能撞出与上局相同的视觉签名（空棋盘）,强制首帧真画
   startEngine(startLevel.value, speedMode.value)
 }
 
@@ -626,10 +642,16 @@ function viewLeaderboard(): void {
 async function initCanvas(): Promise<void> {
   await nextTick()
   try {
+    const stage = await getElementRect('#tetris-stage', instance)
+    if (stage.width > 100 && stage.height > 200) {
+      layout.value = computeTetrisLayout(stage.width - 8, stage.height - 8)
+      dragConfig.stepPx = layout.value.cell
+    }
     boardNode = await getCanvasNode('#tetris-board', instance)
-    boardNode.canvas.width = Math.round(layout.totalW * boardNode.dpr)
-    boardNode.canvas.height = Math.round(layout.totalH * boardNode.dpr)
+    boardNode.canvas.width = Math.round(layout.value.totalW * boardNode.dpr)
+    boardNode.canvas.height = Math.round(layout.value.totalH * boardNode.dpr)
     boardNode.ctx.scale(boardNode.dpr, boardNode.dpr)
+    lastDrawSig = null // 缓冲刚重置,下一帧必须真画
     if (gameState.value) drawState(gameState.value)
   } catch (error) {
     console.warn('[tetris] init canvas failed:', error)
@@ -1375,6 +1397,7 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   }
 
   &__key {
+    width: 108rpx;
     height: 108rpx;
     border-radius: $radius-md;
     background: $card;

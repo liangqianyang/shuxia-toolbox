@@ -1232,7 +1232,7 @@ async function onPlan(): Promise<void> {
   planError.value = ''
   release()
   // AI 联网规划可能要 10-60s，给全屏 loading（mask 防误点）让用户知道在跑
-  uni.showLoading({ title: 'AI 联网规划中…', mask: true })
+  uni.showLoading({ title: '联网规划中…', mask: true })
   try {
     const r = await planWithAi({
       origin: aiOrigin.value.trim(),

@@ -1,19 +1,18 @@
 <template>
   <view class="uno">
-    <!-- 大厅 -->
-    <GameLobby
-      v-if="!state"
-      name="枫趣牌局"
-      description="2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩"
-      :icon="cdnUrl('/static/icons/uno-1.png')"
-      pastel-key="uno"
-      :busy="acting"
-      @create="onCreate"
-      @join="onJoinCode"
-      @rules="rulesOpen = true"
-      @chat="lobbyHint('创建或加入房间后可聊天')"
-      @rematch="lobbyHint('对局结束后可在房间内重开')"
-    />
+    <!-- 大厅（页面根无内边距，房间自带 .room，大厅需单独补页边距） -->
+    <view v-if="!state" class="lobby">
+      <GameLobby
+        name="枫趣牌局"
+        description="2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩"
+        :icon="cdnUrl('/static/icons/uno-1.png')"
+        pastel-key="uno"
+        :busy="acting"
+        @create="onCreate"
+        @join="onJoinCode"
+        @rules="rulesOpen = true"
+      />
+    </view>
 
     <!-- 房间 -->
     <view v-else class="room" :class="{ 'room--playing': state.status === 'playing' }">
@@ -861,10 +860,6 @@ async function onJoinCode(code: string) {
   await joinByCode(code)
 }
 
-function lobbyHint(title: string) {
-  uni.showToast({ title, icon: 'none' })
-}
-
 async function onLeave() {
   await exitRoom()
 }
@@ -1086,6 +1081,9 @@ $gold: #f4b942; // 仅 庄/房主/新牌 角标等小面积内容点缀
   button::after { border: none; }
   button[disabled] { opacity: 1; }
 }
+
+/* 大厅页边距（GameLobby 自身不带侧边距，由页面提供；对齐 jungle 的 16px 页边） */
+.lobby { padding: 0 $space-4 $space-3; }
 
 .room { padding: 24rpx; }
 // 对局中底部有固定的聊天条（消息流 + 入口），留出内容空间防遮挡
@@ -1466,7 +1464,13 @@ $gold: #f4b942; // 仅 庄/房主/新牌 角标等小面积内容点缀
     height: 64rpx;
     line-height: 64rpx;
 
-    &--plain { background: $card; color: $ink; border: 2rpx solid $line-strong; }
+    &--plain {
+      background: $card;
+      color: $ink;
+      font-weight: 600;
+      border: 2rpx solid $blue;
+      box-shadow: $shadow-card;
+    }
   }
 }
 

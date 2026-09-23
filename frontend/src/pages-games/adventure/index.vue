@@ -1,30 +1,29 @@
 <template>
   <view class="page">
-    <!-- ══════════ 大厅 ══════════ -->
-    <GameLobby
-      v-if="!current"
-      name="枫趣冒险"
-      description="2-6 人联机 · 蛇形山道 · 决斗押注与天气预报"
-      :icon="cdnUrl('/static/icons/adventure-1.png')"
-      pastel-key="adventure"
-      :busy="acting"
-      @create="onCreate"
-      @join="onJoinCode"
-      @rules="rulesOpen = true"
-      @chat="lobbyHint('创建或加入房间后可聊天')"
-      @rematch="lobbyHint('对局结束后可在房间内重开')"
-    >
-      <template #extra>
-        <view v-if="myRooms.length" class="my-rooms">
-          <view class="my-rooms-title">我的对局</view>
-          <view v-for="room in myRooms" :key="room.code" class="my-room-item" hover-class="press" @tap="joinByCode(room.code)">
-            <view class="my-room-code">{{ room.code }}</view>
-            <view class="my-room-meta">{{ roomStatusText(room.status) }} · {{ room.playerCount }} 人</view>
-            <view class="my-room-go">{{ room.status === 'saved' ? '继续' : '回到' }} ›</view>
+    <!-- ══════════ 大厅（页面根无侧边距，大厅需单独补） ══════════ -->
+    <view v-if="!current" class="lobby">
+      <GameLobby
+        name="枫趣冒险"
+        description="2-6 人联机 · 蛇形山道 · 决斗押注与天气预报"
+        :icon="cdnUrl('/static/icons/adventure-1.png')"
+        pastel-key="adventure"
+        :busy="acting"
+        @create="onCreate"
+        @join="onJoinCode"
+        @rules="rulesOpen = true"
+      >
+        <template #extra>
+          <view v-if="myRooms.length" class="my-rooms">
+            <view class="my-rooms-title">我的对局</view>
+            <view v-for="room in myRooms" :key="room.code" class="my-room-item" hover-class="press" @tap="joinByCode(room.code)">
+              <view class="my-room-code">{{ room.code }}</view>
+              <view class="my-room-meta">{{ roomStatusText(room.status) }} · {{ room.playerCount }} 人</view>
+              <view class="my-room-go">{{ room.status === 'saved' ? '继续' : '回到' }} ›</view>
+            </view>
           </view>
-        </view>
-      </template>
-    </GameLobby>
+        </template>
+      </GameLobby>
+    </view>
 
     <!-- ══════════ 房间 ══════════ -->
     <view v-else class="room">
@@ -653,10 +652,6 @@ function onCreate() {
 }
 function onJoinCode(code: string) {
   if (code.length === 4) void joinByCode(code)
-}
-
-function lobbyHint(title: string) {
-  uni.showToast({ title, icon: 'none' })
 }
 function copyCode() {
   if (!current.value) return
@@ -1318,6 +1313,9 @@ $muted: #a4b3c0;
   /* 固定聊天 dock（6 行 feed）的避让位 */
   padding-bottom: calc(380rpx + env(safe-area-inset-bottom));
 }
+
+/* 大厅页边距（GameLobby 自身不带侧边距，由页面提供；对齐 jungle 的 16px 页边） */
+.lobby { padding: 0 $space-4 $space-3; }
 
 .btn {
   border-radius: 16rpx;

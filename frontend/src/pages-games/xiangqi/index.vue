@@ -11,8 +11,6 @@
       @create="onCreate"
       @join="onJoinCode"
       @rules="rulesOpen = true"
-      @chat="lobbyHint('创建或加入房间后可聊天')"
-      @rematch="lobbyHint('对局结束后可在房间内重开')"
     />
 
     <!-- 房间 -->
@@ -841,9 +839,6 @@ async function onJoinCode(code: string) {
     await initBoard()
   }
 )}
-function lobbyHint(title: string) {
-  uni.showToast({ title, icon: 'none' })
-}
 
 async function onRematch() {
   await guard(async () => {

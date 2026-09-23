@@ -1,19 +1,18 @@
 <template>
   <view class="ludo">
-    <!-- 大厅 -->
-    <GameLobby
-      v-if="!state"
-      name="飞行棋"
-      description="2-4 人联机 · 经典规则 · 掷骰起飞飞跃终点"
-      :icon="cdnUrl('/static/icons/ludo-1.png')"
-      pastel-key="ludo"
-      :busy="acting"
-      @create="onCreate"
-      @join="onJoinCode"
-      @rules="rulesOpen = true"
-      @chat="lobbyHint('创建或加入房间后可聊天')"
-      @rematch="lobbyHint('对局结束后可在房间内重开')"
-    />
+    <!-- 大厅（页面根无内边距，房间自带 .room，大厅需单独补页边距） -->
+    <view v-if="!state" class="lobby">
+      <GameLobby
+        name="飞行棋"
+        description="2-4 人联机 · 经典规则 · 掷骰起飞飞跃终点"
+        :icon="cdnUrl('/static/icons/ludo-1.png')"
+        pastel-key="ludo"
+        :busy="acting"
+        @create="onCreate"
+        @join="onJoinCode"
+        @rules="rulesOpen = true"
+      />
+    </view>
 
     <!-- 房间 -->
     <view v-else class="room">
@@ -813,10 +812,6 @@ async function onJoinCode(code: string) {
   }
 }
 
-function lobbyHint(title: string) {
-  uni.showToast({ title, icon: 'none' })
-}
-
 function copyCode() {
   const code = state.value?.code
   if (!code) return
@@ -894,6 +889,9 @@ $maple-light: #F2F6F9;
 }
 
 /* ---------- 大厅 ---------- */
+/* GameLobby 自身不带侧边距，由页面提供；对齐 jungle 的 16px 页边 */
+.lobby { padding: 0 $space-4 $space-3; }
+
 .room {
   padding: 20rpx 24rpx calc(400rpx + env(safe-area-inset-bottom));
 
