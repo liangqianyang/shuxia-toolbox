@@ -1,26 +1,19 @@
 <template>
   <view class="gomoku">
-    <!-- 大厅：创建 / 加入 -->
-    <view v-if="!state" class="gomoku__lobby">
-      <view class="gomoku__brand">
-        <text class="gomoku__brand-icon">⚫</text>
-        <text class="gomoku__brand-title">五子棋</text>
-        <text class="gomoku__brand-sub">创建房间，邀请好友联机对弈</text>
-      </view>
-      <button class="gomoku__primary" :disabled="busy" @tap="onCreate">创建房间</button>
-      <view class="gomoku__divider"><text>或加入好友的房间</text></view>
-      <view class="gomoku__join">
-        <input
-          v-model="joinCode"
-          class="gomoku__join-input"
-          type="number"
-          maxlength="4"
-          placeholder="输入 4 位房间码"
-        />
-        <button class="gomoku__join-btn" :disabled="busy" @tap="onJoin">加入</button>
-      </view>
-      <text class="gomoku__rules" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <!-- 大厅：创建 / 加入（枫糖纸面模板，GameLobby 共用） -->
+    <GameLobby
+      v-if="!state"
+      name="五子棋"
+      description="创建房间，邀请好友联机对弈"
+      icon="⚫"
+      pastel-key="gomoku"
+      :busy="busy"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="gomoku__room">
@@ -194,6 +187,7 @@ import type { GomokuColor } from '@/types/gomoku'
 import { playGomokuPlace, playGomokuWin } from '@/pages-games/utils/gomokuAudio'
 import GameRulesModal from '@/components/GameRulesModal.vue'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
 import { gamePhraseText } from '@/pages-games/utils/gameChat'
@@ -266,7 +260,6 @@ const {
 } = useGomokuRoom()
 
 const instance = getCurrentInstance()
-const joinCode = ref('')
 const busy = ref(false)
 
 // ---------- 猜拳定选边 ----------
@@ -589,11 +582,15 @@ async function onCreate() {
   })
 }
 
-async function onJoin() {
+async function onJoinCode(code: string) {
   await guard(async () => {
-    await joinByCode(joinCode.value.trim())
+    await joinByCode(code)
     await initBoard()
   })
+}
+
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 async function onRematch() {
@@ -602,7 +599,6 @@ async function onRematch() {
 
 async function onLeave() {
   await exitRoom()
-  joinCode.value = ''
 }
 
 function copyCode() {
@@ -651,37 +647,6 @@ onShareAppMessage(() => ({
   box-sizing: border-box;
   background: $color-bg;
 
-  &__lobby {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 80rpx;
-  }
-
-  &__brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 64rpx;
-
-    &-icon {
-      font-size: 96rpx;
-    }
-
-    &-title {
-      font-size: $font-title;
-      font-weight: 600;
-      color: $color-text;
-      margin-top: 16rpx;
-    }
-
-    &-sub {
-      font-size: $font-caption;
-      color: $color-text-secondary;
-      margin-top: 8rpx;
-    }
-  }
-
   &__color-pick {
     display: flex;
     gap: 24rpx;
@@ -706,72 +671,12 @@ onShareAppMessage(() => ({
     }
   }
 
-  &__primary {
-    width: 480rpx;
-    height: 96rpx;
-    line-height: 96rpx;
-    border-radius: $radius-lg;
-    background: $color-primary;
-    color: #fff;
-    font-size: $font-body;
-    border: none;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__divider {
-    margin: 48rpx 0 24rpx;
-    font-size: $font-caption;
-    color: $color-text-secondary;
-  }
-
-  &__rules {
-    margin-top: 28rpx;
-    font-size: $font-body;
-    color: $color-primary;
-    text-decoration: underline;
-  }
-
   &__rules-btn {
     height: 64rpx;
     line-height: 64rpx;
     padding: 0 20rpx;
     font-size: $font-caption;
     color: $color-primary;
-  }
-
-  &__join {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-
-    &-input {
-      width: 320rpx;
-      height: 88rpx;
-      padding: 0 24rpx;
-      background: $color-card;
-      border: 2rpx solid $color-border;
-      border-radius: $radius-md;
-      font-size: $font-body;
-      box-sizing: border-box;
-    }
-
-    &-btn {
-      width: 160rpx;
-      height: 88rpx;
-      line-height: 88rpx;
-      border-radius: $radius-md;
-      background: $color-card;
-      color: $color-primary-dark;
-      border: 2rpx solid $color-primary;
-      font-size: $font-body;
-
-      &::after {
-        border: none;
-      }
-    }
   }
 
   &__header {

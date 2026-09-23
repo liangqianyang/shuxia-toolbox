@@ -1,30 +1,19 @@
 <template>
   <view class="xiangqi">
     <!-- 大厅：创建 / 加入 -->
-    <view v-if="!state" class="xiangqi__lobby">
-      <view class="xiangqi__brand">
-        <view class="xiangqi__brand-chips">
-          <view class="xiangqi__brand-chip xiangqi__brand-chip--red"><text>帅</text></view>
-          <text class="xiangqi__brand-vs">VS</text>
-          <view class="xiangqi__brand-chip xiangqi__brand-chip--black"><text>将</text></view>
-        </view>
-        <text class="xiangqi__brand-title">象棋</text>
-        <text class="xiangqi__brand-sub">楚河汉界 · 将帅对垒 · 两人对弈</text>
-      </view>
-      <button class="xiangqi__primary" :disabled="busy" @tap="onCreate">创建房间</button>
-      <view class="xiangqi__divider"><text>或加入好友的房间</text></view>
-      <view class="xiangqi__join">
-        <input
-          v-model="joinCode"
-          class="xiangqi__join-input"
-          type="number"
-          maxlength="4"
-          placeholder="输入 4 位房间码"
-        />
-        <button class="xiangqi__join-btn" :disabled="busy" @tap="onJoin">加入</button>
-      </view>
-      <text class="xiangqi__rules-link" hover-class="press" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <GameLobby
+      v-if="!state"
+      name="象棋"
+      description="楚河汉界 · 将帅对垒 · 两人对弈"
+      :icon="cdnUrl('/static/icons/xiangqi-1.png')"
+      pastel-key="xiangqi"
+      :busy="busy"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="xiangqi__room">
@@ -260,6 +249,8 @@ import { PIECE_NAMES, legalTargets, pieceAt, opponent as opponentOf } from '@/pa
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { XiangqiLastMove, XiangqiPieceType, XiangqiRoomState, XiangqiSide } from '@/types/xiangqi'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
+import { cdnUrl } from '@/utils/cdn'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
 import { gamePhraseText } from '@/pages-games/utils/gameChat'
@@ -318,7 +309,6 @@ const {
 } = useXiangqiRoom()
 
 const instance = getCurrentInstance()
-const joinCode = ref('')
 const busy = ref(false)
 
 const avatarOf = (url: string) => resolveAvatarUrl(url)
@@ -845,11 +835,14 @@ async function onCreate() {
   })
 }
 
-async function onJoin() {
+async function onJoinCode(code: string) {
   await guard(async () => {
-    await joinByCode(joinCode.value.trim())
+    await joinByCode(code)
     await initBoard()
-  })
+  }
+)}
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 async function onRematch() {
@@ -866,7 +859,6 @@ function battleCleanup() {
 
 async function onLeaveAndBack() {
   await exitRoom()
-  joinCode.value = ''
   uni.navigateBack({ fail: () => {} })
 }
 
@@ -960,126 +952,6 @@ onShareAppMessage(() => ({
   padding: 0 16px 24rpx;
   box-sizing: border-box;
   background: #f6f9fb;
-
-  &__lobby {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 120rpx;
-  }
-
-  &__brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16rpx;
-    margin-bottom: 64rpx;
-  }
-
-  &__brand-chips {
-    display: flex;
-    align-items: center;
-    gap: 20rpx;
-  }
-
-  &__brand-chip {
-    width: 88rpx;
-    height: 88rpx;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 40rpx;
-    font-weight: 600;
-
-    &--red {
-      background: #e8806f;
-      border: 3rpx solid #d96a58;
-    }
-
-    &--black {
-      background: #2e4154;
-      border: 3rpx solid #2e2620;
-    }
-  }
-
-  &__brand-vs {
-    font-size: 28rpx;
-    font-weight: 600;
-    color: #a4b3c0;
-  }
-
-  &__brand-title {
-    font-size: 48rpx;
-    font-weight: 600;
-    color: #2e4154;
-  }
-
-  &__brand-sub {
-    font-size: 24rpx;
-    color: #6e8093;
-  }
-
-  &__primary {
-    width: 100%;
-    height: 96rpx;
-    line-height: 96rpx;
-    border-radius: 48rpx;
-    background: #58a6dc;
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 600;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__divider {
-    margin: 40rpx 0;
-    font-size: 22rpx;
-    color: #a4b3c0;
-  }
-
-  &__join {
-    display: flex;
-    gap: 16rpx;
-    width: 100%;
-  }
-
-  &__join-input {
-    flex: 1;
-    height: 88rpx;
-    padding: 0 32rpx;
-    border-radius: 44rpx;
-    background: #fff;
-    border: 1rpx solid #eaf0f4;
-    font-size: 30rpx;
-  }
-
-  &__join-btn {
-    width: 200rpx;
-    height: 88rpx;
-    line-height: 88rpx;
-    border-radius: 44rpx;
-    background: #fff;
-    border: 2rpx solid #58a6dc;
-    box-sizing: border-box;
-    color: #58a6dc;
-    font-size: 30rpx;
-    font-weight: 600;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__rules-link {
-    margin-top: 48rpx;
-    font-size: 26rpx;
-    color: #3b86b8;
-  }
 
   &__room {
     display: flex;

@@ -1,17 +1,19 @@
 <template>
   <view class="ludo">
     <!-- 大厅 -->
-    <view v-if="!state" class="lobby">
-      <image class="lobby__logo" :src="cdnUrl('/static/icons/ludo-1.png')" mode="aspectFit" />
-      <view class="lobby__title">飞行棋</view>
-      <view class="lobby__subtitle">2-4 人联机 · 经典规则 · 掷骰起飞飞跃终点</view>
-      <button class="lobby__create" :disabled="acting" @tap="onCreate">创建房间</button>
-      <view class="lobby__join">
-        <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
-        <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
-      </view>
-      <text class="lobby__rules" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <GameLobby
+      v-if="!state"
+      name="飞行棋"
+      description="2-4 人联机 · 经典规则 · 掷骰起飞飞跃终点"
+      :icon="cdnUrl('/static/icons/ludo-1.png')"
+      pastel-key="ludo"
+      :busy="acting"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="room">
@@ -258,6 +260,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { cdnUrl } from '@/utils/cdn'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import { useLudoRoom } from './composables/useLudoRoom'
 import { ludoBoardImage, LUDO_COLORS } from './utils/ludoRender'
@@ -361,7 +364,6 @@ const {
   stopSync,
 } = useLudoRoom()
 
-const joinCode = ref('')
 const soundOn = ref(ludoSoundEnabled())
 
 /** 等待室空位占位数（补齐 4 席展示）。 */
@@ -803,12 +805,16 @@ async function onCreate() {
   }
 }
 
-async function onJoin() {
+async function onJoinCode(code: string) {
   try {
-    await joinByCode(joinCode.value.trim())
+    await joinByCode(code)
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '加入失败', icon: 'none' })
   }
+}
+
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 function copyCode() {
@@ -888,90 +894,6 @@ $maple-light: #F2F6F9;
 }
 
 /* ---------- 大厅 ---------- */
-.lobby {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 120rpx 48rpx 0;
-
-  &__logo {
-    width: 240rpx;
-    height: 240rpx;
-    border-radius: 52rpx;
-    box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.18);
-  }
-
-  &__title {
-    margin-top: 32rpx;
-    font-size: 52rpx;
-    font-weight: 600;
-    color: $felt;
-    letter-spacing: 8rpx;
-  }
-
-  &__subtitle {
-    margin-top: 14rpx;
-    font-size: 24rpx;
-    color: rgba(46, 65, 84, 0.6);
-  }
-
-  &__create {
-    margin-top: 72rpx;
-    width: 500rpx;
-    background: $blue;
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 600;
-    border-radius: 48rpx;
-
-    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
-  }
-
-  &__join {
-    margin-top: 36rpx;
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-  }
-
-  &__rules {
-    margin-top: 28rpx;
-    font-size: 26rpx;
-    color: #3b86b8;
-    text-decoration: underline;
-  }
-
-  // 加入区样式与五子棋大厅同款：白底 + 蓝描边按钮
-  &__input {
-    width: 320rpx;
-    height: 88rpx;
-    padding: 0 24rpx;
-    background: #ffffff;
-    border: 2rpx solid #dde6ec;
-    border-radius: 20rpx;
-    color: $ink;
-    font-size: 28rpx;
-    box-sizing: border-box;
-    text-align: center;
-    letter-spacing: 8rpx;
-  }
-
-  &__join-btn {
-    width: 160rpx;
-    height: 88rpx;
-    line-height: 88rpx;
-    border-radius: 20rpx;
-    background: #ffffff;
-    color: #3b86b8;
-    border: 2rpx solid #dde6ec;
-    font-size: 28rpx;
-    box-sizing: border-box;
-
-    &[disabled] { opacity: 0.55; }
-  }
-}
-
-/* ---------- 房间骨架 ---------- */
 .room {
   padding: 20rpx 24rpx calc(400rpx + env(safe-area-inset-bottom));
 

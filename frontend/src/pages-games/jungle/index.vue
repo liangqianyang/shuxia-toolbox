@@ -1,30 +1,19 @@
 <template>
   <view class="jungle">
     <!-- 大厅：创建 / 加入 -->
-    <view v-if="!state" class="jungle__lobby">
-      <view class="jungle__brand">
-        <view class="jungle__brand-chips">
-          <view class="jungle__brand-chip jungle__brand-chip--blue"><text>象</text></view>
-          <text class="jungle__brand-vs">VS</text>
-          <view class="jungle__brand-chip jungle__brand-chip--red"><text>狮</text></view>
-        </view>
-        <text class="jungle__brand-title">斗兽棋</text>
-        <text class="jungle__brand-sub">猜拳选边，鼠可吃象、狮虎跳河</text>
-      </view>
-      <button class="jungle__primary" :disabled="busy" @tap="onCreate">创建房间</button>
-      <view class="jungle__divider"><text>或加入好友的房间</text></view>
-      <view class="jungle__join">
-        <input
-          v-model="joinCode"
-          class="jungle__join-input"
-          type="number"
-          maxlength="4"
-          placeholder="输入 4 位房间码"
-        />
-        <button class="jungle__join-btn" :disabled="busy" @tap="onJoin">加入</button>
-      </view>
-      <text class="jungle__rules-link" hover-class="press" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <GameLobby
+      v-if="!state"
+      name="斗兽棋"
+      description="猜拳选边，鼠可吃象、狮虎跳河"
+      :icon="cdnUrl('/static/icons/jungle-1.png')"
+      pastel-key="jungle"
+      :busy="busy"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="jungle__room">
@@ -338,6 +327,8 @@ import {
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { JungleAnimal, JungleLastMove, JungleRoomState, JungleSide } from '@/types/jungle'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
+import { cdnUrl } from '@/utils/cdn'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
 import { gamePhraseText } from '@/pages-games/utils/gameChat'
@@ -391,7 +382,6 @@ const {
 } = useJungleRoom()
 
 const instance = getCurrentInstance()
-const joinCode = ref('')
 const busy = ref(false)
 
 const avatarOf = (url: string) => resolveAvatarUrl(url)
@@ -905,11 +895,15 @@ async function onCreate() {
   })
 }
 
-async function onJoin() {
+async function onJoinCode(code: string) {
   await guard(async () => {
-    await joinByCode(joinCode.value.trim())
+    await joinByCode(code)
     await initBoard()
   })
+}
+
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 async function onRematch() {
@@ -923,7 +917,6 @@ async function onRematch() {
 /** 结算卡「离开房间」：退出并返回上一页。 */
 async function onLeaveAndBack() {
   await exitRoom()
-  joinCode.value = ''
   uni.navigateBack({ fail: () => {} })
 }
 
@@ -1018,130 +1011,6 @@ onShareAppMessage(() => ({
   padding: 0 16px 24rpx;
   box-sizing: border-box;
   background: #f6f9fb;
-
-  /* ── 大厅 ── */
-  &__lobby {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 120rpx;
-  }
-
-  &__brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 64rpx;
-
-    &-chips {
-      display: flex;
-      align-items: center;
-      gap: 32rpx;
-    }
-
-    &-chip {
-      width: 112rpx;
-      height: 112rpx;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-size: 48rpx;
-      font-weight: 600;
-
-      &--blue {
-        background: #4a86b8;
-        border: 4rpx solid #3b86b8;
-      }
-
-      &--red {
-        background: #e8806f;
-        border: 4rpx solid #d96a58;
-      }
-    }
-
-    &-vs {
-      font-size: 36rpx;
-      font-weight: 600;
-      color: #6e8093;
-    }
-
-    &-title {
-      font-size: $font-title;
-      font-weight: 600;
-      color: $color-text;
-      margin-top: 24rpx;
-    }
-
-    &-sub {
-      font-size: $font-caption;
-      color: $color-text-secondary;
-      margin-top: 8rpx;
-    }
-  }
-
-  &__primary {
-    width: 480rpx;
-    height: 96rpx;
-    line-height: 96rpx;
-    border-radius: $radius-lg;
-    background: #58a6dc;
-    color: #ffffff;
-    font-size: $font-body;
-    font-weight: 600;
-    border: none;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__divider {
-    margin: 48rpx 0 24rpx;
-    font-size: $font-caption;
-    color: $color-text-secondary;
-  }
-
-  &__rules-link {
-    margin-top: 28rpx;
-    font-size: $font-body;
-    color: #3b86b8;
-    text-decoration: underline;
-  }
-
-  &__join {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-
-    &-input {
-      width: 320rpx;
-      height: 88rpx;
-      padding: 0 24rpx;
-      background: $color-card;
-      border: 2rpx solid $color-border;
-      border-radius: $radius-md;
-      font-size: $font-body;
-      box-sizing: border-box;
-    }
-
-    &-btn {
-      width: 160rpx;
-      height: 88rpx;
-      line-height: 88rpx;
-      border-radius: $radius-md;
-      background: $color-card;
-      color: #58a6dc;
-      border: 2rpx solid #58a6dc;
-      box-sizing: border-box;
-      font-size: $font-body;
-
-      &::after {
-        border: none;
-      }
-    }
-  }
 
   /* ── 数据栏 ── */
   &__topbar {

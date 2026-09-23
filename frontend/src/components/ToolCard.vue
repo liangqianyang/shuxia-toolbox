@@ -1,12 +1,14 @@
 <!-- 分组列表行（v4 核心排版单元）——原型 .trow 的唯一实现。
      home/toolbox/games/tool-library/admin 的工具/游戏行全部收编于此，禁止页面手抄。
-     行间发丝线由使用方传 divided（WXSS 相邻兄弟选择器不可靠）；按压反馈需显式 pressable。 -->
+     行间发丝线由使用方传 divided（WXSS 相邻兄弟选择器不可靠）；按压反馈需显式 pressable。
+     .stop 必须：$emit('tap') 是原生事件名，不挡冒泡的话宿主 bindtap 会同时收到
+     内部原生 tap 和自定义事件，点击触发两次（跳转压两层页面即此因）。 -->
 <template>
   <view
     class="tool-card"
     :class="{ 'tool-card--divided': divided, 'tool-card--sm': size === 'sm' }"
     :hover-class="pressable ? 'press' : 'none'"
-    @tap="$emit('tap')"
+    @tap.stop="$emit('tap')"
   >
     <view class="tool-card__tile" :style="{ backgroundColor: pair.tint, color: pair.fg }">
       <ToolIcon class="tool-card__tile-icon" :icon="icon" />

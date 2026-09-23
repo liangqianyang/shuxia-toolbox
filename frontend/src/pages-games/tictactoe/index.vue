@@ -1,30 +1,19 @@
 <template>
   <view class="ttt">
     <!-- 大厅 -->
-    <view v-if="!state" class="ttt__lobby">
-      <view class="ttt__brand">
-        <view class="ttt__brand-chips">
-          <text class="ttt__brand-x">✕</text>
-          <text class="ttt__brand-vs">VS</text>
-          <text class="ttt__brand-o">◯</text>
-        </view>
-        <text class="ttt__brand-title">井字棋</text>
-        <text class="ttt__brand-sub">三连成线 · 猜拳定先手 · 快局</text>
-      </view>
-      <button class="ttt__primary" :disabled="busy" @tap="onCreate">创建房间</button>
-      <view class="ttt__divider"><text>或加入好友的房间</text></view>
-      <view class="ttt__join">
-        <input
-          v-model="joinCode"
-          class="ttt__join-input"
-          type="number"
-          maxlength="4"
-          placeholder="输入 4 位房间码"
-        />
-        <button class="ttt__join-btn" :disabled="busy" @tap="onJoin">加入</button>
-      </view>
-      <text class="ttt__rules-link" hover-class="press" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <GameLobby
+      v-if="!state"
+      name="井字棋"
+      description="三连成线 · 猜拳定先手 · 快局"
+      :icon="cdnUrl('/static/icons/tictactoe-1.png')"
+      pastel-key="tictactoe"
+      :busy="busy"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="ttt__room">
@@ -259,6 +248,8 @@ import { getWindowInfo } from '@/utils/canvasAdapter'
 import { LINES } from '@/pages-games/utils/tictactoe'
 import type { TicTacToeMark } from '@/types/tictactoe'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
+import { cdnUrl } from '@/utils/cdn'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
 import { gamePhraseText } from '@/pages-games/utils/gameChat'
@@ -291,7 +282,6 @@ const {
   stopSync,
 } = useTictactoeRoom()
 
-const joinCode = ref('')
 const busy = ref(false)
 
 const avatarOf = (url: string) => resolveAvatarUrl(url)
@@ -531,8 +521,11 @@ async function onCreate() {
   await guard(async () => createAndEnter())
 }
 
-async function onJoin() {
-  await guard(async () => joinByCode(joinCode.value.trim()))
+async function onJoinCode(code: string) {
+  await guard(async () => joinByCode(code))
+}
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 async function onRematch() {
@@ -541,7 +534,6 @@ async function onRematch() {
 
 async function onLeaveAndBack() {
   await exitRoom()
-  joinCode.value = ''
   uni.navigateBack({ fail: () => {} })
 }
 
@@ -604,116 +596,6 @@ onShareAppMessage(() => ({
   padding: 0 16px 24rpx;
   box-sizing: border-box;
   background: #f6f9fb;
-
-  &__lobby {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 140rpx;
-  }
-
-  &__brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16rpx;
-    margin-bottom: 64rpx;
-  }
-
-  &__brand-chips {
-    display: flex;
-    align-items: center;
-    gap: 24rpx;
-  }
-
-  &__brand-x {
-    font-size: 64rpx;
-    font-weight: 600;
-    color: #e8806f;
-  }
-
-  &__brand-o {
-    font-size: 64rpx;
-    font-weight: 600;
-    color: #4a86b8;
-  }
-
-  &__brand-vs {
-    font-size: 28rpx;
-    font-weight: 600;
-    color: #a4b3c0;
-  }
-
-  &__brand-title {
-    font-size: 48rpx;
-    font-weight: 600;
-    color: #2e4154;
-  }
-
-  &__brand-sub {
-    font-size: 24rpx;
-    color: #6e8093;
-  }
-
-  &__primary {
-    width: 100%;
-    height: 96rpx;
-    line-height: 96rpx;
-    border-radius: 48rpx;
-    background: #58a6dc;
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 600;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__divider {
-    margin: 40rpx 0;
-    font-size: 22rpx;
-    color: #a4b3c0;
-  }
-
-  &__join {
-    display: flex;
-    gap: 16rpx;
-    width: 100%;
-  }
-
-  &__join-input {
-    flex: 1;
-    height: 88rpx;
-    padding: 0 32rpx;
-    border-radius: 44rpx;
-    background: #fff;
-    border: 1rpx solid #eaf0f4;
-    font-size: 30rpx;
-  }
-
-  &__join-btn {
-    width: 200rpx;
-    height: 88rpx;
-    line-height: 88rpx;
-    border-radius: 44rpx;
-    background: #fff;
-    border: 2rpx solid #58a6dc;
-    box-sizing: border-box;
-    color: #58a6dc;
-    font-size: 30rpx;
-    font-weight: 600;
-
-    &::after {
-      border: none;
-    }
-  }
-
-  &__rules-link {
-    margin-top: 48rpx;
-    font-size: 26rpx;
-    color: #3b86b8;
-  }
 
   &__room {
     display: flex;

@@ -1,17 +1,19 @@
 <template>
   <view class="uno">
     <!-- 大厅 -->
-    <view v-if="!state" class="lobby">
-      <image class="lobby__logo" :src="cdnUrl('/static/icons/uno-1.png')" mode="aspectFit" />
-      <view class="lobby__title">枫趣牌局</view>
-      <view class="lobby__subtitle">2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩</view>
-      <button class="lobby__create" :disabled="acting" @tap="onCreate">创建房间</button>
-      <view class="lobby__join">
-        <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
-        <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
-      </view>
-      <text class="lobby__rules" @tap="rulesOpen = true">玩法说明</text>
-    </view>
+    <GameLobby
+      v-if="!state"
+      name="枫趣牌局"
+      description="2-10 人联机 · 轻松开局 · 枫叶小精灵陪你玩"
+      :icon="cdnUrl('/static/icons/uno-1.png')"
+      pastel-key="uno"
+      :busy="acting"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    />
 
     <!-- 房间 -->
     <view v-else class="room" :class="{ 'room--playing': state.status === 'playing' }">
@@ -361,6 +363,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { cdnUrl } from '@/utils/cdn'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useUnoRoom } from '@/pages-games/composables/useUnoRoom'
 import { useUnoCards } from '@/pages-games/composables/useUnoCards'
@@ -458,7 +461,6 @@ const { unoChatTextEnabled, refreshFeatures } = useFeatures()
 
 const { images, ensure, preload } = useUnoCards()
 
-const joinCode = ref('')
 const selectedIndex = ref(-1)
 const colorPickerVisible = ref(false)
 const colorPickMode = ref<'wild' | 'start'>('wild')
@@ -855,13 +857,16 @@ async function onCreate() {
   await createAndEnter()
 }
 
-async function onJoin() {
-  await joinByCode(joinCode.value.trim())
+async function onJoinCode(code: string) {
+  await joinByCode(code)
+}
+
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 
 async function onLeave() {
   await exitRoom()
-  joinCode.value = ''
 }
 
 function copyCode() {
@@ -1082,58 +1087,6 @@ $gold: #f4b942; // 仅 庄/房主/新牌 角标等小面积内容点缀
   button[disabled] { opacity: 1; }
 }
 
-// ---------- 大厅 ----------
-.lobby {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 140rpx 48rpx 0;
-
-  &__logo { width: 220rpx; height: 220rpx; border-radius: 48rpx; box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.12); }
-  &__title { font-size: 56rpx; font-weight: 600; margin-top: 28rpx; color: $ink; }
-  &__subtitle { font-size: 26rpx; color: $ink2; margin-top: 12rpx; }
-  &__create {
-    margin-top: 80rpx;
-    width: 480rpx;
-    background: $blue;
-    color: #fff;
-    font-weight: 600;
-    border-radius: 48rpx;
-
-    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
-  }
-  &__join { display: flex; align-items: center; gap: 16rpx; margin-top: 40rpx; }
-  &__rules { margin-top: 28rpx; font-size: 26rpx; color: $blue-deep; text-decoration: underline; }
-  // 加入区样式与五子棋大厅同款：白底 + 发丝线描边
-  &__input {
-    width: 320rpx;
-    height: 88rpx;
-    padding: 0 24rpx;
-    background: $card;
-    border: 2rpx solid $line-strong;
-    border-radius: 20rpx;
-    color: $ink;
-    font-size: 28rpx;
-    box-sizing: border-box;
-    text-align: center;
-    letter-spacing: 8rpx;
-  }
-  &__join-btn {
-    width: 160rpx;
-    height: 88rpx;
-    line-height: 88rpx;
-    border-radius: 20rpx;
-    background: $card;
-    color: $blue-deep;
-    border: 2rpx solid $line-strong;
-    font-size: 28rpx;
-    box-sizing: border-box;
-
-    &[disabled] { opacity: 0.55; }
-  }
-}
-
-// ---------- 房间公共 ----------
 .room { padding: 24rpx; }
 // 对局中底部有固定的聊天条（消息流 + 入口），留出内容空间防遮挡
 .room--playing { padding-bottom: calc(330rpx + env(safe-area-inset-bottom)); }

@@ -1,30 +1,30 @@
 <template>
   <view class="page">
     <!-- ══════════ 大厅 ══════════ -->
-    <view v-if="!current" class="lobby">
-      <view class="lobby-logo">
-        <image class="lobby-logo-img" :src="cdnUrl('/static/icons/adventure-1.png')" mode="aspectFit" />
-        <view class="lobby-title">枫趣冒险</view>
-        <view class="lobby-sub">2-6 人联机 · 蛇形山道 · 决斗押注与天气预报</view>
-      </view>
-      <view class="lobby-actions">
-        <button class="btn btn-primary" :loading="acting" @tap="onCreate">创建房间</button>
-        <view class="join-row">
-          <input v-model="joinCode" class="join-input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
-          <button class="btn join-btn" :disabled="joinCode.length !== 4" @tap="onJoin">加入</button>
+    <GameLobby
+      v-if="!current"
+      name="枫趣冒险"
+      description="2-6 人联机 · 蛇形山道 · 决斗押注与天气预报"
+      :icon="cdnUrl('/static/icons/adventure-1.png')"
+      pastel-key="adventure"
+      :busy="acting"
+      @create="onCreate"
+      @join="onJoinCode"
+      @rules="rulesOpen = true"
+      @chat="lobbyHint('创建或加入房间后可聊天')"
+      @rematch="lobbyHint('对局结束后可在房间内重开')"
+    >
+      <template #extra>
+        <view v-if="myRooms.length" class="my-rooms">
+          <view class="my-rooms-title">我的对局</view>
+          <view v-for="room in myRooms" :key="room.code" class="my-room-item" hover-class="press" @tap="joinByCode(room.code)">
+            <view class="my-room-code">{{ room.code }}</view>
+            <view class="my-room-meta">{{ roomStatusText(room.status) }} · {{ room.playerCount }} 人</view>
+            <view class="my-room-go">{{ room.status === 'saved' ? '继续' : '回到' }} ›</view>
+          </view>
         </view>
-        <view class="rules-entry" hover-class="press" @tap="rulesOpen = true">玩法说明</view>
-      </view>
-      <view v-if="myRooms.length" class="my-rooms">
-        <view class="my-rooms-title">我的对局</view>
-        <view v-for="room in myRooms" :key="room.code" class="my-room-item" hover-class="press" @tap="joinByCode(room.code)">
-          <view class="my-room-code">{{ room.code }}</view>
-          <view class="my-room-meta">{{ roomStatusText(room.status) }} · {{ room.playerCount }} 人</view>
-          <view class="my-room-go">{{ room.status === 'saved' ? '继续' : '回到' }} ›</view>
-        </view>
-      </view>
-      <view class="lobby-hint">天气看得见 · 决斗押注 · 房主可存档续局</view>
-    </view>
+      </template>
+    </GameLobby>
 
     <!-- ══════════ 房间 ══════════ -->
     <view v-else class="room">
@@ -508,6 +508,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import { cdnUrl } from '@/utils/cdn'
+import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { resolveAvatarUrl as resolveAvatar } from '@/services/toolbox'
 import { useFeatures } from '@/composables/useFeatures'
 import { useAdventureRoom } from './composables/useAdventureRoom'
@@ -645,14 +646,17 @@ const { adventureChatTextEnabled, refreshFeatures } = useFeatures()
 
 // ---------------------------------------------------------------- 基础
 
-const joinCode = ref('')
 const soundOn = ref(adventureSoundEnabled())
 
 function onCreate() {
   void createAndEnter()
 }
-function onJoin() {
-  if (joinCode.value.length === 4) void joinByCode(joinCode.value)
+function onJoinCode(code: string) {
+  if (code.length === 4) void joinByCode(code)
+}
+
+function lobbyHint(title: string) {
+  uni.showToast({ title, icon: 'none' })
 }
 function copyCode() {
   if (!current.value) return
@@ -1331,27 +1335,12 @@ $muted: #a4b3c0;
 }
 
 // ── 大厅 ──
-.lobby { padding: 80rpx 48rpx; display: flex; flex-direction: column; align-items: center; gap: 40rpx; }
-.lobby-logo { display: flex; flex-direction: column; align-items: center; gap: 16rpx; margin-top: 60rpx; }
-.lobby-logo-img { width: 180rpx; height: 180rpx; border-radius: 40rpx; background: rgba(46,65,84,0.06); }
-.lobby-title { font-size: 48rpx; font-weight: 600; color: $ink; letter-spacing: 4rpx; }
-.lobby-sub { font-size: 24rpx; color: $muted; }
-.lobby-actions { width: 100%; display: flex; flex-direction: column; gap: 24rpx; }
-.join-row { display: flex; gap: 16rpx; }
-.join-input {
-  flex: 1; height: 76rpx; background: #fff; border: 2rpx solid rgba(46,65,84,0.15);
-  border-radius: 16rpx; padding: 0 24rpx; font-size: 30rpx; letter-spacing: 8rpx; text-align: center;
-}
-.join-btn { background: #fff; border: 2rpx solid #58a6dc; color: #58a6dc; box-sizing: border-box; }
-.rules-entry { text-align: center; font-size: 26rpx; color: #3b86b8; text-decoration: underline; padding: 8rpx 0; }
 .my-rooms { width: 100%; background: #fff; border-radius: 20rpx; padding: 24rpx; }
 .my-rooms-title { font-size: 26rpx; font-weight: 600; color: $ink; margin-bottom: 16rpx; }
 .my-room-item { display: flex; align-items: center; gap: 16rpx; padding: 16rpx 8rpx; border-top: 2rpx solid rgba(46,65,84,0.06); }
 .my-room-code { font-size: 32rpx; font-weight: 600; color: $ink; letter-spacing: 4rpx; }
 .my-room-meta { flex: 1; font-size: 24rpx; color: $muted; }
 .my-room-go { font-size: 26rpx; color: $maple; font-weight: 600; }
-.lobby-hint { font-size: 22rpx; color: $muted; }
-
 // ── 顶栏 ──
 .room-header { display: flex; align-items: center; justify-content: space-between; padding: 20rpx 24rpx; }
 .room-code { font-size: 30rpx; font-weight: 600; color: $ink; letter-spacing: 4rpx; }
