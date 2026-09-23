@@ -11,6 +11,8 @@ use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
 use Hyperf\DbConnection\Db;
 use RuntimeException;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\StdoutLoggerInterface;
 
 /**
  * 枫趣冒险联机房间：服务端权威，完整对局快照存 MySQL（重启不丢局，saved 可跨天续局）。
@@ -76,6 +78,9 @@ final class AdventureRoomService
     private const int CHAT_COOLDOWN_SECONDS = 3;
 
     public const int CHAT_KEEP = 50;
+
+    /** 托管循环进行中标志：防 afterAdvance 经 continueTurn 链重入 drainAuto。 */
+    private bool $drainingAuto = false;
 
     public function __construct(
         private readonly WechatUserService $users,
@@ -957,33 +962,40 @@ final class AdventureRoomService
             ->pluck('code');
         $swept = 0;
         foreach ($codes as $code) {
-            $room = Db::transaction(function () use ($code) {
-                $room = $this->lockByCode((string) $code);
-                if ($room->status !== 'playing' || $room->turn_deadline_at === null
-                    || strtotime((string) $room->turn_deadline_at) > time()) {
-                    return null;
-                }
-                if (! $this->anyoneOnline($room)) {
-                    // 全员离线守卫：自动存档（区别于房主手动保存，事件带 auto 标记）
-                    $state = $this->pushEvent($room->state, ['t' => 'save', 'v' => 'auto']);
-                    $room->state = $state;
-                    $room->status = 'saved';
-                    $room->paused_at = date('Y-m-d H:i:s');
-                    $room->turn_deadline_at = null;
+            try {
+                $room = Db::transaction(function () use ($code) {
+                    $room = $this->lockByCode((string) $code);
+                    if ($room->status !== 'playing' || $room->turn_deadline_at === null
+                        || strtotime((string) $room->turn_deadline_at) > time()) {
+                        return null;
+                    }
+                    if (! $this->anyoneOnline($room)) {
+                        // 全员离线守卫：自动存档（区别于房主手动保存，事件带 auto 标记）
+                        $state = $this->pushEvent($room->state, ['t' => 'save', 'v' => 'auto']);
+                        $room->state = $state;
+                        $room->status = 'saved';
+                        $room->paused_at = date('Y-m-d H:i:s');
+                        $room->turn_deadline_at = null;
+                        $room->version++;
+                        $room->save();
+                        return null;
+                    }
+                    if (! $this->applyDueTimeoutIfNeeded($room)) {
+                        return null;
+                    }
                     $room->version++;
                     $room->save();
-                    return null;
+                    return $room;
+                });
+                if ($room instanceof AdventureRoom) {
+                    $this->broadcast($room);
+                    ++$swept;
                 }
-                if (! $this->applyDueTimeoutIfNeeded($room)) {
-                    return null;
-                }
-                $room->version++;
-                $room->save();
-                return $room;
-            });
-            if ($room instanceof AdventureRoom) {
-                $this->broadcast($room);
-                ++$swept;
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
             }
         }
         return $swept;
@@ -994,55 +1006,63 @@ final class AdventureRoomService
      */
     public function sweepLonelyRooms(): int
     {
-        $rooms = AdventureRoom::query()->where('status', 'playing')->limit(50)->get();
+        // 只取 code：行内 state JSON 可达几十 KB，秒级清扫不整行拉取（锁后自会重读全行）
+        $rooms = AdventureRoom::query()->where('status', 'playing')->select('code')->limit(50)->get();
         $ended = 0;
         foreach ($rooms as $room) {
-            $changed = Db::transaction(function () use ($room) {
-                $room = $this->lockByCode((string) $room->code);
-                if ($room->status !== 'playing') {
-                    return null;
-                }
-                $state = $room->state;
-                $seats = $room->seats;
-                $active = [];
-                foreach ($seats as $i => $uid) {
-                    if (! in_array($i, $state['leftSeats'] ?? [], true) && ! in_array($i, $state['finishedOrder'] ?? [], true)) {
-                        $active[$i] = (int) $uid;
+            try {
+                $changed = Db::transaction(function () use ($room) {
+                    $room = $this->lockByCode((string) $room->code);
+                    if ($room->status !== 'playing') {
+                        return null;
                     }
-                }
-                if (count($active) < 2) {
-                    return null;
-                }
-                $onlineIds = $this->pusher->onlineUserIds((string) $room->code);
-                $seenAt = $room->seen_at ?? [];
-                $now = time();
-                $online = [];
-                $othersGone = true;
-                foreach ($active as $i => $uid) {
-                    $fresh = isset($seenAt[(string) $uid]) ? strtotime((string) $seenAt[(string) $uid]) : 0;
-                    $isOnline = in_array($uid, $onlineIds, true) || $fresh >= $now - self::ONLINE_SECONDS;
-                    if ($isOnline) {
-                        $online[] = $i;
-                        continue;
+                    $state = $room->state;
+                    $seats = $room->seats;
+                    $active = [];
+                    foreach ($seats as $i => $uid) {
+                        if (! in_array($i, $state['leftSeats'] ?? [], true) && ! in_array($i, $state['finishedOrder'] ?? [], true)) {
+                            $active[$i] = (int) $uid;
+                        }
                     }
-                    if ($fresh >= $now - self::OFFLINE_FORFEIT_SECONDS) {
-                        $othersGone = false; // 刚离线不久，可能切后台马上回来
+                    if (count($active) < 2) {
+                        return null;
                     }
+                    $onlineIds = $this->pusher->onlineUserIds((string) $room->code);
+                    $seenAt = $room->seen_at ?? [];
+                    $now = time();
+                    $online = [];
+                    $othersGone = true;
+                    foreach ($active as $i => $uid) {
+                        $fresh = isset($seenAt[(string) $uid]) ? strtotime((string) $seenAt[(string) $uid]) : 0;
+                        $isOnline = in_array($uid, $onlineIds, true) || $fresh >= $now - self::ONLINE_SECONDS;
+                        if ($isOnline) {
+                            $online[] = $i;
+                            continue;
+                        }
+                        if ($fresh >= $now - self::OFFLINE_FORFEIT_SECONDS) {
+                            $othersGone = false; // 刚离线不久，可能切后台马上回来
+                        }
+                    }
+                    if (count($online) !== 1 || ! $othersGone) {
+                        return null;
+                    }
+                    $winnerSeat = $online[0];
+                    $state = $this->pushEvent($state, ['t' => 'win', 'seat' => $winnerSeat, 'reason' => 'last_man']);
+                    $room->state = $state;
+                    $this->finishGame($room, $state, 'last_man');
+                    $room->version++;
+                    $room->save();
+                    return $room;
+                });
+                if ($changed instanceof AdventureRoom) {
+                    $this->broadcast($changed);
+                    ++$ended;
                 }
-                if (count($online) !== 1 || ! $othersGone) {
-                    return null;
-                }
-                $winnerSeat = $online[0];
-                $state = $this->pushEvent($state, ['t' => 'win', 'seat' => $winnerSeat, 'reason' => 'last_man']);
-                $room->state = $state;
-                $this->finishGame($room, $state, 'last_man');
-                $room->version++;
-                $room->save();
-                return $room;
-            });
-            if ($changed instanceof AdventureRoom) {
-                $this->broadcast($changed);
-                ++$ended;
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
             }
         }
         return $ended;
@@ -1081,27 +1101,34 @@ final class AdventureRoomService
 
         $players = [];
         foreach ($seats as $i => $uid) {
-            $profile = $this->users->findUser((int) $uid);
-            $players[] = [
-                'seat' => $i,
-                'userId' => (int) $uid,
-                'nickname' => (string) (($profile['nickname'] ?? '') ?: '冒险棋友'),
-                'avatarUrl' => (string) ($profile['avatarUrl'] ?? ''),
-                'online' => in_array((int) $uid, $onlineIds, true)
-                    || (isset($seenAt[(string) $uid]) && strtotime((string) $seenAt[(string) $uid]) >= time() - self::ONLINE_SECONDS),
-                'left' => in_array($i, $leftSeats, true),
-                'finished' => in_array($i, $finishedOrder, true),
-                'auto' => ! empty($autoFlags[(string) $uid]),
-                'idle' => (int) ($idleStrikes[(string) $uid] ?? 0) >= self::IDLE_LIMIT,
-                'place' => is_array($places) ? ($places[$i] ?? null) : null,
-                'pos' => (int) ($state['positions'][$i] ?? 0),
-                'camp' => (int) ($state['campFloor'][$i] ?? 0),
-                'leaves' => (int) ($state['leaves'][(string) $uid] ?? 0),
-                'itemCount' => count($state['items'][(string) $uid] ?? []),
-                'shield' => ! empty($state['shields'][(string) $uid]),
-                'slow' => (int) ($state['slowNext'][$i] ?? 0),
-                'skip' => ! empty($state['skipNext'][$i]),
-            ];
+            try {
+                $profile = $this->users->findUser((int) $uid);
+                $players[] = [
+                    'seat' => $i,
+                    'userId' => (int) $uid,
+                    'nickname' => (string) (($profile['nickname'] ?? '') ?: '冒险棋友'),
+                    'avatarUrl' => (string) ($profile['avatarUrl'] ?? ''),
+                    'online' => in_array((int) $uid, $onlineIds, true)
+                        || (isset($seenAt[(string) $uid]) && strtotime((string) $seenAt[(string) $uid]) >= time() - self::ONLINE_SECONDS),
+                    'left' => in_array($i, $leftSeats, true),
+                    'finished' => in_array($i, $finishedOrder, true),
+                    'auto' => ! empty($autoFlags[(string) $uid]),
+                    'idle' => (int) ($idleStrikes[(string) $uid] ?? 0) >= self::IDLE_LIMIT,
+                    'place' => is_array($places) ? ($places[$i] ?? null) : null,
+                    'pos' => (int) ($state['positions'][$i] ?? 0),
+                    'camp' => (int) ($state['campFloor'][$i] ?? 0),
+                    'leaves' => (int) ($state['leaves'][(string) $uid] ?? 0),
+                    'itemCount' => count($state['items'][(string) $uid] ?? []),
+                    'shield' => ! empty($state['shields'][(string) $uid]),
+                    'slow' => (int) ($state['slowNext'][$i] ?? 0),
+                    'skip' => ! empty($state['skipNext'][$i]),
+                ];
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
+            }
         }
 
         // 选择窗：岔路带选项、擂台带候选，全员可见；mine 标记归属
@@ -1281,7 +1308,23 @@ final class AdventureRoomService
      * 托管急切执行：托管座位的整回合（掷+走+窗口默认+决斗随机），真人窗口则停手等输入。
      * 循环上限 AUTO_TURN_CAP。
      */
+    /** 托管急切执行入口：守卫重入——afterAdvance 在托管循环内会再次触发 drainAuto，
+     *  递归会让 AUTO_TURN_CAP 逐层重置、全托管局在单事务里按递归深度自走整局；
+     *  重入直接返回，交给外层 while 继续消化后续托管座位。 */
     private function drainAuto(AdventureRoom $room, array &$state): void
+    {
+        if ($this->drainingAuto) {
+            return;
+        }
+        $this->drainingAuto = true;
+        try {
+            $this->drainAutoLoop($room, $state);
+        } finally {
+            $this->drainingAuto = false; // 异常也不能卡死标志位（清扫器复用同一实例）
+        }
+    }
+
+    private function drainAutoLoop(AdventureRoom $room, array &$state): void
     {
         $seats = $room->seats;
         $iterations = 0;

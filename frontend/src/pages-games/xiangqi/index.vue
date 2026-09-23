@@ -23,7 +23,7 @@
         />
         <button class="xiangqi__join-btn" :disabled="busy" @tap="onJoin">加入</button>
       </view>
-      <text class="xiangqi__rules-link" hover-class="press" @tap="rulesOpen = true">❓ 玩法说明</text>
+      <text class="xiangqi__rules-link" hover-class="press" @tap="rulesOpen = true">玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -128,7 +128,7 @@
         <view class="xiangqi__chatbar-trigger" hover-class="press" @tap="openChat">
           <text class="xiangqi__chatbar-icon">💬</text>
           <text class="xiangqi__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="xiangqi__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+          <text v-if="chatUnread" class="xiangqi__chatbar-unread">{{ chatUnread > 9 ? '9+' : chatUnread }}</text>
         </view>
       </view>
     </view>
@@ -266,18 +266,18 @@ import { gamePhraseText } from '@/pages-games/utils/gameChat'
 import { playXiangqiSound } from '@/pages-games/utils/xiangqiSound'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 象棋三帧） ----------
-const COLOR_BOARD = '#FFFDF8'
-const COLOR_INK = '#4A3F35'
-const COLOR_MARK = '#C9A876'
-const COLOR_RIVER_TEXT = '#C9B896'
-const COLOR_RED = '#E85D4A'
-const COLOR_RED_DEEP = '#B8402E'
-const COLOR_BLACK = '#4A3F35'
-const COLOR_BLACK_DEEP = '#2E2620'
+const COLOR_BOARD = '#FBF5E8'
+const COLOR_INK = '#2E4154'
+const COLOR_MARK = '#C2A87A'
+const COLOR_RIVER_TEXT = '#C2B189'
+const COLOR_RED = '#E8806F'
+const COLOR_RED_DEEP = '#D96A58'
+const COLOR_BLACK = '#2E4154'
+const COLOR_BLACK_DEEP = '#22303C'
 const COLOR_GOLD = '#F4B942'
 const COLOR_GOLD_DOT = '#F4B942E6'
 const COLOR_GOLD_TINT = '#F4B94214'
-const COLOR_ATTACK = '#E85D4A'
+const COLOR_ATTACK = '#E8806F'
 
 const rulesOpen = ref(false)
 
@@ -325,6 +325,7 @@ const avatarOf = (url: string) => resolveAvatarUrl(url)
 
 // ---------- 底部聊天条 ----------
 const feedChats = computed(() => roomChat.recentChats.value)
+const chatUnread = computed(() => roomChat.unreadChat.value)
 const chatNameOf = (m: RoomChatMessage): string =>
   m.role === 'red' ? (state.value?.red?.nickname ?? '红方') : (state.value?.black?.nickname ?? '黑方')
 const chatBodyOf = (m: RoomChatMessage): string =>
@@ -416,7 +417,13 @@ watch(
         if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
         rpsCountdown.value = state.value?.ttl ?? 10
         rpsCountdownTimer = setInterval(() => {
-          if (rpsCountdown.value > 0) rpsCountdown.value--
+          if (rpsCountdown.value > 0) {
+            rpsCountdown.value--
+          } else if (rpsCountdownTimer) {
+            // 数到 0 自清，别留 interval 每秒空转
+            clearInterval(rpsCountdownTimer)
+            rpsCountdownTimer = null
+          }
         }, 1000)
       }
     }
@@ -767,7 +774,13 @@ function resetCountdown() {
   if (countdownTimer) clearInterval(countdownTimer)
   countdown.value = state.value?.ttl ?? 0
   countdownTimer = setInterval(() => {
-    if (countdown.value > 0) countdown.value--
+    if (countdown.value > 0) {
+      countdown.value--
+    } else if (countdownTimer) {
+      // 数到 0 自清，别留 interval 每秒空转
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
   }, 1000)
 }
 
@@ -809,7 +822,6 @@ watch(
     prevStatus = next.status
     prevTurn = next.turn
   },
-  { deep: true },
 )
 
 // ---------- 操作 ----------
@@ -868,7 +880,7 @@ function onBack() {
     uni.showModal({
       title: '离开房间',
       content: '对局还没结束，离开将判负，确定吗？',
-      confirmColor: '#E85D4A',
+      confirmColor: '#58A6DC',
       success: (res) => {
         if (res.confirm) void onLeaveAndBack()
       },
@@ -892,7 +904,7 @@ function onResign() {
   uni.showModal({
     title: '认输',
     content: '确定认输结束本局吗？',
-    confirmColor: '#E85D4A',
+    confirmColor: '#58A6DC',
     success: (res) => {
       if (!res.confirm) return
       void guard(async () => {
@@ -929,6 +941,10 @@ onHide(() => {
 })
 
 onUnload(() => {
+
+  // 页面级倒计时兜底清理（卸载时 interval 一并收掉）
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
+  if (rpsCountdownTimer) { clearInterval(rpsCountdownTimer); rpsCountdownTimer = null }
   stopSync()
 })
 
@@ -943,7 +959,7 @@ onShareAppMessage(() => ({
   min-height: 100vh;
   padding: 0 16px 24rpx;
   box-sizing: border-box;
-  background: #fff8f0;
+  background: #f6f9fb;
 
   &__lobby {
     display: flex;
@@ -975,34 +991,34 @@ onShareAppMessage(() => ({
     justify-content: center;
     color: #fff;
     font-size: 40rpx;
-    font-weight: 700;
+    font-weight: 600;
 
     &--red {
-      background: #e85d4a;
-      border: 3rpx solid #b8402e;
+      background: #e8806f;
+      border: 3rpx solid #d96a58;
     }
 
     &--black {
-      background: #4a3f35;
+      background: #2e4154;
       border: 3rpx solid #2e2620;
     }
   }
 
   &__brand-vs {
     font-size: 28rpx;
-    font-weight: 700;
-    color: #b9a98f;
+    font-weight: 600;
+    color: #a4b3c0;
   }
 
   &__brand-title {
     font-size: 48rpx;
-    font-weight: 700;
-    color: #4a3f35;
+    font-weight: 600;
+    color: #2e4154;
   }
 
   &__brand-sub {
     font-size: 24rpx;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__primary {
@@ -1010,7 +1026,7 @@ onShareAppMessage(() => ({
     height: 96rpx;
     line-height: 96rpx;
     border-radius: 48rpx;
-    background: #e85d4a;
+    background: #58a6dc;
     color: #fff;
     font-size: 32rpx;
     font-weight: 600;
@@ -1023,7 +1039,7 @@ onShareAppMessage(() => ({
   &__divider {
     margin: 40rpx 0;
     font-size: 22rpx;
-    color: #b9a98f;
+    color: #a4b3c0;
   }
 
   &__join {
@@ -1038,7 +1054,7 @@ onShareAppMessage(() => ({
     padding: 0 32rpx;
     border-radius: 44rpx;
     background: #fff;
-    border: 1rpx solid #f0e4d7;
+    border: 1rpx solid #eaf0f4;
     font-size: 30rpx;
   }
 
@@ -1047,8 +1063,10 @@ onShareAppMessage(() => ({
     height: 88rpx;
     line-height: 88rpx;
     border-radius: 44rpx;
-    background: #f7eedf;
-    color: #4a3f35;
+    background: #fff;
+    border: 2rpx solid #58a6dc;
+    box-sizing: border-box;
+    color: #58a6dc;
     font-size: 30rpx;
     font-weight: 600;
 
@@ -1060,7 +1078,7 @@ onShareAppMessage(() => ({
   &__rules-link {
     margin-top: 48rpx;
     font-size: 26rpx;
-    color: #7d6f60;
+    color: #3b86b8;
   }
 
   &__room {
@@ -1082,7 +1100,7 @@ onShareAppMessage(() => ({
     width: 40px;
     height: 40px;
     border-radius: 20px;
-    background: #f7eedf;
+    background: #f2f6f9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1090,7 +1108,7 @@ onShareAppMessage(() => ({
 
   &__back-icon {
     font-size: 22px;
-    color: #4a3f35;
+    color: #2e4154;
     margin-top: -2px;
   }
 
@@ -1103,12 +1121,12 @@ onShareAppMessage(() => ({
   &__title-main {
     font-size: 17px;
     font-weight: 600;
-    color: #4a3f35;
+    color: #2e4154;
   }
 
   &__title-sub {
     font-size: 10px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__ply {
@@ -1120,12 +1138,12 @@ onShareAppMessage(() => ({
   &__ply-num {
     font-size: 24px;
     font-weight: 600;
-    color: #4a3f35;
+    color: #2e4154;
   }
 
   &__ply-label {
     font-size: 10px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__bar {
@@ -1158,7 +1176,7 @@ onShareAppMessage(() => ({
   }
 
   &__avatar--black {
-    background: #f7eedf;
+    background: #f2f6f9;
   }
 
   &__avatar--red {
@@ -1191,7 +1209,7 @@ onShareAppMessage(() => ({
   &__bar-name {
     font-size: 13px;
     font-weight: 600;
-    color: #4a3f35;
+    color: #2e4154;
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1205,11 +1223,11 @@ onShareAppMessage(() => ({
     color: #fff;
 
     &--black {
-      background: #4a3f35;
+      background: #2e4154;
     }
 
     &--red {
-      background: #e85d4a;
+      background: #e8806f;
     }
   }
 
@@ -1226,10 +1244,10 @@ onShareAppMessage(() => ({
 
   &__bar-status {
     font-size: 10px;
-    color: #7d6f60;
+    color: #6e8093;
 
     &--mine {
-      color: #c08a1e;
+      color: #c99a34;
       font-weight: 600;
     }
   }
@@ -1241,7 +1259,7 @@ onShareAppMessage(() => ({
     line-height: 32px;
     border-radius: 16px;
     background: #f4b942;
-    color: #4a3f35;
+    color: #2e4154;
     font-size: 13px;
     font-weight: 600;
 
@@ -1259,7 +1277,7 @@ onShareAppMessage(() => ({
 
   &__tray-label {
     font-size: 9px;
-    color: #b9a98f;
+    color: #a4b3c0;
   }
 
   &__tray-chips {
@@ -1279,14 +1297,14 @@ onShareAppMessage(() => ({
     justify-content: center;
     color: #fff;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
 
     &--me {
-      background: #e85d4a;
+      background: #e8806f;
     }
 
     &--opp {
-      background: #4a3f35;
+      background: #2e4154;
     }
   }
 
@@ -1303,9 +1321,9 @@ onShareAppMessage(() => ({
     padding: 4px 10px;
     border-radius: 10px;
     background: #fff;
-    border: 1rpx solid #f0e4d7;
+    border: 1rpx solid #eaf0f4;
     font-size: 11px;
-    color: #4a3f35;
+    color: #2e4154;
     z-index: 2;
 
     &--emoji {
@@ -1318,7 +1336,7 @@ onShareAppMessage(() => ({
     padding: 12px;
     border-radius: 16px;
     background: #fff;
-    border: 1rpx solid #f0e4d7;
+    border: 1rpx solid #eaf0f4;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1344,7 +1362,7 @@ onShareAppMessage(() => ({
     width: 44px;
     height: 44px;
     border-radius: 22px;
-    background: #f7eedf;
+    background: #f2f6f9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1357,7 +1375,7 @@ onShareAppMessage(() => ({
   &__hint {
     text-align: center;
     font-size: 11px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__chatbar {
@@ -1371,9 +1389,9 @@ onShareAppMessage(() => ({
     align-items: flex-start;
     gap: 8px;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
-    background: rgba(255, 248, 237, 0.95);
+    background: rgba(255, 255, 255, 0.96);
     border-radius: 12px 12px 0 0;
-    box-shadow: 0 -2px 10px rgba(62, 50, 38, 0.08);
+    box-shadow: 0 -2px 10px rgba(46, 65, 84, 0.08);
   }
 
   &__chatbar-trigger {
@@ -1384,7 +1402,7 @@ onShareAppMessage(() => ({
     height: 32px;
     padding: 0 12px;
     border-radius: 16px;
-    background: #f7eedf;
+    background: #e9f4fb;
     flex-shrink: 0;
   }
 
@@ -1394,7 +1412,7 @@ onShareAppMessage(() => ({
 
   &__chatbar-hint {
     font-size: 11px;
-    color: #b9a98f;
+    color: #a4b3c0;
   }
 
   &__chatbar-unread {
@@ -1406,7 +1424,7 @@ onShareAppMessage(() => ({
     line-height: 16px;
     padding: 0 4px;
     border-radius: 8px;
-    background: #e85d4a;
+    background: #e8806f;
     color: #fff;
     font-size: 9px;
     text-align: center;
@@ -1419,7 +1437,7 @@ onShareAppMessage(() => ({
     flex-direction: column;
     gap: 2px;
     background: #fff;
-    border: 1rpx solid #f0e4d7;
+    border: 1rpx solid #eaf0f4;
     border-radius: 12px;
     padding: 6px 12px;
     overflow: hidden;
@@ -1434,13 +1452,13 @@ onShareAppMessage(() => ({
 
   &__chatbar-name {
     font-size: 10px;
-    color: #b9a98f;
+    color: #a4b3c0;
     flex-shrink: 0;
   }
 
   &__chatbar-text {
     font-size: 10px;
-    color: #7d6f60;
+    color: #6e8093;
     overflow: hidden;
     text-overflow: ellipsis;
 
@@ -1462,7 +1480,7 @@ onShareAppMessage(() => ({
   &__rps {
     width: 299px;
     border-radius: 20px;
-    background: #fff8f0;
+    background: #f6f9fb;
     padding: 24px 20px;
   }
 
@@ -1475,13 +1493,13 @@ onShareAppMessage(() => ({
 
   &__rps-title {
     font-size: 16px;
-    font-weight: 700;
-    color: #4a3f35;
+    font-weight: 600;
+    color: #2e4154;
   }
 
   &__rps-sub {
     font-size: 11px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__rps-sides {
@@ -1500,7 +1518,7 @@ onShareAppMessage(() => ({
 
     &--win {
       .xiangqi__rps-name {
-        color: #c08a1e;
+        color: #c99a34;
       }
     }
   }
@@ -1514,21 +1532,21 @@ onShareAppMessage(() => ({
     justify-content: center;
     color: #fff;
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 600;
 
     &--red {
-      background: #e85d4a;
+      background: #e8806f;
     }
 
     &--black {
-      background: #4a3f35;
+      background: #2e4154;
     }
   }
 
   &__rps-name {
     font-size: 12px;
     font-weight: 600;
-    color: #4a3f35;
+    color: #2e4154;
     max-width: 90px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1537,19 +1555,19 @@ onShareAppMessage(() => ({
 
   &__rps-status {
     font-size: 10px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__rps-pick {
     font-size: 11px;
     font-weight: 600;
-    color: #c08a1e;
+    color: #c99a34;
   }
 
   &__rps-vs {
     font-size: 14px;
-    font-weight: 700;
-    color: #b9a98f;
+    font-weight: 600;
+    color: #a4b3c0;
   }
 
   &__rps-btns {
@@ -1563,8 +1581,8 @@ onShareAppMessage(() => ({
     height: 76rpx;
     line-height: 76rpx;
     border-radius: 16rpx;
-    background: #f7eedf;
-    color: #4a3f35;
+    background: #f2f6f9;
+    color: #2e4154;
     font-size: 28rpx;
     font-weight: 600;
     padding: 0;
@@ -1576,7 +1594,7 @@ onShareAppMessage(() => ({
 
   &__rps-wait {
     font-size: 12px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__scrim {
@@ -1592,7 +1610,7 @@ onShareAppMessage(() => ({
   &__result-card {
     width: 299px;
     border-radius: 20px;
-    background: #fff8f0;
+    background: #f6f9fb;
     padding: 28px 20px 20px;
     display: flex;
     flex-direction: column;
@@ -1609,7 +1627,7 @@ onShareAppMessage(() => ({
   &__deco-line {
     width: 60px;
     height: 1px;
-    background: #e8d9c4;
+    background: #dde6ec;
   }
 
   &__deco-leaf {
@@ -1618,13 +1636,13 @@ onShareAppMessage(() => ({
 
   &__result-title {
     font-size: 30px;
-    font-weight: 700;
-    color: #e85d4a;
+    font-weight: 600;
+    color: #e8806f;
   }
 
   &__result-sub {
     font-size: 12px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__result-stats {
@@ -1643,7 +1661,7 @@ onShareAppMessage(() => ({
 
   &__stat-label {
     font-size: 11px;
-    color: #b9a98f;
+    color: #a4b3c0;
   }
 
   &__stat-values {
@@ -1654,14 +1672,14 @@ onShareAppMessage(() => ({
 
   &__stat-num {
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 600;
 
     &--red {
-      color: #e85d4a;
+      color: #e8806f;
     }
 
     &--black {
-      color: #4a3f35;
+      color: #2e4154;
     }
   }
 
@@ -1686,23 +1704,23 @@ onShareAppMessage(() => ({
     justify-content: center;
     color: #fff;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
 
     &--red {
-      background: #e85d4a;
+      background: #e8806f;
     }
 
     &--black {
-      background: #4a3f35;
+      background: #2e4154;
     }
   }
 
   &__result-badge {
     padding: 6px 16px;
     border-radius: 16px;
-    background: #f7eedf;
+    background: #f2f6f9;
     font-size: 12px;
-    color: #4a3f35;
+    color: #2e4154;
   }
 
   &__result-rematch {
@@ -1710,7 +1728,7 @@ onShareAppMessage(() => ({
     height: 44px;
     line-height: 44px;
     border-radius: 22px;
-    background: #e85d4a;
+    background: #e8806f;
     color: #fff;
     font-size: 14px;
     font-weight: 600;
@@ -1725,8 +1743,8 @@ onShareAppMessage(() => ({
     height: 40px;
     line-height: 40px;
     border-radius: 20px;
-    background: #f7eedf;
-    color: #4a3f35;
+    background: #f2f6f9;
+    color: #2e4154;
     font-size: 13px;
     font-weight: 600;
 
@@ -1748,7 +1766,7 @@ onShareAppMessage(() => ({
     width: 100%;
     max-height: 72vh;
     border-radius: 24px 24px 0 0;
-    background: #fff8f0;
+    background: #f6f9fb;
     padding: 20px 20px 16px;
     display: flex;
     flex-direction: column;
@@ -1763,20 +1781,20 @@ onShareAppMessage(() => ({
 
   &__drawer-title {
     font-size: 16px;
-    font-weight: 700;
-    color: #4a3f35;
+    font-weight: 600;
+    color: #2e4154;
   }
 
   &__drawer-close {
     width: 28px;
     height: 28px;
     border-radius: 14px;
-    background: #f7eedf;
+    background: #f2f6f9;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 13px;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__drawer-scroll {
@@ -1797,8 +1815,8 @@ onShareAppMessage(() => ({
 
     text {
       font-size: 12px;
-      font-weight: 700;
-      color: #4a3f35;
+      font-weight: 600;
+      color: #2e4154;
     }
 
     &::before {
@@ -1813,14 +1831,14 @@ onShareAppMessage(() => ({
   &__rule-text {
     font-size: 11px;
     line-height: 1.6;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__rule-tail {
     display: block;
     text-align: center;
     font-size: 11px;
-    color: #b9a98f;
+    color: #a4b3c0;
     padding: 8px 0;
   }
 
@@ -1835,21 +1853,21 @@ onShareAppMessage(() => ({
     width: 36px;
     padding: 2px 0;
     border-radius: 12px;
-    background: #e85d4a;
+    background: #e8806f;
     color: #fff;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
     text-align: center;
 
     &--dark {
-      background: #4a3f35;
+      background: #2e4154;
     }
   }
 
   &__sp-text {
     font-size: 11px;
     line-height: 1.5;
-    color: #7d6f60;
+    color: #6e8093;
   }
 
   &__cg-badge {
@@ -1857,9 +1875,9 @@ onShareAppMessage(() => ({
     padding: 1px 7px;
     border-radius: 8px;
     background: #f4b94233;
-    color: #c08a1e;
+    color: #c99a34;
     font-size: 9px;
-    font-weight: 700;
+    font-weight: 600;
   }
 }
 </style>

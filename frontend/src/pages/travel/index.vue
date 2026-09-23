@@ -568,7 +568,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { useFeatures } from '@/composables/useFeatures'
 import TravelStopCard from '@/components/TravelStopCard.vue'
@@ -1131,6 +1131,14 @@ onLoad((query) => {
   pendingShareCode.value = Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
 })
 
+onUnmounted(() => {
+  // 卸载后别再对已失效的 canvas 触发防抖重绘
+  if (renderTimer) {
+    clearTimeout(renderTimer)
+    renderTimer = null
+  }
+})
+
 onShareAppMessage(() => ({
   title: trip.title || '旅游攻略',
   path: lastSharePath.value || '/pages/travel/index',
@@ -1594,9 +1602,9 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     color: $color-text-secondary;
 
     &--active {
-      border-color: $color-primary;
-      background-color: #fff3e6;
-      color: $color-primary-dark;
+      border-color: $blue;
+      background-color: $blue-tint;
+      color: $blue-deep;
       font-weight: 600;
     }
   }
@@ -1633,8 +1641,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__intensity-item--active {
-    border-color: $color-primary;
-    background-color: #fff3e6;
+    border-color: $blue;
+    background-color: $blue-tint;
   }
 
   &__intensity-label {
@@ -1675,8 +1683,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     height: 64rpx;
     line-height: 64rpx;
     text-align: center;
-    background-color: $color-bg;
-    color: $color-primary-dark;
+    background-color: $fill;
+    color: $ink;
     font-size: 36rpx;
   }
 
@@ -1703,22 +1711,26 @@ function confirmReplaceStop(name: string): Promise<boolean> {
 
   &__ai-seg {
     display: flex;
-    border: 2rpx solid $color-border;
+    background-color: $fill;
     border-radius: $radius-md;
-    overflow: hidden;
+    padding: 6rpx;
+    gap: 6rpx;
   }
 
   &__ai-seg-item {
-    padding: 12rpx 28rpx;
+    flex: 1;
+    text-align: center;
+    padding: 12rpx 0;
+    border-radius: $radius-sm;
     font-size: $font-caption;
-    color: $color-text-secondary;
-    background-color: $color-bg;
+    color: $ink2;
   }
 
   &__ai-seg-item--active {
-    background-color: $color-primary;
-    color: #ffffff;
+    background-color: #ffffff;
+    color: $ink;
     font-weight: 600;
+    box-shadow: 0 2rpx 6rpx rgba(30, 55, 80, 0.1);
   }
 
   &__ai-hours {
@@ -1758,7 +1770,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__ai-err {
-    color: #d9534f;
+    color: $red;
   }
 
   &__ai-go {
@@ -1799,8 +1811,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__style-item--active {
-    border-color: $color-primary;
-    background-color: #fff3e6;
+    border-color: $blue;
+    background-color: $blue-tint;
   }
 
   &__style-label {
@@ -1842,8 +1854,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     gap: 12rpx;
     padding: 14rpx 18rpx;
     border-radius: $radius-md;
-    background-color: #fff8ef;
-    border: 2rpx solid #ead6bf;
+    background-color: $blue-tint;
+    border: 2rpx solid $line;
   }
 
   &__cloud-code-label {
@@ -1855,8 +1867,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     flex: 1;
     min-width: 0;
     font-size: $font-body;
-    color: $color-primary-dark;
-    font-weight: 800;
+    color: $blue-deep;
+    font-weight: 600;
     letter-spacing: 1rpx;
   }
 
@@ -1912,18 +1924,18 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__review-status--good {
-    background-color: #edf8ef;
-    color: #2f7d46;
+    background-color: #ebf5f0;
+    color: #3f8a66;
   }
 
   &__review-status--info {
-    background-color: #fff3e6;
-    color: $color-primary-dark;
+    background-color: $fill;
+    color: $ink2;
   }
 
   &__review-status--warn {
-    background-color: #fff0ee;
-    color: #d9534f;
+    background-color: #fdefec;
+    color: $red;
   }
 
   &__review-metrics {
@@ -1939,14 +1951,14 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     gap: 4rpx;
     padding: 16rpx 12rpx;
     border-radius: $radius-md;
-    background-color: #fff8ef;
-    border: 2rpx solid #ead6bf;
+    background-color: $fill;
+    border: 2rpx solid $line;
   }
 
   &__review-metric-val {
-    font-size: 34rpx;
-    font-weight: 800;
-    color: $color-primary-dark;
+    font-size: 32rpx;
+    font-weight: 600;
+    color: $blue-deep;
     text-align: center;
   }
 
@@ -1978,7 +1990,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
 
   &__review-mark--warn {
     color: #ffffff;
-    background-color: #d9534f;
+    background-color: $red;
   }
 
   &__review-mark--info {
@@ -2009,8 +2021,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   &__day-badge {
     padding: 8rpx 20rpx;
     border-radius: 999rpx;
-    background-color: $color-primary;
-    color: #ffffff;
+    background-color: $blue-tint;
+    color: $blue-deep;
     font-size: $font-caption;
     font-weight: 600;
     flex-shrink: 0;
@@ -2026,7 +2038,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__day-del {
-    color: #d9534f;
+    color: $red;
     font-size: $font-caption;
     flex-shrink: 0;
   }
@@ -2063,18 +2075,18 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__day-check-chip--ok {
-    background-color: #edf8ef;
-    color: #2f7d46;
+    background-color: #ebf5f0;
+    color: #3f8a66;
   }
 
   &__day-check-chip--info {
-    background-color: #f4f5f7;
-    color: $color-text-secondary;
+    background-color: $fill;
+    color: $ink3;
   }
 
   &__day-check-chip--warn {
-    background-color: #fff0ee;
-    color: #d9534f;
+    background-color: #fdefec;
+    color: $red;
   }
 
   &__day-handbook {
@@ -2083,8 +2095,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     gap: 14rpx;
     padding: 18rpx;
     border-radius: $radius-md;
-    background-color: #fff8ef;
-    border: 2rpx solid #ead6bf;
+    background-color: $blue-tint;
+    border: 2rpx solid $line;
   }
 
   &__day-summary {
@@ -2119,9 +2131,9 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__day-mood--active {
-    border-color: $color-primary;
-    background-color: #fff3e6;
-    color: $color-primary-dark;
+    border-color: $blue;
+    background-color: $blue-tint;
+    color: $blue-deep;
   }
 
   &__day-mood-label {
@@ -2131,7 +2143,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__day-mood-hint {
-    font-size: 20rpx;
+    font-size: $font-micro;
     line-height: 1.25;
     text-align: center;
   }
@@ -2145,18 +2157,19 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   &__add-stop {
     padding: 20rpx;
     border-radius: $radius-md;
-    border: 2rpx dashed $color-border;
+    background-color: $blue-tint;
     text-align: center;
-    color: $color-text-secondary;
+    color: $blue-deep;
     font-size: $font-body;
+    font-weight: 600;
   }
 
   &__add-day {
     padding: 24rpx;
     border-radius: $radius-md;
-    border: 2rpx dashed $color-primary;
+    background-color: $blue-tint;
     text-align: center;
-    color: $color-primary;
+    color: $blue-deep;
     font-size: $font-body;
     font-weight: 600;
   }
@@ -2213,19 +2226,19 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__suite--active {
-    border-color: $color-primary;
-    background-color: #fff3e6;
+    border-color: $blue;
+    background-color: $blue-tint;
   }
 
   &__suite-label {
     font-size: $font-caption;
-    color: $color-text;
-    font-weight: 800;
+    color: $ink;
+    font-weight: 600;
     text-align: center;
   }
 
   &__suite-hint {
-    font-size: 20rpx;
+    font-size: $font-micro;
     line-height: 1.25;
     color: $color-text-secondary;
     text-align: center;
@@ -2264,9 +2277,9 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__gitem-check--active {
-    border-color: $color-primary;
-    background-color: #fff3e6;
-    color: $color-primary-dark;
+    border-color: $blue;
+    background-color: $blue-tint;
+    color: $blue-deep;
   }
 
   &__gitem-label {
@@ -2297,10 +2310,10 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     flex-shrink: 0;
     padding: 3rpx 10rpx;
     border-radius: 999rpx;
-    background-color: #fff3e6;
-    color: $color-primary-dark;
-    font-size: 20rpx;
-    font-weight: 700;
+    background-color: $blue-tint;
+    color: $blue-deep;
+    font-size: $font-micro;
+    font-weight: 600;
   }
 
   &__gitem-hint {
@@ -2322,7 +2335,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__gitem-bgclear {
-    color: #d9534f;
+    color: $red;
     font-size: $font-caption;
   }
 
@@ -2391,8 +2404,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   &__xhs-tag {
     padding: 6rpx 18rpx;
     border-radius: 999rpx;
-    background-color: #fff3e6;
-    color: $color-primary-dark;
+    background-color: $blue-tint;
+    color: $blue-deep;
     font-size: $font-caption;
   }
 
@@ -2401,7 +2414,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     border-radius: $radius-md;
     background-color: $color-bg;
     border: 2rpx solid $color-border;
-    font-size: 34rpx;
+    font-size: 32rpx;
     font-weight: 700;
     color: $color-text;
   }
@@ -2426,7 +2439,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__xhs-tagdel {
-    color: #d9534f;
+    color: $red;
     font-size: $font-caption;
     padding: 0 6rpx;
   }
@@ -2446,8 +2459,8 @@ function confirmReplaceStop(name: string): Promise<boolean> {
     right: 0;
     bottom: 0;
     padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
-    background-color: #fff8f0;
-    border-top: 2rpx solid $color-border;
+    background-color: rgba(255, 255, 255, 0.94);
+    border-top: 2rpx solid $line;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2627,7 +2640,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__pack-op--del {
-    color: #d9534f;
+    color: $red;
   }
 
   &__pack-add {
@@ -2717,7 +2730,7 @@ function confirmReplaceStop(name: string): Promise<boolean> {
   }
 
   &__food-op--del {
-    color: #d9534f;
+    color: $red;
   }
 
   &__food-add {

@@ -78,8 +78,8 @@ function onTap(paletteIndex: number) {
 
     &--active {
       // 隔离高亮选中：加粗主色描边 + 轻微上浮，与图纸里的暗纱聚焦呼应
-      border: 4rpx solid $color-primary-dark;
-      box-shadow: 0 0 0 4rpx rgba(200, 149, 108, 0.3);
+      border: 4rpx solid $blue-deep;
+      box-shadow: 0 0 0 4rpx rgba(88, 166, 220, 0.35);
       transform: translateY(-2rpx);
     }
   }

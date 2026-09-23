@@ -398,6 +398,14 @@
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import {
+  apiRequest,
+  AUTH_STORAGE_KEY,
+  getWechatProfile,
+  loginWechat,
+  USER_STORAGE_KEY,
+  wxLoginCode,
+} from '@/services/toolbox'
 
 type SourceMode = 'nearby' | 'pool' | 'group'
 type FoodTab = 'nearby' | 'ticket' | 'pool' | 'group'
@@ -471,12 +479,6 @@ interface ReverseLocationResponse {
   adcode: string
 }
 
-interface ApiEnvelope<T> {
-  code: number
-  message: string
-  data: T
-}
-
 interface FoodHistoryItem {
   id: string
   name: string
@@ -513,12 +515,6 @@ interface AccountUser {
   avatarUrl: string
 }
 
-interface LoginResponse {
-  token: string
-  expiresAt: string
-  user: AccountUser
-}
-
 interface ProfileResponse {
   user: AccountUser
 }
@@ -530,15 +526,11 @@ interface FoodMineResponse {
   history: FoodHistoryItem[]
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:9501').replace(/\/$/, '')
-const API_KEY = import.meta.env.VITE_API_KEY || ''
 const PREF_STORAGE_KEY = 'shuxia-food-preferences-v1'
 const POOL_STORAGE_KEY = 'shuxia-food-pool-v1'
 const POOL_GROUP_STORAGE_KEY = 'shuxia-food-pool-groups-v1'
 const HISTORY_STORAGE_KEY = 'shuxia-food-history-v1'
 const GROUP_STORAGE_KEY = 'shuxia-food-group-v1'
-const AUTH_STORAGE_KEY = 'shuxia-food-auth-token-v1'
-const USER_STORAGE_KEY = 'shuxia-food-auth-user-v1'
 
 const DEFAULT_PREFERENCES: PreferenceTag[] = [
   { id: 'quick', label: '快速', keyword: '快餐' },
@@ -734,6 +726,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopDrawAnimation()
+  // 店名搜索防抖：卸载后别再白打一次搜索请求
+  if (shopSearchTimer) {
+    clearTimeout(shopSearchTimer)
+    shopSearchTimer = null
+  }
 })
 
 onLoad((query) => {
@@ -757,7 +754,7 @@ async function loginWithWechatProfile(): Promise<void> {
   let profile: Record<string, unknown> = {}
   let profileSynced = true
   try {
-    profile = await getWechatProfile()
+    profile = await getWechatProfile('用于展示用户昵称和同步吃饭工具数据')
   } catch (e) {
     profileSynced = false
     console.warn('[food] getUserProfile failed:', e)
@@ -820,12 +817,10 @@ async function ensureAccount(): Promise<boolean> {
 }
 
 async function loginWithWechat(profile: Record<string, unknown>): Promise<void> {
-  const code = await wxLoginCode()
-  const data = await apiPost<LoginResponse>('/api/auth/wechat-login', { code, profile }, false)
+  // code 换会话 + 持久化在共享服务层完成，这里同步页面响应式状态
+  const data = await loginWechat(profile)
   authToken.value = data.token
   accountUser.value = data.user
-  uni.setStorageSync(AUTH_STORAGE_KEY, data.token)
-  uni.setStorageSync(USER_STORAGE_KEY, data.user)
 }
 
 async function syncFoodDataFromCloud(): Promise<void> {
@@ -2031,98 +2026,25 @@ function locationErrorMessage(errMsg = ''): string {
   return '定位失败，可手动搜索地点'
 }
 
-function wxLoginCode(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: (res) => {
-        if (res.code) {
-          resolve(res.code)
-          return
-        }
-        reject(new Error('微信登录未返回 code'))
-      },
-      fail: () => reject(new Error('微信登录失败')),
-    })
-  })
-}
-
-function getWechatProfile(): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const api = typeof wx !== 'undefined' && typeof wx.getUserProfile === 'function' ? wx : null
-    if (!api) {
-      resolve({})
-      return
-    }
-    api.getUserProfile({
-      desc: '用于展示用户昵称和同步吃饭工具数据',
-      success: (res: { userInfo?: Record<string, unknown> }) => resolve(res.userInfo ?? {}),
-      fail: (err: { errMsg?: string }) => reject(new Error(err.errMsg || '用户未授权微信资料')),
-    })
-  })
-}
-
 function apiGet<T>(path: string, query: Record<string, string | number>): Promise<T> {
-  const qs = Object.entries(query)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-    .join('&')
-  const url = qs ? `${API_BASE}${path}?${qs}` : `${API_BASE}${path}`
-
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url,
-      method: 'GET',
-      header: requestHeaders(),
-      timeout: 8000,
-      success: (res) => {
-        const body = res.data as ApiEnvelope<T>
-        if (!body || body.code !== 0) {
-          reject(new Error(body?.message || '接口返回异常'))
-          return
-        }
-        resolve(body.data)
-      },
-      fail: (err) => reject(new Error(err.errMsg || '网络请求失败')),
-    })
-  })
+  // 统一走共享请求层（信封解包/超时/头），页面只保留自管的 authToken 语义
+  return apiRequest<T>(path, 'GET', query, { userToken: authToken.value, timeout: 8000 })
 }
 
 function apiPost<T>(path: string, data: Record<string, unknown>, withUserToken = true): Promise<T> {
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url: `${API_BASE}${path}`,
-      method: 'POST',
-      data,
-      header: requestHeaders(withUserToken),
-      timeout: 8000,
-      success: (res) => {
-        const body = res.data as ApiEnvelope<T>
-        if (!body || body.code !== 0) {
-          reject(new Error(body?.message || '接口返回异常'))
-          return
-        }
-        resolve(body.data)
-      },
-      fail: (err) => reject(new Error(err.errMsg || '网络请求失败')),
-    })
-  })
+  return apiRequest<T>(path, 'POST', data, { userToken: withUserToken ? authToken.value : false, timeout: 8000 })
 }
 
-function requestHeaders(withUserToken = true): Record<string, string> {
-  const headers: Record<string, string> = { 'X-API-Key': API_KEY }
-  if (withUserToken && authToken.value !== '') {
-    headers['X-User-Token'] = authToken.value
-  }
-  return headers
-}
 </script>
 
 <style lang="scss" scoped>
+// v4 小清新换肤：冷灰/青绿/番茄红/炭黑 全量归 v4 令牌（蓝白 + 淡彩 + $red 危险）。
+// 对应原型 #food：白卡发丝线、蓝实底主行动、seg 轨道选中、tabs4 蓝 tint 选中。
 .food {
   min-height: 100vh;
   padding: 32rpx 28rpx calc(156rpx + constant(safe-area-inset-bottom));
   padding: 32rpx 28rpx calc(156rpx + env(safe-area-inset-bottom));
-  background: #f7f8f8;
+  background: $bg;
 
   &__header {
     display: flex;
@@ -2135,23 +2057,24 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__eyebrow {
     display: block;
     margin-bottom: 8rpx;
-    color: #7f8a91;
+    color: $blue-deep;
     font-size: 24rpx;
+    letter-spacing: 2rpx;
   }
 
   &__title {
     display: block;
-    color: #202326;
-    font-size: 48rpx;
-    font-weight: 800;
+    color: $ink;
+    font-size: $font-display;
+    font-weight: 600;
     line-height: 1.15;
   }
 
   &__account {
     margin-bottom: 18rpx;
     padding: 18rpx 22rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2163,7 +2086,7 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
-    background: #eef1f2;
+    background: $fill;
     flex-shrink: 0;
   }
 
@@ -2178,14 +2101,14 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__account-title {
-    color: #202326;
+    color: $ink;
     font-size: 26rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__account-sub {
     margin-top: 4rpx;
-    color: #7f8a91;
+    color: $ink2;
     font-size: 22rpx;
     line-height: 1.35;
   }
@@ -2197,18 +2120,18 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1d6671;
-    background: #eef8fa;
+    color: $blue-deep;
+    background: $blue-tint;
     font-size: 24rpx;
-    font-weight: 800;
+    font-weight: 600;
     flex-shrink: 0;
   }
 
   &__profile {
     margin: -4rpx 0 18rpx;
     padding: 18rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
     display: grid;
     grid-template-columns: 92rpx 1fr 96rpx;
     gap: 12rpx;
@@ -2226,10 +2149,10 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1d6671;
-    background: #eef8fa;
+    color: $blue-deep;
+    background: $blue-tint;
     font-size: 22rpx;
-    font-weight: 800;
+    font-weight: 600;
     line-height: 1.2;
 
     &::after {
@@ -2246,23 +2169,23 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__nickname-input {
     min-height: 76rpx;
     padding: 0 20rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 14rpx;
-    background: #f8faf9;
-    color: #202326;
+    border: 2rpx solid $line;
+    border-radius: $radius-sm;
+    background: #ffffff;
+    color: $ink;
     font-size: 26rpx;
   }
 
   &__profile-save {
     min-height: 76rpx;
-    border-radius: 14rpx;
+    border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #202326;
+    background: $blue;
     font-size: 26rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__tabs {
@@ -2276,29 +2199,29 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     grid-template-columns: repeat(4, 1fr);
     gap: 8rpx;
     padding: 6rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
-    background: rgba(237, 241, 241, 0.96);
-    box-shadow: 0 12rpx 36rpx rgba(31, 44, 52, 0.16);
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12rpx 36rpx rgba(46, 65, 84, 0.12);
     backdrop-filter: blur(16rpx);
   }
 
   &__tab {
     min-height: 78rpx;
-    border-radius: 12rpx;
+    border-radius: $radius-sm;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 4rpx;
-    color: #6b747b;
+    color: $ink2;
     font-size: 22rpx;
-    font-weight: 760;
+    font-weight: 600;
 
     &--active {
-      color: #b73c2e;
-      background: #ffffff;
-      box-shadow: 0 4rpx 12rpx rgba(30, 42, 50, 0.08);
+      color: $blue-deep;
+      background: $blue-tint;
+      box-shadow: none;
     }
   }
 
@@ -2310,35 +2233,35 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__mode {
     display: flex;
     padding: 6rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
-    background: #edf1f1;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
+    background: $fill;
     flex-shrink: 0;
   }
 
   &__mode-item {
     min-width: 82rpx;
     padding: 14rpx 18rpx;
-    border-radius: 12rpx;
-    color: #6b747b;
+    border-radius: $radius-sm;
+    color: $ink2;
     font-size: 24rpx;
-    font-weight: 700;
+    font-weight: 600;
     text-align: center;
 
     &--active {
-      color: #202326;
+      color: $ink;
       background: #ffffff;
-      box-shadow: 0 4rpx 12rpx rgba(30, 42, 50, 0.08);
+      box-shadow: 0 2rpx 6rpx rgba(30, 55, 80, 0.1);
     }
   }
 
   &__panel,
   &__ticket {
     padding: 28rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
     background: #ffffff;
-    box-shadow: 0 10rpx 32rpx rgba(31, 44, 52, 0.08);
+    box-shadow: $shadow-card;
   }
 
   &__panel {
@@ -2366,14 +2289,14 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__section-title {
-    color: #202326;
-    font-size: 28rpx;
-    font-weight: 800;
+    color: $ink;
+    font-size: $font-body;
+    font-weight: 600;
   }
 
   &__caption,
   &__link {
-    color: #7f8a91;
+    color: $ink2;
     font-size: 24rpx;
   }
 
@@ -2383,8 +2306,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__link {
-    color: #238a9a;
-    font-weight: 700;
+    color: $blue-deep;
+    font-weight: 600;
   }
 
   &__place {
@@ -2398,10 +2321,10 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__pool-input {
     min-height: 76rpx;
     padding: 0 22rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 14rpx;
-    background: #f8faf9;
-    color: #202326;
+    border: 2rpx solid $line;
+    border-radius: $radius-sm;
+    background: #ffffff;
+    color: $ink;
     font-size: 26rpx;
   }
 
@@ -2409,19 +2332,19 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__mini-btn,
   &__pool-add {
     min-height: 76rpx;
-    border-radius: 14rpx;
+    border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #202326;
+    background: $blue;
     font-size: 26rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__place-current {
     margin-top: 12rpx;
-    color: #69717a;
+    color: $ink2;
     font-size: 24rpx;
     line-height: 1.4;
   }
@@ -2435,8 +2358,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__place-result {
     min-height: 92rpx;
     padding: 16rpx 18rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 14rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-sm;
     display: grid;
     grid-template-columns: 1fr 72rpx;
     gap: 16rpx;
@@ -2444,8 +2367,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     background: #ffffff;
 
     &--active {
-      border-color: rgba(35, 138, 154, 0.36);
-      background: #eef8fa;
+      border-color: rgba($blue, 0.36);
+      background: $blue-tint;
     }
   }
 
@@ -2462,14 +2385,14 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__place-result-title {
-    color: #202326;
+    color: $ink;
     font-size: 26rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__place-result-sub {
     margin-top: 6rpx;
-    color: #7f8a91;
+    color: $ink2;
     font-size: 22rpx;
   }
 
@@ -2479,18 +2402,18 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1d6671;
-    background: #eef8fa;
+    color: $blue-deep;
+    background: $blue-tint;
     font-size: 22rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__place-empty {
     margin-top: 16rpx;
     padding: 18rpx;
-    border: 2rpx dashed #d9e0e3;
-    border-radius: 14rpx;
-    color: #7f8a91;
+    border: 2rpx dashed $line-strong;
+    border-radius: $radius-sm;
+    color: $ink2;
     font-size: 24rpx;
     line-height: 1.5;
     text-align: center;
@@ -2501,9 +2424,9 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     grid-template-columns: repeat(6, 1fr);
     gap: 8rpx;
     padding: 6rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
-    background: #edf1f1;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
+    background: $fill;
   }
 
   &__radius-item {
@@ -2511,15 +2434,15 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 12rpx;
-    color: #6b747b;
+    border-radius: $radius-sm;
+    color: $ink2;
     font-size: 24rpx;
-    font-weight: 700;
+    font-weight: 600;
 
     &--active {
-      color: #202326;
+      color: $ink;
       background: #ffffff;
-      box-shadow: 0 4rpx 12rpx rgba(30, 42, 50, 0.08);
+      box-shadow: 0 2rpx 6rpx rgba(30, 55, 80, 0.1);
     }
   }
 
@@ -2539,19 +2462,19 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     align-items: center;
     gap: 8rpx;
     padding: 0 22rpx;
-    border: 2rpx solid #e2e7e9;
+    border: 2rpx solid $line;
     border-radius: 999rpx;
     background: #ffffff;
-    color: #394149;
+    color: $ink;
     font-size: 24rpx;
   }
 
   &__tag {
     &--active {
-      border-color: rgba(223, 81, 63, 0.28);
-      background: #fff2ef;
-      color: #b73c2e;
-      font-weight: 800;
+      border-color: $blue;
+      background: $blue-tint;
+      color: $blue-deep;
+      font-weight: 600;
     }
 
     &--editing {
@@ -2560,7 +2483,7 @@ function requestHeaders(withUserToken = true): Record<string, string> {
 
     &--add {
       border-style: dashed;
-      color: #7f8a91;
+      color: $ink2;
     }
   }
 
@@ -2572,9 +2495,9 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #df513f;
+    background: $red;
     font-size: 24rpx;
-    font-weight: 800;
+    font-weight: 600;
     line-height: 1;
   }
 
@@ -2587,33 +2510,33 @@ function requestHeaders(withUserToken = true): Record<string, string> {
 
   &__room {
     padding: 18rpx;
-    border: 2rpx solid rgba(35, 138, 154, 0.22);
-    border-radius: 16rpx;
-    background: #f2fafb;
+    border: 2rpx solid rgba($blue, 0.22);
+    border-radius: $radius-md;
+    background: $blue-tint;
   }
 
   &__room-code {
     min-height: 68rpx;
     padding: 0 18rpx;
-    border-radius: 14rpx;
+    border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16rpx;
-    color: #1d6671;
+    color: $blue-deep;
     background: #ffffff;
     font-size: 26rpx;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &__room-copy {
-    color: #238a9a;
+    color: $blue-deep;
     font-size: 24rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__room-divider {
-    color: #bcd3d7;
+    color: rgba($blue, 0.35);
     font-size: 22rpx;
   }
 
@@ -2648,17 +2571,17 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #238a9a;
+    background: #4e97ce;
     font-size: 22rpx;
-    font-weight: 850;
-    box-shadow: 0 4rpx 14rpx rgba(30, 42, 50, 0.12);
+    font-weight: 600;
+    box-shadow: 0 4rpx 14rpx rgba(46, 65, 84, 0.12);
 
     &:nth-child(2n) {
-      background: #df513f;
+      background: #e27966;
     }
 
     &:nth-child(3n) {
-      background: #2f8f72;
+      background: #67a75b;
     }
   }
 
@@ -2673,7 +2596,7 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #202326;
+    background: $ink2;
     font-size: 20rpx;
     line-height: 1;
   }
@@ -2689,14 +2612,14 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     min-height: 128rpx;
     margin-top: 30rpx;
     padding: 0 28rpx;
-    border-radius: 16rpx;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 20rpx;
     color: #ffffff;
-    background: #df513f;
-    box-shadow: 0 14rpx 28rpx rgba(223, 81, 63, 0.22);
+    background: $blue;
+    box-shadow: 0 10rpx 24rpx rgba($blue, 0.2);
 
     &--loading {
       transform: translateY(2rpx);
@@ -2706,8 +2629,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     &--pool {
       margin-top: 0;
       margin-bottom: 18rpx;
-      background: #b73c2e;
-      box-shadow: 0 14rpx 28rpx rgba(183, 60, 46, 0.22);
+      background: $blue-deep;
+      box-shadow: 0 10rpx 24rpx rgba($blue-deep, 0.2);
     }
   }
 
@@ -2717,8 +2640,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__decide-title {
-    font-size: 40rpx;
-    font-weight: 850;
+    font-size: $font-title;
+    font-weight: 600;
     line-height: 1.1;
   }
 
@@ -2737,20 +2660,19 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     justify-content: center;
     background: rgba(255, 255, 255, 0.18);
     font-size: 36rpx;
-    font-weight: 800;
+    font-weight: 600;
     flex-shrink: 0;
   }
 
   &__draw {
     margin-top: 18rpx;
     padding: 22rpx;
-    border: 2rpx solid rgba(223, 81, 63, 0.2);
-    border-radius: 16rpx;
+    border: 2rpx solid rgba($blue, 0.2);
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     gap: 18rpx;
-    background: #fffdf9;
-    box-shadow: inset 0 0 0 2rpx rgba(255, 255, 255, 0.62);
+    background: $blue-tint;
     animation: food-draw-in 180ms ease-out;
 
     &--ticket {
@@ -2772,9 +2694,9 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__draw-ring {
     position: absolute;
     inset: 0;
-    border: 6rpx solid rgba(223, 81, 63, 0.16);
-    border-top-color: #df513f;
-    border-right-color: #238a9a;
+    border: 6rpx solid rgba($blue, 0.16);
+    border-top-color: $blue;
+    border-right-color: $blue-deep;
     border-radius: 50%;
     animation: food-draw-spin 760ms linear infinite;
   }
@@ -2788,9 +2710,9 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: #202326;
+    background: $blue;
     font-size: 26rpx;
-    font-weight: 900;
+    font-weight: 600;
     animation: food-draw-pop 620ms ease-in-out infinite alternate;
   }
 
@@ -2806,16 +2728,16 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__draw-stage {
-    color: #b73c2e;
+    color: $blue-deep;
     font-size: 22rpx;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &__draw-name {
     margin-top: 6rpx;
-    color: #202326;
-    font-size: 34rpx;
-    font-weight: 900;
+    color: $ink;
+    font-size: 32rpx;
+    font-weight: 600;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2827,19 +2749,19 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     margin-top: 14rpx;
     border-radius: 999rpx;
     overflow: hidden;
-    background: #edf1f1;
+    background: rgba($blue, 0.14);
   }
 
   &__draw-progress-bar {
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #df513f, #238a9a);
+    background: $blue;
     transition: width 140ms ease;
   }
 
   &__draw-hint {
     margin-top: 10rpx;
-    color: #7f8a91;
+    color: $ink2;
     font-size: 22rpx;
     line-height: 1.4;
   }
@@ -2848,8 +2770,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     position: relative;
     overflow: hidden;
     margin-bottom: 24rpx;
-    border-color: rgba(223, 81, 63, 0.24);
-    background: #fff8f6;
+    border-color: rgba($blue, 0.24);
+    background: #ffffff;
   }
 
   &__ticket-head {
@@ -2861,21 +2783,21 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__ticket-kicker {
-    color: #b73c2e;
+    color: $blue-deep;
     font-size: 24rpx;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &__ticket-source {
-    color: #7f8a91;
+    color: $ink2;
     font-size: 22rpx;
   }
 
   &__shop-name {
     display: block;
-    color: #202326;
-    font-size: 46rpx;
-    font-weight: 880;
+    color: $ink;
+    font-size: $font-display;
+    font-weight: 600;
     line-height: 1.16;
     animation: food-ticket-pop 220ms ease-out;
   }
@@ -2889,29 +2811,29 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     min-height: 52rpx;
     padding: 0 18rpx;
     background: #ffffff;
-    color: #69717a;
+    color: $ink2;
     font-size: 22rpx;
   }
 
   &__meta-chip--link {
-    border-color: rgba(35, 138, 154, 0.28);
-    background: #eef8fa;
-    color: #1d6671;
-    font-weight: 800;
+    border-color: rgba($blue, 0.28);
+    background: $blue-tint;
+    color: $blue-deep;
+    font-weight: 600;
   }
 
   &__reason,
   &__address {
     display: block;
     margin-top: 18rpx;
-    color: #394149;
+    color: $ink;
     font-size: 26rpx;
     line-height: 1.65;
   }
 
   &__address {
     margin-top: 10rpx;
-    color: #7f8a91;
+    color: $ink2;
     font-size: 24rpx;
   }
 
@@ -2924,33 +2846,33 @@ function requestHeaders(withUserToken = true): Record<string, string> {
 
   &__ticket-btn {
     min-height: 76rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 14rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #ffffff;
-    color: #202326;
+    color: $ink;
     font-size: 26rpx;
-    font-weight: 800;
+    font-weight: 600;
 
     &--primary {
-      border-color: #df513f;
+      border-color: $blue;
       color: #ffffff;
-      background: #df513f;
+      background: $blue;
     }
   }
 
   &__pool-location {
     margin-bottom: 22rpx;
     padding: 18rpx;
-    border: 2rpx solid rgba(35, 138, 154, 0.18);
-    border-radius: 16rpx;
+    border: 2rpx solid rgba($blue, 0.18);
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 18rpx;
-    background: #f2fafb;
+    background: $blue-tint;
   }
 
   &__pool-location-copy {
@@ -2964,14 +2886,14 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   }
 
   &__pool-location-kicker {
-    color: #1d6671;
+    color: $blue-deep;
     font-size: 22rpx;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &__pool-location-text {
     margin-top: 6rpx;
-    color: #394149;
+    color: $ink;
     font-size: 24rpx;
     line-height: 1.45;
   }
@@ -2991,10 +2913,10 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #1d6671;
+    color: $blue-deep;
     background: #ffffff;
     font-size: 22rpx;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &__pool-form {
@@ -3002,16 +2924,12 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     gap: 12rpx;
   }
 
-  &__pool-add {
-    background: #b73c2e;
-  }
-
   &__empty {
     margin-top: 18rpx;
     padding: 24rpx;
-    border: 2rpx dashed #d9e0e3;
-    border-radius: 16rpx;
-    color: #7f8a91;
+    border: 2rpx dashed $line-strong;
+    border-radius: $radius-md;
+    color: $ink2;
     font-size: 26rpx;
     line-height: 1.55;
     text-align: center;
@@ -3026,8 +2944,8 @@ function requestHeaders(withUserToken = true): Record<string, string> {
   &__pool-item {
     min-height: 96rpx;
     padding: 18rpx;
-    border: 2rpx solid #e2e7e9;
-    border-radius: 16rpx;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
     display: grid;
     grid-template-columns: 1fr 64rpx;
     gap: 14rpx;
@@ -3053,10 +2971,10 @@ function requestHeaders(withUserToken = true): Record<string, string> {
     border-radius: 999rpx;
     display: inline-flex;
     align-items: center;
-    color: #b06a00;
-    background: #fff3df;
+    color: $ink2;
+    background: $fill;
     font-size: 20rpx;
-    font-weight: 800;
+    font-weight: 600;
     line-height: 1;
   }
 
@@ -3070,27 +2988,27 @@ function requestHeaders(withUserToken = true): Record<string, string> {
 
   &__pool-name {
     min-width: 0;
-    color: #202326;
+    color: $ink;
     font-size: 28rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &__pool-note {
     margin-top: 6rpx;
-    color: #7f8a91;
-    font-size: 23rpx;
+    color: $ink2;
+    font-size: 24rpx;
   }
 
   &__pool-delete {
     height: 56rpx;
-    border-radius: 14rpx;
+    border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #df513f;
-    background: #fff2ef;
+    color: $red;
+    background: #fdefec;
     font-size: 24rpx;
-    font-weight: 800;
+    font-weight: 600;
   }
 }
 

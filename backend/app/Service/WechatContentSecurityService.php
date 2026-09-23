@@ -126,7 +126,10 @@ final class WechatContentSecurityService
         }
 
         $result = is_array($body['result'] ?? null) ? $body['result'] : [];
-        return (int) ($result['suggest'] ?? 0) === 0;
+        // msg_sec_check version=2 的 result.suggest 是字符串 "pass"|"review"|"risky"。
+        // 必须严格判 pass：历史实现 `(int) $suggest === 0` 对字符串恒得 0，违规内容也放行（fail-open）。
+        // review（疑似）按从严处理同样拒绝；字段缺失一律拒绝（fail-closed）。
+        return ($result['suggest'] ?? '') === 'pass';
     }
 
     /** 调 msg_sec_check；网络层异常统一包装。 */

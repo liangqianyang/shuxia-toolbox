@@ -26,15 +26,15 @@ import {
 
 /** 玩家四色（页面飞机回退色/播报条同用这组）。 */
 export const LUDO_COLORS = [
-  { name: '红', hex: '#EF5B5B' },
-  { name: '黄', hex: '#F2B33D' },
-  { name: '蓝', hex: '#4E8DE8' },
-  { name: '绿', hex: '#4FBF6B' },
+  { name: '红', hex: '#F5A99C' },
+  { name: '黄', hex: '#F2CE7E' },
+  { name: '蓝', hex: '#A9CFEA' },
+  { name: '绿', hex: '#9AD4B4' },
 ]
 
-/** 品牌底色（奶油白/墨绿，同枫趣牌局色板）。 */
-const BOARD_BG = '#FFF8ED'
-const BOARD_INK = '#21483D'
+/** 底板（v4：白底 + 冷调墨线；座位色 = 马卡龙淡彩）。 */
+const BOARD_BG = '#FFFFFF'
+const BOARD_INK = '#2E4154'
 
 const boardImageCache = new Map<number, Promise<string>>()
 

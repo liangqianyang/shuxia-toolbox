@@ -46,7 +46,7 @@ export function renderPackingCard(
     top,
     colW,
     bottom,
-    '#5B8DEF',
+    '#4E97CE',
     '#EEF4FF',
   )
 

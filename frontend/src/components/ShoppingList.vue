@@ -71,8 +71,9 @@ function onCopy() {
   &__copy {
     padding: 8rpx 28rpx;
     border-radius: 999rpx;
-    background-color: $color-primary;
-    color: #ffffff;
+    background-color: $blue-tint;
+    border: 2rpx solid $blue;
+    color: $blue-deep;
     font-size: $font-caption;
     font-weight: 600;
   }
@@ -89,7 +90,7 @@ function onCopy() {
     align-items: center;
     gap: 16rpx;
     padding: 10rpx 0;
-    border-bottom: 2rpx solid $color-bg;
+    border-bottom: 2rpx solid $line;
   }
 
   &__dot {
@@ -114,7 +115,7 @@ function onCopy() {
 
   &__packs {
     font-size: $font-caption;
-    color: $color-primary-dark;
+    color: $blue-deep;
     font-weight: 600;
   }
 }

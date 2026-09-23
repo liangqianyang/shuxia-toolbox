@@ -81,24 +81,22 @@ const emojis = GAME_EMOJIS
 </script>
 
 <style lang="scss" scoped>
-$ink: #21483d;
-$cream: #fff8ed;
-$muted: #9aa79e;
-$maple: #e85d4a;
-$gold: #f4b942;
+// v4 小清新：白底圆顶抽屉 + 蓝 tint 触发/选中 + 发丝线；发送者名 = 蓝（v4.1 聊天坞规范）
+$ink: #2e4154;
+$muted: #a4b3c0;
 
-.gcp-mask { position: fixed; inset: 0; background: rgba(33, 42, 38, 0.5); z-index: 110; display: flex; align-items: flex-end; }
+.gcp-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(46, 65, 84, 0.35); z-index: 110; display: flex; align-items: flex-end; }
 .gcp-panel {
-  width: 100%; max-height: 72vh; background: $cream; border-radius: 32rpx 32rpx 0 0;
+  width: 100%; max-height: 72vh; background: #ffffff; border-radius: 32rpx 32rpx 0 0;
   padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16rpx;
 }
 .gcp-tabs { display: flex; gap: 24rpx; align-items: center; }
 .gcp-tab { font-size: 28rpx; color: $muted; padding: 8rpx 4rpx; border-bottom: 5rpx solid transparent; }
-.gcp-tab.active { color: $ink; font-weight: 800; border-bottom-color: $maple; }
+.gcp-tab.active { color: $ink; font-weight: 600; border-bottom-color: #58a6dc; }
 .gcp-close { margin-left: auto; font-size: 32rpx; color: $muted; padding: 8rpx; }
-.gcp-log { max-height: 260rpx; background: rgba(255, 255, 255, 0.7); border-radius: 16rpx; padding: 12rpx 20rpx; }
+.gcp-log { max-height: 260rpx; background: #f2f6f9; border-radius: 16rpx; padding: 12rpx 20rpx; }
 .gcp-log-row { display: flex; gap: 8rpx; padding: 6rpx 0; align-items: baseline; }
-.gcp-log-name { font-size: 22rpx; color: $muted; white-space: nowrap; flex-shrink: 0; }
+.gcp-log-name { font-size: 22rpx; color: #3b86b8; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .gcp-log-text { font-size: 24rpx; color: $ink; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gcp-log-emoji { font-size: 40rpx; flex-shrink: 0; }
 .gcp-groups { max-height: 320rpx; overflow-y: auto; }
@@ -106,16 +104,16 @@ $gold: #f4b942;
 .gcp-group-title { font-size: 22rpx; color: $muted; margin-bottom: 8rpx; }
 .gcp-group-btns { display: flex; flex-wrap: wrap; gap: 12rpx; }
 .gcp-phrase {
-  font-size: 24rpx; color: $ink; background: #fff; border-radius: 999rpx; padding: 10rpx 24rpx;
-  border: 2rpx solid rgba(33, 72, 61, 0.12);
+  font-size: 24rpx; color: $ink; background: #ffffff; border-radius: 999rpx; padding: 10rpx 24rpx;
+  border: 2rpx solid #dde6ec;
 }
 .gcp-phrase.disabled, .gcp-emoji.disabled { opacity: 0.4; }
 .gcp-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12rpx; max-height: 320rpx; overflow-y: auto; }
-.gcp-emoji { font-size: 48rpx; text-align: center; padding: 12rpx 0; background: #fff; border-radius: 14rpx; }
+.gcp-emoji { font-size: 48rpx; text-align: center; padding: 12rpx 0; background: #f2f6f9; border-radius: 14rpx; }
 .gcp-text-row { display: flex; gap: 12rpx; align-items: center; }
-.gcp-input { flex: 1; height: 72rpx; background: #fff; border-radius: 14rpx; padding: 0 24rpx; font-size: 26rpx; }
+.gcp-input { flex: 1; height: 72rpx; background: #ffffff; border: 2rpx solid #dde6ec; border-radius: 14rpx; padding: 0 24rpx; font-size: 26rpx; }
 .gcp-send {
-  background: $maple; color: #fff; border-radius: 14rpx; font-size: 26rpx; font-weight: 700;
+  background: #58a6dc; color: #fff; border-radius: 14rpx; font-size: 26rpx; font-weight: 600;
   height: 72rpx; line-height: 72rpx; padding: 0 28rpx; border: none;
 }
 .gcp-send[disabled] { opacity: 0.45; }

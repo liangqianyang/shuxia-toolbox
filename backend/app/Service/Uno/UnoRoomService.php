@@ -11,6 +11,8 @@ use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
 use Hyperf\DbConnection\Db;
 use RuntimeException;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\StdoutLoggerInterface;
 
 /**
  * UNO 联机房间：服务端权威，完整对局快照存 MySQL（重启不丢局）。
@@ -436,7 +438,7 @@ final class UnoRoomService
 
         $room = Db::transaction(function () use ($code, $userId, $color) {
             $room = $this->lockByCode($code);
-            $this->applyDueTimeoutIfNeeded($room);
+            $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'playing') {
                 throw new BizException(422, '对局不在进行中');
@@ -474,7 +476,7 @@ final class UnoRoomService
     {
         $room = Db::transaction(function () use ($code, $userId) {
             $room = $this->lockByCode($code);
-            $this->applyDueTimeoutIfNeeded($room);
+            $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'playing') {
                 throw new BizException(422, '对局不在进行中');
@@ -857,18 +859,25 @@ final class UnoRoomService
             ->pluck('code');
         $swept = 0;
         foreach ($codes as $code) {
-            $room = Db::transaction(function () use ($code) {
-                $room = $this->lockByCode((string) $code);
-                if (! $this->applyDueTimeoutIfNeeded($room)) {
-                    return null;
+            try {
+                $room = Db::transaction(function () use ($code) {
+                    $room = $this->lockByCode((string) $code);
+                    if (! $this->applyDueTimeoutIfNeeded($room)) {
+                        return null;
+                    }
+                    $room->version++;
+                    $room->save();
+                    return $room;
+                });
+                if ($room instanceof UnoRoom) {
+                    $this->broadcast($room);
+                    ++$swept;
                 }
-                $room->version++;
-                $room->save();
-                return $room;
-            });
-            if ($room instanceof UnoRoom) {
-                $this->broadcast($room);
-                ++$swept;
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
             }
         }
         return $swept;
@@ -885,62 +894,70 @@ final class UnoRoomService
      */
     public function sweepLonelyRooms(): int
     {
-        $rooms = UnoRoom::query()->where('status', 'playing')->limit(50)->get();
+        // 只取 code：行内 state JSON 可达几十 KB，纯为算在线数的秒级清扫不整行拉取（锁后自会重读全行）
+        $rooms = UnoRoom::query()->where('status', 'playing')->select('code')->limit(50)->get();
         $ended = 0;
         foreach ($rooms as $room) {
-            $changed = Db::transaction(function () use ($room) {
-                $room = $this->lockByCode((string) $room->code);
-                if ($room->status !== 'playing') {
-                    return null;
-                }
-                $state = $room->state;
-                if (($state['phase'] ?? 'playing') === 'dealerDraw') {
-                    return null;
-                }
-                $seats = $room->seats;
-                $left = $state['leftSeats'] ?? [];
-                $active = [];
-                foreach ($seats as $i => $uid) {
-                    if (! in_array($i, $left, true)) {
-                        $active[$i] = (int) $uid;
+            try {
+                $changed = Db::transaction(function () use ($room) {
+                    $room = $this->lockByCode((string) $room->code);
+                    if ($room->status !== 'playing') {
+                        return null;
                     }
-                }
-                if (count($active) < 2) {
-                    return null;
-                }
-                $onlineIds = $this->pusher->onlineUserIds((string) $room->code);
-                $seenAt = $room->seen_at ?? [];
-                $now = time();
-                $online = [];
-                $othersGone = true;
-                foreach ($active as $i => $uid) {
-                    $fresh = isset($seenAt[(string) $uid]) ? strtotime((string) $seenAt[(string) $uid]) : 0;
-                    $isOnline = in_array($uid, $onlineIds, true) || $fresh >= $now - self::ONLINE_SECONDS;
-                    if ($isOnline) {
-                        $online[] = $i;
-                        continue;
+                    $state = $room->state;
+                    if (($state['phase'] ?? 'playing') === 'dealerDraw') {
+                        return null;
                     }
-                    if ($fresh >= $now - self::OFFLINE_FORFEIT_SECONDS) {
-                        $othersGone = false; // 刚离线不久，可能切后台马上回来
+                    $seats = $room->seats;
+                    $left = $state['leftSeats'] ?? [];
+                    $active = [];
+                    foreach ($seats as $i => $uid) {
+                        if (! in_array($i, $left, true)) {
+                            $active[$i] = (int) $uid;
+                        }
                     }
+                    if (count($active) < 2) {
+                        return null;
+                    }
+                    $onlineIds = $this->pusher->onlineUserIds((string) $room->code);
+                    $seenAt = $room->seen_at ?? [];
+                    $now = time();
+                    $online = [];
+                    $othersGone = true;
+                    foreach ($active as $i => $uid) {
+                        $fresh = isset($seenAt[(string) $uid]) ? strtotime((string) $seenAt[(string) $uid]) : 0;
+                        $isOnline = in_array($uid, $onlineIds, true) || $fresh >= $now - self::ONLINE_SECONDS;
+                        if ($isOnline) {
+                            $online[] = $i;
+                            continue;
+                        }
+                        if ($fresh >= $now - self::OFFLINE_FORFEIT_SECONDS) {
+                            $othersGone = false; // 刚离线不久，可能切后台马上回来
+                        }
+                    }
+                    if (count($online) !== 1 || ! $othersGone) {
+                        return null;
+                    }
+                    $winnerSeat = $online[0];
+                    $state['lastEvent'] = ['type' => 'win_last_man', 'seat' => $winnerSeat];
+                    $room->state = $state;
+                    $room->status = 'finished';
+                    $room->winner_user_id = $seats[$winnerSeat];
+                    $room->win_reason = 'last_man';
+                    $room->turn_deadline_at = null;
+                    $room->version++;
+                    $room->save();
+                    return $room;
+                });
+                if ($changed instanceof UnoRoom) {
+                    $this->broadcast($changed);
+                    ++$ended;
                 }
-                if (count($online) !== 1 || ! $othersGone) {
-                    return null;
-                }
-                $winnerSeat = $online[0];
-                $state['lastEvent'] = ['type' => 'win_last_man', 'seat' => $winnerSeat];
-                $room->state = $state;
-                $room->status = 'finished';
-                $room->winner_user_id = $seats[$winnerSeat];
-                $room->win_reason = 'last_man';
-                $room->turn_deadline_at = null;
-                $room->version++;
-                $room->save();
-                return $room;
-            });
-            if ($changed instanceof UnoRoom) {
-                $this->broadcast($changed);
-                ++$ended;
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
             }
         }
         return $ended;

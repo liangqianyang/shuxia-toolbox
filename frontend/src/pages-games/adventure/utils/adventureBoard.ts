@@ -164,7 +164,7 @@ export const SEGMENT_COLORS: { band: string; cell: string; text: string }[] = [
 ]
 
 /** 座位颜色（2-6 人，枫趣品牌色系延展）。 */
-export const SEAT_COLORS = ['#E85D4A', '#F4B942', '#5F9E6E', '#4A7FB5', '#9B6BB5', '#4AB5A0']
+export const SEAT_COLORS = ['#F5A99C', '#F2CE7E', '#9AD4B4', '#A9CFEA', '#C3B2E4', '#8CCFC5']
 
 export function seatColor(seat: number): string {
   return SEAT_COLORS[seat % SEAT_COLORS.length]

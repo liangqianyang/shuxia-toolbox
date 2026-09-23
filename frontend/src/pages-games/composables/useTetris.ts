@@ -6,7 +6,7 @@
  */
 
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
-import { applyAction, createGame, type GameAction, type TetrisState } from '@/pages-games/utils/tetris'
+import { applyAction, createGame, type GameAction, type SpeedMode, type TetrisState } from '@/pages-games/utils/tetris'
 
 const TICK_MS = 33
 const DT_CLAMP_MS = 250
@@ -59,11 +59,11 @@ export function useTetris(options: UseTetrisOptions) {
     options.onStateChange(next)
   }
 
-  function start(startLevel: number): void {
+  function start(startLevel: number, speedMode: SpeedMode = 'progressive'): void {
     stopDas()
     running.value = true
     paused.value = false
-    const game = createGame(startLevel)
+    const game = createGame(startLevel, Math.random, speedMode)
     state.value = game
     options.onStateChange(game)
     lastTickAt = Date.now()

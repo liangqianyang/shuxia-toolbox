@@ -1,17 +1,18 @@
 /**
  * 时光纪念卡 · 场景色系统（工具私有，不进 uni.scss 全局注入）
- * 每种场景一个主题色：hero 渐变、日期徽章、列表色条、天数彩字、筛选彩点、编辑页场景格。
- * 颜色取自已确认的改版原型（pen.dev「时光纪念卡 · 改版方案」）。
+ * 每种场景一组粉彩扁平三元组：(mid 中彩 / deep 深彩字 / tint 浅彩底)。
+ * v4 小清新：hero 满幅渐变 → 浅彩扁平底 + 深彩字；色条/彩点/徽章自动跟随。
+ * 色值取自 v4 改版原型（maple-paper-prototype.html #anniversary 筛选点与事件行）。
  */
 
 $ann-scenes: (
-  birthday: (#e58fb1, #c75f8c, #fbe9f1),
-  relationship: (#e06a5a, #b8402e, #fbeae5),
-  wedding: (#c9a2c0, #a87ca0, #f4eaf1),
-  travel: (#5b8fb9, #3d6e96, #e8f0f7),
-  deadline: (#8a6fa8, #6e5590, #eee8f5),
-  baby: (#e5a33e, #c5811e, #fbf0dc),
-  habit: (#6fa06b, #4e7d4a, #e8f2e7),
+  birthday: (#de8fab, #c9698e, #fdf0f5),
+  relationship: (#e8806f, #c96b5a, #fdefec),
+  wedding: (#c99bbc, #a87ca0, #f6eff3),
+  travel: (#6fa5d6, #4e86b4, #ebf3fa),
+  deadline: (#a08cc7, #8e7cc3, #f1edf9),
+  baby: (#e3b15c, #b98a2e, #fbf3df),
+  habit: (#79b590, #4e8a66, #edf6f0),
   custom: (#c8956c, #a8744b, #f6ede2),
 );
 
@@ -20,11 +21,20 @@ $ann-scenes: (
   $deep: nth($colors, 2);
   $tint: nth($colors, 3);
 
-  // hero 满幅渐变：去掉混白亮端（浅色场景上白字对比不足），顶部叠深色压暗层兜底小字可读性
+  // hero 粉彩扁平：浅彩底 + 深彩字（不再用满幅渐变 + 白字）
   .anniversary__hero--#{$scene} {
-    background:
-      linear-gradient(180deg, rgba(74, 63, 53, 0.24), rgba(74, 63, 53, 0) 46%),
-      linear-gradient(165deg, $color, $deep 62%);
+    background: $tint;
+    color: $deep;
+  }
+
+  // 里程碑进度条：中彩（原型 .mbar i）
+  .anniversary__hero--#{$scene} .anniversary__hero-milestone-bar {
+    background: $color;
+  }
+
+  // hero 次级按钮：白底 + 场景彩描边（原型 .hb）
+  .anniversary__hero--#{$scene} .anniversary__hero-btn {
+    border-color: rgba($color, 0.35);
   }
 
   // 列表日期徽章：浅彩底 + 深彩字

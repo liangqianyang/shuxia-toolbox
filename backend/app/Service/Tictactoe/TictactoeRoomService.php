@@ -12,6 +12,8 @@ use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
 use RuntimeException;
 use Hyperf\DbConnection\Db;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\StdoutLoggerInterface;
 
 /**
  * 联机井字棋房间：服务端权威，状态存 MySQL。
@@ -250,23 +252,30 @@ final class TictactoeRoomService
             ->pluck('code');
         $swept = 0;
         foreach ($codes as $code) {
-            $room = Db::transaction(function () use ($code) {
-                $room = $this->lockByCode((string) $code);
-                if (! in_array($room->status, ['rps', 'playing'], true)
-                    || $room->turn_deadline_at === null
-                    || strtotime((string) $room->turn_deadline_at) > time()) {
-                    return null;
+            try {
+                $room = Db::transaction(function () use ($code) {
+                    $room = $this->lockByCode((string) $code);
+                    if (! in_array($room->status, ['rps', 'playing'], true)
+                        || $room->turn_deadline_at === null
+                        || strtotime((string) $room->turn_deadline_at) > time()) {
+                        return null;
+                    }
+                    if (! $this->applyDueIfNeeded($room)) {
+                        return null;
+                    }
+                    $room->version++;
+                    $room->save();
+                    return $room;
+                });
+                if ($room instanceof TictactoeRoom) {
+                    $this->broadcast($room);
+                    ++$swept;
                 }
-                if (! $this->applyDueIfNeeded($room)) {
-                    return null;
-                }
-                $room->version++;
-                $room->save();
-                return $room;
-            });
-            if ($room instanceof TictactoeRoom) {
-                $this->broadcast($room);
-                ++$swept;
+            } catch (\Throwable $e) {
+                // 单房间异常（并发关房竞态/旧版 state 缺键/推送抖动）不拖垮整轮 1s 清扫
+                ApplicationContext::getContainer()->get(StdoutLoggerInterface::class)
+                    ->error('[sweep] ' . self::class . ': ' . $e->getMessage());
+                continue;
             }
         }
         return $swept;

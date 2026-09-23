@@ -8,9 +8,9 @@ import { canvasToFile, createDrawingCanvas } from '@/utils/canvasAdapter'
 import { CELLS, cellToPoint, type CellType } from './adventureBoard'
 
 /** 品牌底色（奶油白/墨绿/枫叶红/金黄，同枫趣牌局色板）。 */
-const BOARD_BG = '#FFF8ED'
-const BOARD_INK = '#21483D'
-const MAPLE = '#E85D4A'
+const BOARD_BG = '#FFFFFF'
+const BOARD_INK = '#2E4154'
+const MAPLE = '#E8806F'
 const GOLD = '#F4B942'
 
 /**

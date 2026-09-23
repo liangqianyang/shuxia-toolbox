@@ -1,6 +1,6 @@
 <template>
   <view class="tetris">
-    <!-- ═══════════ 菜单面板（游戏主页,深色街机皮肤） ═══════════ -->
+    <!-- ═══════════ 菜单面板（游戏主页,v4 小清新 · 照原型 lobby-tetris） ═══════════ -->
     <view v-if="panel === 'menu'" class="tetris__menu">
       <view class="tetris__hero">
         <view class="tetris__deco">
@@ -19,8 +19,10 @@
           </view>
         </view>
         <view class="tetris__title-row">
-          <text class="tetris__title">俄罗斯方块</text>
-          <text class="tetris__title-badge">TETRIS</text>
+          <view class="tetris__title-copy">
+            <text class="tetris__kicker">单机消遣 · 离线可玩</text>
+            <text class="tetris__title">俄罗斯方块</text>
+          </view>
           <view class="tetris__title-flex"></view>
           <view class="tetris__icon-btn" hover-class="press" @tap="toggleSound">
             <text>{{ soundOn ? '🔊' : '🔇' }}</text>
@@ -29,11 +31,59 @@
             <text>ⓘ</text>
           </view>
         </view>
+        <text class="tetris__subtitle">经典方块 · 手势操作 · 冲榜挑战</text>
       </view>
 
-      <view class="tetris__best">
+      <view class="tetris__start-btn" hover-class="press" @tap="startGame">
+        <text class="tetris__start-icon">▶</text>
+        <text class="tetris__start-text">开始游戏</text>
+      </view>
+
+      <view class="tetris__card tetris__settings">
+        <view class="tetris__opt">
+          <text class="tetris__opt-label">下落速度</text>
+          <view class="tetris__chiprow">
+            <view
+              class="tetris__chip"
+              :class="{ 'is-active': speedMode === 'progressive' }"
+              hover-class="press"
+              @tap="pickSpeed('progressive')"
+            >
+              <text>越消越快</text>
+            </view>
+            <view
+              class="tetris__chip"
+              :class="{ 'is-active': speedMode === 'constant' }"
+              hover-class="press"
+              @tap="pickSpeed('constant')"
+            >
+              <text>恒定速度</text>
+            </view>
+          </view>
+        </view>
+        <text class="tetris__opt-note">恒定 = 全程同一速度,不随消行加速 · 选择会被记住</text>
+        <view class="tetris__divider"></view>
+        <view class="tetris__opt">
+          <text class="tetris__opt-label">初始等级</text>
+          <view class="tetris__chiprow">
+            <view
+              v-for="v in LEVEL_CHIPS"
+              :key="v"
+              class="tetris__chip tetris__chip--num"
+              :class="{ 'is-active': startLevel === v }"
+              hover-class="press"
+              @tap="pickLevel(v)"
+            >
+              <text>{{ v }}</text>
+            </view>
+          </view>
+        </view>
+        <text class="tetris__opt-note">起始等级越高,开局速度与计分越高(1 ~ 15)</text>
+      </view>
+
+      <view class="tetris__card tetris__best">
         <view class="tetris__best-item">
-          <text class="tetris__best-num tetris__best-num--gold">{{ best ? formatScore(best.score) : '0' }}</text>
+          <text class="tetris__best-num">{{ best ? formatScore(best.score) : '0' }}</text>
           <text class="tetris__best-label">最高分</text>
         </view>
         <view class="tetris__best-item">
@@ -50,25 +100,6 @@
         </view>
       </view>
 
-      <view class="tetris__level">
-        <view class="tetris__level-head">
-          <text class="tetris__level-title">起始等级</text>
-          <text class="tetris__level-note">等级越高,下落越快</text>
-        </view>
-        <view class="tetris__chips">
-          <view
-            v-for="v in LEVEL_CHIPS"
-            :key="v"
-            class="tetris__chip"
-            :class="{ 'is-active': startLevel === v }"
-            hover-class="press"
-            @tap="pickLevel(v)"
-          >
-            <text class="tetris__chip-num">{{ v }}</text>
-          </view>
-        </view>
-      </view>
-
       <view v-if="gameRankEnabled" class="tetris__board-list">
         <view v-if="leaderboardLoading" class="tetris__lb-hint">
           <text>加载中…</text>
@@ -80,7 +111,7 @@
         <view v-else-if="!leaderboard || leaderboard.entries.length === 0" class="tetris__lb-hint">
           <text>🏆 虚位以待,玩一局成为第一个上榜的枫友</text>
         </view>
-        <view v-else class="tetris__lb">
+        <view v-else class="tetris__card tetris__lb">
           <view class="tetris__lb-head">
             <text class="tetris__lb-title">排行榜</text>
             <text class="tetris__lb-count">{{ leaderboard.entries.length }} 人</text>
@@ -115,31 +146,43 @@
       </view>
 
       <view class="tetris__menu-flex"></view>
-      <view class="tetris__start-wrap">
-        <view class="tetris__start-btn" hover-class="press" @tap="startGame">
-          <text class="tetris__start-icon">▶</text>
-          <text class="tetris__start-text">开始游戏</text>
-        </view>
-      </view>
     </view>
 
-    <!-- ═══════════ 游戏面板 ═══════════ -->
+    <!-- ═══════════ 游戏面板（v4 · 照原型 play-tetris） ═══════════ -->
     <view v-else class="tetris__game">
-      <view class="tetris__hud">
-        <view class="tetris__hud-score">
-          <text class="tetris__hud-score-num">{{ formatScore(view?.score ?? 0) }}</text>
-          <text class="tetris__hud-score-label">得分</text>
+      <view class="tetris__battletop">
+        <view class="tetris__statchip">
+          <text class="tetris__statchip-v">{{ formatScore(view?.score ?? 0) }}</text>
+          <text class="tetris__statchip-k">得分</text>
         </view>
-        <view class="tetris__hud-item">
-          <text class="tetris__hud-item-num">{{ view?.lines ?? 0 }}</text>
-          <text class="tetris__hud-item-label">行数</text>
+        <view class="tetris__statchip">
+          <text class="tetris__statchip-v">{{ view?.lines ?? 0 }}</text>
+          <text class="tetris__statchip-k">行数</text>
         </view>
-        <view class="tetris__hud-item">
-          <text class="tetris__hud-item-num tetris__hud-item-num--cyan">{{ view?.level ?? startLevel }}</text>
-          <text class="tetris__hud-item-label">等级</text>
+        <view class="tetris__statchip">
+          <text class="tetris__statchip-v tetris__statchip-v--accent">{{ view?.level ?? startLevel }}</text>
+          <text class="tetris__statchip-k">等级</text>
         </view>
         <view class="tetris__pause-btn" hover-class="press" @tap="pauseGame">
           <text>{{ paused ? '▶' : '⏸' }}</text>
+        </view>
+      </view>
+      <view class="tetris__speedrow">
+        <view
+          class="tetris__speed-chip"
+          :class="{ 'is-active': speedMode === 'progressive' }"
+          hover-class="press"
+          @tap="pickSpeed('progressive')"
+        >
+          <text>越消越快</text>
+        </view>
+        <view
+          class="tetris__speed-chip"
+          :class="{ 'is-active': speedMode === 'constant' }"
+          hover-class="press"
+          @tap="pickSpeed('constant')"
+        >
+          <text>恒定速度</text>
         </view>
       </view>
 
@@ -165,38 +208,42 @@
         </view>
       </view>
 
-      <!-- 按钮排：←/→ 移动（按住连发）· 旋转 · 硬降 · HOLD（HOLD 贴最右,原型序） -->
+      <!-- 按钮排（原型序）：[←][→][旋转 accent][⤓直落 蓝实底]‖隔离‖[HOLD]——
+           直落蓝色实底与高频白键视觉区分（防误触），HOLD 低频靠边缘 -->
       <view class="tetris__pad">
         <view
-          class="tetris__pad-btn tetris__pad-btn--move"
+          class="tetris__key tetris__key--move"
+          hover-class="press"
           @touchstart="onPadLeftDown"
           @touchend="endMove"
           @touchcancel="endMove"
         >
-          <text>←</text>
+          <text class="tetris__key-icon">←</text>
         </view>
         <view
-          class="tetris__pad-btn tetris__pad-btn--move"
+          class="tetris__key tetris__key--move"
+          hover-class="press"
           @touchstart="onPadRightDown"
           @touchend="endMove"
           @touchcancel="endMove"
         >
-          <text>→</text>
+          <text class="tetris__key-icon">→</text>
         </view>
-        <view class="tetris__pad-flex"></view>
-        <view class="tetris__pad-btn tetris__pad-btn--rotate" hover-class="press" @tap="rotatePiece">
-          <text class="tetris__pad-rotate-icon">↻</text>
-          <text>旋转</text>
+        <view class="tetris__key tetris__key--accent" hover-class="press" @tap="rotatePiece">
+          <text class="tetris__key-icon">↻</text>
+          <text class="tetris__key-label">旋转</text>
         </view>
-        <view class="tetris__pad-btn tetris__pad-btn--drop" hover-class="press" @tap="hardDropPiece">
-          <text>⤓</text>
+        <view class="tetris__key tetris__key--drop" hover-class="press" @tap="hardDropPiece">
+          <text class="tetris__key-icon">⤓</text>
+          <text class="tetris__key-label">直落</text>
         </view>
-        <view class="tetris__pad-btn tetris__pad-btn--hold" hover-class="press" @tap="holdPiece">
-          <text>HOLD</text>
+        <view class="tetris__pad-iso"></view>
+        <view class="tetris__key" hover-class="press" @tap="holdPiece">
+          <text class="tetris__key-label">HOLD</text>
         </view>
       </view>
       <view class="tetris__hint">
-        <text>下滑软降 · 快滑硬降 · 点按旋转</text>
+        <text>点按旋转 · 下滑软降 · 直落 = 快滑 或 蓝色实底键</text>
       </view>
 
       <!-- 遮罩挂在整个游戏面板上（挂 canvas 容器里会被画布高度裁住,结算卡比画布高） -->
@@ -251,9 +298,9 @@
 
 <script setup lang="ts">
 /**
- * 俄罗斯方块页（奶油亮色皮肤,布局照 Pen 原型稿「俄罗斯方块 · 主页/对局/结算」）：
- * 菜单 = 游戏主页（方块装饰 + 战绩条 + 等级档位 + 排行榜 + 沉底金色开始按钮）;
- * 游戏 = HUD 大分数 + 弹性居中棋盘 + [←][→]·[旋转][⤓][HOLD] 按钮排。
+ * 俄罗斯方块页（v4 小清新皮肤,布局照原型 lobby-tetris / play-tetris）：
+ * 菜单 = 游戏主页（方块装饰 + 大标题 + 开始按钮 + 下落速度/初始等级设置卡 + 最高分 + 排行榜）;
+ * 游戏 = 三枚 statchip + 速度切换行 + 弹性居中棋盘 + [←][→][旋转][⤓直落蓝实底]‖隔离‖[HOLD] 按钮排。
  * 引擎纯逻辑在 utils/tetris.ts,循环/输入在 composables/useTetris.ts,绘帧在 utils/tetrisRender.ts——
  * 页面只做：canvas 节点获取（照 gomoku 家法）、特效（events→音效/振动）、本地最高分与面板切换。
  */
@@ -268,10 +315,11 @@ import { getCanvasNode, getWindowInfo, type CanvasNode } from '@/utils/canvasAda
 import { computeTetrisLayout, drawTetrisFrame, type TetrisLayout } from '@/pages-games/utils/tetrisRender'
 import { createDragController, defaultDragConfig } from '@/pages-games/utils/touchGestures'
 import { playTetrisSound, setTetrisSoundEnabled, tetrisSoundEnabled } from '@/pages-games/utils/tetrisSound'
-import type { TetrisState } from '@/pages-games/utils/tetris'
+import type { SpeedMode, TetrisState } from '@/pages-games/utils/tetris'
 
 const BEST_KEY = 'shuxia_tetris_best_v1'
 const LEVEL_KEY = 'shuxia_tetris_start_level'
+const SPEED_KEY = 'shuxia_tetris_speed_mode'
 
 interface BestRecord {
   score: number
@@ -280,18 +328,18 @@ interface BestRecord {
 }
 
 const LEVEL_CHIPS = [1, 3, 5, 10, 15]
-/** 菜单顶部四色方块装饰（L/T/I/S,格 13px 步进 15px）。 */
+/** 菜单顶部四色方块装饰（L/T/I/S,格 13px 步进 15px；色 = 渲染器同款马卡龙）。 */
 const DECO_PIECES: { cells: Array<[number, number]>; color: string }[] = [
-  { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], color: '#E8974E' },
-  { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], color: '#A86EE8' },
-  { cells: [[0, 0], [1, 0], [2, 0], [3, 0]], color: '#3EC6E0' },
-  { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], color: '#5CC26A' },
+  { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], color: '#E8A06B' },
+  { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], color: '#C3B2E4' },
+  { cells: [[0, 0], [1, 0], [2, 0], [3, 0]], color: '#A9CFEA' },
+  { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], color: '#9AD4B4' },
 ]
 /** 结算卡顶部装饰（Z/I/S 小号）。 */
 const OVER_DECO: { cells: Array<[number, number]>; color: string }[] = [
-  { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], color: '#E05F5F' },
-  { cells: [[0, 0], [1, 0], [2, 0], [3, 0]], color: '#3EC6E0' },
-  { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], color: '#5CC26A' },
+  { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], color: '#F5A99C' },
+  { cells: [[0, 0], [1, 0], [2, 0], [3, 0]], color: '#A9CFEA' },
+  { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], color: '#9AD4B4' },
 ]
 
 const instance = getCurrentInstance()
@@ -299,6 +347,7 @@ const { gameRankEnabled, refreshFeatures } = useFeatures()
 const panel = ref<'menu' | 'game'>('menu')
 const showRules = ref(false)
 const startLevel = ref(readStartLevel())
+const speedMode = ref<SpeedMode>(readSpeedMode())
 const best = ref<BestRecord | null>(readBest())
 const soundOn = ref(tetrisSoundEnabled())
 const gameOver = ref(false)
@@ -349,11 +398,12 @@ function rankBadge(rank: number): string {
   return rank === 1 ? '1' : rank === 2 ? '2' : rank === 3 ? '3' : String(rank)
 }
 
+/** 名次色 = PASTEL 表内的低饱和点缀（金/灰/铜/最弱墨）,不做实底。 */
 function rankColor(rank: number): string {
-  if (rank === 1) return '#C08A1E'
-  if (rank === 2) return '#8A93A6'
-  if (rank === 3) return '#B4764A'
-  return '#7D6F60'
+  if (rank === 1) return '#C99A34'
+  if (rank === 2) return '#6E8093'
+  if (rank === 3) return '#CC6F4E'
+  return '#A4B3C0'
 }
 
 function formatScore(score: number): string {
@@ -370,7 +420,7 @@ function decoPieceStyle(p: { cells: Array<[number, number]> }): Record<string, s
 
 const win = getWindowInfo()
 const SIDE_PAD_PX = 12
-const HUD_PX = 92
+const HUD_PX = 148
 const PAD_PX = 210
 const layout: TetrisLayout = computeTetrisLayout(
   win.windowWidth - SIDE_PAD_PX * 2,
@@ -505,6 +555,28 @@ function hardDropPiece(): void {
   input({ t: 'hardDrop' })
 }
 
+// ---------- 速度模式 ----------
+
+/** 切换下落速度：菜单里只改偏好;对局内经 setSpeedMode 即时生效（恒定 = 重力间隔恒取起始档）。 */
+function pickSpeed(mode: SpeedMode): void {
+  if (speedMode.value === mode) return
+  speedMode.value = mode
+  try {
+    uni.setStorageSync(SPEED_KEY, mode)
+  } catch {
+    // 存储失败本次会话仍生效
+  }
+  if (panel.value === 'game') input({ t: 'setSpeedMode', mode })
+}
+
+function readSpeedMode(): SpeedMode {
+  try {
+    return uni.getStorageSync(SPEED_KEY) === 'constant' ? 'constant' : 'progressive'
+  } catch {
+    return 'progressive'
+  }
+}
+
 // ---------- 面板切换 ----------
 
 async function startGame(): Promise<void> {
@@ -518,7 +590,7 @@ function beginRound(): void {
   gameOver.value = false
   isNewBest.value = false
   submitRank.value = null
-  startEngine(startLevel.value)
+  startEngine(startLevel.value, speedMode.value)
 }
 
 function restartGame(): void {
@@ -637,15 +709,16 @@ const rulesSections = [
     heading: '操作',
     lines: [
       '棋盘手势：左右拖动逐格移动，向下拖动软降，快速下滑硬降，点按或上滑旋转',
-      '底部按钮：← / → 按住连发，旋转、HOLD 暂存、⤓ 硬降到底',
+      '底部按钮：← / → 按住连发，旋转、HOLD 暂存、⤓ 直落（蓝色实底键，与快滑手势双通道）',
       'HOLD 每个块只能用一次，落块后恢复',
     ],
   },
   {
     heading: '等级与速度',
     lines: [
-      '开局可选起始等级 1~15，等级越高方块落得越快',
-      '每消除 10 行升 1 级，速度按官方曲线持续加快',
+      '下落速度二选一：「越消越快」每 10 行升级加速（默认）/「恒定速度」全程同一速度',
+      '速度模式对局内可随时切换，选择会被记住',
+      '开局可选起始等级 1~15；每消除 10 行升 1 级（计分跟着涨）',
     ],
   },
   {
@@ -660,24 +733,22 @@ const rulesSections = [
 </script>
 
 <style lang="scss" scoped>
-// 深色街机皮肤（照原型 token）:尺寸/间距尽量走 $space-*/$radius-*/$font-*
-$t-bg: #fff8f0;
-$t-panel: #ffffff;
-$t-panel-2: #f7eddf;
-$t-line: #e8d9c4;
-$t-text: #4a3f35;
-$t-dim: #7d6f60;
-$t-gold: #c08a1e;
-$t-gold-fill: #f4b942;
-$t-cyan: #1e9dbe;
-$t-ink: #4a3f35;
-$t-red: #d65a4a;
+// v4 小清新皮肤（原型 lobby-tetris / play-tetris）:冷调蓝白 + 马卡龙方块,字重降档
+$t-ink: $ink;
+$t-dim: $ink2;
+$t-faint: $ink3;
+$t-blue: $blue;
+$t-blue-deep: $blue-deep;
+$t-blue-tint: $blue-tint;
+$t-line: $line;
+$t-line-strong: $line-strong;
+$t-red: $red;
 $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
 .tetris {
   min-height: 100vh;
   padding: $space-3 $space-3 calc($space-3 + env(safe-area-inset-bottom));
-  background: $t-bg;
+  background: $bg;
 
   &__menu {
     display: flex;
@@ -722,21 +793,24 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     margin-top: $space-2;
   }
 
-  &__title {
-    font-size: 76rpx;
-    font-weight: 900;
-    color: $t-text;
-    line-height: 1.1;
+  &__title-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
   }
 
-  &__title-badge {
-    background: $t-panel-2;
-    color: $t-gold;
-    border-radius: $radius-pill;
-    padding: 6rpx 18rpx;
-    font-family: $mono;
+  &__kicker {
     font-size: 20rpx;
+    letter-spacing: 5rpx;
+    font-weight: 600;
+    color: $blue-deep;
+  }
+
+  &__title {
+    font-size: 60rpx;
     font-weight: 700;
+    color: $t-ink;
+    line-height: 1.2;
   }
 
   &__title-flex {
@@ -747,7 +821,8 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
-    background: $t-panel-2;
+    background: $card;
+    border: 2rpx solid $line-strong;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -755,15 +830,122 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     font-size: $font-body;
   }
 
+  &__subtitle {
+    display: block;
+    margin-top: $space-1;
+    font-size: $font-caption;
+    color: $t-dim;
+  }
+
+  // ---------- 开始按钮（蓝实底主行动） ----------
+
+  &__start-btn {
+    height: 96rpx;
+    border-radius: $radius-md;
+    background: $blue;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $space-2;
+    margin-top: $space-3;
+  }
+
+  &__start-icon {
+    color: #fff;
+    font-size: $font-body;
+  }
+
+  &__start-text {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 600;
+  }
+
+  // ---------- 设置卡（下落速度 / 初始等级） ----------
+
+  &__card {
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-lg;
+  }
+
+  &__settings {
+    margin-top: $space-3;
+    padding: $space-3;
+    display: flex;
+    flex-direction: column;
+    gap: $space-2;
+  }
+
+  &__opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $space-2;
+  }
+
+  &__opt-label {
+    font-size: $font-body;
+    font-weight: 600;
+    color: $t-ink;
+    flex: none;
+  }
+
+  &__opt-note {
+    font-size: $font-micro;
+    color: $t-faint;
+    line-height: 1.6;
+  }
+
+  &__divider {
+    height: 2rpx;
+    background: $line;
+  }
+
+  &__chiprow {
+    display: flex;
+    gap: $space-2;
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  &__chip {
+    border: 2rpx solid $line-strong;
+    border-radius: $radius-pill;
+    background: $card;
+    padding: 10rpx 26rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $t-dim;
+    font-size: $font-micro;
+
+    &.is-active {
+      background: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
+      font-weight: 600;
+    }
+  }
+
+  &__chip--num {
+    flex: 1;
+    padding: 14rpx 0;
+
+    text {
+      font-family: $mono;
+      font-size: $font-caption;
+      font-weight: 600;
+    }
+  }
+
   // ---------- 战绩条 ----------
 
   &__best {
     display: flex;
     align-items: center;
-    background: $t-panel;
-    border-radius: $radius-lg;
     padding: $space-3 $space-4;
-    margin-top: $space-2;
+    margin-top: $space-3;
     gap: $space-3;
   }
 
@@ -776,20 +958,15 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   }
 
   &__best-num {
-    font-family: $mono;
-    font-size: 40rpx;
-    font-weight: 700;
-    color: $t-text;
+    font-size: 44rpx;
+    font-weight: 300;
+    color: $t-ink;
     font-variant-numeric: tabular-nums;
-
-    &--gold {
-      color: $t-gold;
-    }
   }
 
   &__best-label {
     font-size: $font-micro;
-    color: $t-dim;
+    color: $t-faint;
   }
 
   &__rank-badge {
@@ -797,7 +974,7 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     flex-direction: column;
     align-items: center;
     gap: 4rpx;
-    background: $t-panel-2;
+    background: $blue-tint;
     border-radius: $radius-md;
     padding: $space-2 $space-3;
   }
@@ -807,66 +984,9 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   }
 
   &__rank-text {
-    font-family: $mono;
     font-size: 22rpx;
-    font-weight: 700;
-    color: $t-gold;
-  }
-
-  // ---------- 等级档位 ----------
-
-  &__level {
-    margin-top: $space-4;
-    display: flex;
-    flex-direction: column;
-    gap: $space-2;
-  }
-
-  &__level-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
-  &__level-title {
-    font-size: $font-body;
-    font-weight: 700;
-    color: $t-text;
-  }
-
-  &__level-note {
-    font-size: $font-micro;
-    color: $t-dim;
-  }
-
-  &__chips {
-    display: flex;
-    gap: $space-2;
-  }
-
-  &__chip {
-    flex: 1;
-    height: 84rpx;
-    border-radius: $radius-md;
-    background: $t-panel;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &.is-active {
-      background: $t-gold-fill;
-    }
-  }
-
-  &__chip-num {
-    font-family: $mono;
-    font-size: 30rpx;
-    font-weight: 700;
-    color: $t-dim;
-
-    .is-active & {
-      color: $t-ink;
-    }
+    font-weight: 600;
+    color: $blue-deep;
   }
 
   // ---------- 排行榜 ----------
@@ -881,7 +1001,8 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     align-items: center;
     gap: $space-2;
     padding: $space-6 $space-4;
-    background: $t-panel;
+    background: $card;
+    border: 2rpx solid $line;
     border-radius: $radius-lg;
     font-size: $font-caption;
     color: $t-dim;
@@ -889,15 +1010,13 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
   &__lb-retry {
     padding: $space-1 $space-4;
-    background: $t-panel-2;
+    background: $fill;
     border-radius: $radius-pill;
-    color: $t-text;
+    color: $t-ink;
     font-size: $font-caption;
   }
 
   &__lb {
-    background: $t-panel;
-    border-radius: $radius-lg;
     padding: $space-3 $space-3 $space-2;
     display: flex;
     flex-direction: column;
@@ -913,21 +1032,20 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
   &__lb-title {
     font-size: $font-body;
-    font-weight: 700;
-    color: $t-text;
+    font-weight: 600;
+    color: $t-ink;
   }
 
   &__lb-count {
-    font-family: $mono;
     font-size: $font-micro;
-    color: $t-dim;
+    color: $t-faint;
   }
 
   &__lb-mine {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: $t-panel-2;
+    background: $blue-tint;
     border-radius: $radius-md;
     padding: $space-2 $space-3;
     margin-bottom: $space-1;
@@ -938,10 +1056,9 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     }
 
     &-val {
-      font-family: $mono;
       font-size: $font-caption;
-      font-weight: 700;
-      color: $t-gold;
+      font-weight: 600;
+      color: $blue-deep;
     }
   }
 
@@ -953,7 +1070,7 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     padding: $space-2 $space-3;
 
     &.is-me {
-      background: $t-panel-2;
+      background: $fill;
     }
   }
 
@@ -967,16 +1084,15 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   &__lb-rank {
     width: 32rpx;
     text-align: center;
-    font-family: $mono;
     font-size: $font-caption;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   &__lb-avatar {
     width: 56rpx;
     height: 56rpx;
     border-radius: 50%;
-    background: $t-panel-2;
+    background: $fill;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -990,58 +1106,30 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
     &-char {
       font-size: $font-caption;
-      color: $t-dim;
+      color: $t-faint;
     }
   }
 
   &__lb-name {
     font-size: $font-caption;
-    color: $t-text;
+    color: $t-ink;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   &__lb-score {
-    font-family: $mono;
     font-size: $font-caption;
-    font-weight: 600;
-    color: $t-text;
+    font-weight: 500;
+    color: $t-ink;
     font-variant-numeric: tabular-nums;
   }
 
-  // ---------- 开始按钮 ----------
+  // ---------- 游戏面板 ----------
 
   &__menu-flex {
     flex: 1;
   }
-
-  &__start-wrap {
-    padding: $space-3 0 $space-1;
-  }
-
-  &__start-btn {
-    height: 108rpx;
-    border-radius: $radius-lg;
-    background: $t-gold-fill;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $space-2;
-  }
-
-  &__start-icon {
-    color: $t-ink;
-    font-size: $font-body;
-  }
-
-  &__start-text {
-    color: $t-ink;
-    font-size: 34rpx;
-    font-weight: 700;
-  }
-
-  // ---------- 游戏面板 ----------
 
   &__game {
     position: relative;
@@ -1050,69 +1138,84 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     min-height: calc(100vh - 48rpx - env(safe-area-inset-bottom));
   }
 
-  &__hud {
+  // 三枚 statchip + 暂停（原型 .battletop）
+  &__battletop {
     display: flex;
-    align-items: center;
-    gap: $space-5;
-    padding: $space-2 $space-2 $space-1;
+    align-items: stretch;
+    gap: $space-2;
+    padding-top: $space-1;
   }
 
-  &__hud-score {
-    display: flex;
-    flex-direction: column;
-    gap: 2rpx;
-
-    &-num {
-      font-family: $mono;
-      font-size: 56rpx;
-      font-weight: 700;
-      color: $t-text;
-      font-variant-numeric: tabular-nums;
-      line-height: 1.1;
-    }
-
-    &-label {
-      font-size: $font-micro;
-      color: $t-dim;
-    }
-  }
-
-  &__hud-item {
+  &__statchip {
+    flex: 1;
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
+    padding: $space-2 20rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2rpx;
+    min-width: 0;
 
-    &-num {
-      font-family: $mono;
-      font-size: 40rpx;
-      font-weight: 600;
-      color: $t-text;
+    &-v {
+      font-size: 32rpx;
+      font-weight: 300;
+      letter-spacing: 1rpx;
+      color: $t-ink;
       font-variant-numeric: tabular-nums;
-      line-height: 1.1;
+      line-height: 1.2;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
 
-      &--cyan {
-        color: $t-cyan;
+      &--accent {
+        color: $blue-deep;
+        font-weight: 600;
       }
     }
 
-    &-label {
-      font-size: $font-micro;
-      color: $t-dim;
+    &-k {
+      font-size: 20rpx;
+      color: $t-faint;
     }
   }
 
   &__pause-btn {
-    margin-left: auto;
-    width: 76rpx;
-    height: 76rpx;
+    width: 72rpx;
+    align-self: stretch;
     border-radius: $radius-md;
-    background: $t-panel-2;
+    background: $card;
+    border: 2rpx solid $line-strong;
     display: flex;
     align-items: center;
     justify-content: center;
     color: $t-dim;
     font-size: $font-body;
+  }
+
+  // 对局内速度切换（恒定/渐进 即时生效）
+  &__speedrow {
+    display: flex;
+    justify-content: center;
+    gap: $space-2;
+    padding: $space-2 0 0;
+  }
+
+  &__speed-chip {
+    border: 2rpx solid $line-strong;
+    border-radius: $radius-pill;
+    background: $card;
+    padding: 6rpx 24rpx;
+    color: $t-dim;
+    font-size: $font-micro;
+
+    &.is-active {
+      background: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
+      font-weight: 600;
+    }
   }
 
   &__stage {
@@ -1148,7 +1251,7 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(58, 48, 38, 0.55);
+    background: rgba(46, 65, 84, 0.45);
   }
 
   &__mask-card {
@@ -1156,9 +1259,9 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     max-width: 320px;
     max-height: 80vh;
     overflow-y: auto;
-    background: $t-panel;
-    border: 2rpx solid $t-line;
-    border-radius: 40rpx;
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-lg;
     padding: $space-5 $space-4 $space-3;
     display: flex;
     flex-direction: column;
@@ -1168,25 +1271,25 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
   &__mask-title {
     font-size: $font-title;
-    font-weight: 700;
-    color: $t-text;
+    font-weight: 600;
+    color: $t-ink;
   }
 
   &__mask-btn {
     width: 100%;
     height: 88rpx;
     border-radius: $radius-md;
-    background: $t-panel-2;
+    background: $fill;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: $t-text;
+    color: $t-ink;
     font-size: $font-body;
 
     &--primary {
-      background: $t-gold-fill;
-      color: $t-ink;
-      font-weight: 700;
+      background: $blue;
+      color: #fff;
+      font-weight: 600;
     }
   }
 
@@ -1204,25 +1307,24 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   &__over-title {
     font-family: $mono;
     font-size: 30rpx;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 10rpx;
     color: $t-red;
   }
 
   &__over-badge {
-    background: rgba(244, 185, 66, 0.15);
+    background: $blue-tint;
     border-radius: $radius-pill;
     padding: 6rpx 24rpx;
     font-size: $font-caption;
-    font-weight: 700;
-    color: $t-gold;
+    font-weight: 600;
+    color: $blue-deep;
   }
 
   &__over-score {
-    font-family: $mono;
     font-size: 88rpx;
-    font-weight: 700;
-    color: $t-text;
+    font-weight: 300;
+    color: $t-ink;
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
   }
@@ -1242,68 +1344,74 @@ $mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
     }
 
     &-text {
-      font-family: $mono;
       font-size: $font-caption;
-      font-weight: 700;
-      color: $t-gold;
+      font-weight: 600;
+      color: $blue-deep;
     }
   }
 
-  // ---------- 按钮排 ----------
+  // ---------- 按钮排（原型 .ctrlbar：白键 + accent 旋转 + 蓝实底直落 + 隔离带 + HOLD） ----------
 
   &__pad {
     display: flex;
     align-items: center;
-    gap: $space-2;
+    justify-content: center;
+    gap: 14rpx;
     padding: $space-2 0 0;
   }
 
-  &__pad-flex {
-    flex: 1;
+  &__pad-iso {
+    width: 32rpx;
+    flex: none;
   }
 
-  &__pad-btn {
-    height: 120rpx;
-    border-radius: $radius-lg;
-    background: $t-panel-2;
+  &__key {
+    height: 108rpx;
+    border-radius: $radius-md;
+    background: $card;
+    border: 2rpx solid $line-strong;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: $space-2;
-    color: $t-text;
-    font-family: $mono;
+    gap: 2rpx;
+    color: $t-ink;
+    flex: none;
+
+    &--move {
+      width: 108rpx;
+    }
+
+    &--accent {
+      width: 140rpx;
+      background: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
+    }
+
+    &--drop {
+      width: 112rpx;
+      background: $blue;
+      border-color: $blue;
+      color: #fff;
+    }
+  }
+
+  &__key-icon {
     font-size: 34rpx;
-    font-weight: 700;
+    line-height: 1.1;
   }
 
-  &__pad-btn--move {
-    width: 104rpx;
-  }
-
-  &__pad-btn--rotate {
-    width: 176rpx;
-    font-family: 'PingFang SC', 'Noto Sans SC', sans-serif;
-    font-size: $font-body;
-  }
-
-  &__pad-rotate-icon {
-    font-size: 34rpx;
-  }
-
-  &__pad-btn--hold {
-    width: 128rpx;
-    font-size: 26rpx;
-  }
-
-  &__pad-btn--drop {
-    width: 120rpx;
+  &__key-label {
+    font-size: 20rpx;
+    font-weight: 600;
   }
 
   &__hint {
     padding: $space-2 0 0;
     text-align: center;
     font-size: $font-micro;
-    color: #a99c89;
+    color: $t-faint;
   }
 }
 </style>

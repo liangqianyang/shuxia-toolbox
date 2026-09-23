@@ -115,8 +115,8 @@ function onClear() {
 
     &--on {
       opacity: 1;
-      border-color: $color-primary-dark;
-      box-shadow: 0 0 0 2rpx rgba(200, 149, 108, 0.35);
+      border-color: $blue-deep;
+      box-shadow: 0 0 0 2rpx rgba(88, 166, 220, 0.4);
     }
   }
 

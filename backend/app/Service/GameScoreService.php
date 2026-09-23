@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Exception\BizException;
 use App\Model\GameScore;
 use App\Model\WechatUser;
+use Hyperf\Database\Exception\QueryException;
 
 /** 单机游戏成绩：提交（保最好）与排行榜。防刷是宽松合理性校验而非安全边界——成绩由客户端上报，只挡明显编造值。 */
 final class GameScoreService
@@ -37,11 +38,9 @@ final class GameScoreService
             ->first();
         $isNewBest = $row === null || $score > (int) $row->score;
         if ($isNewBest) {
-            // UNIQUE(game_key, user_id) 兜底并发：冲突时以更小店内数据为准重读一次
-            GameScore::query()->updateOrCreate(
-                ['game_key' => self::GAME_TETRIS, 'user_id' => $userId],
-                ['score' => $score, 'lines_cleared' => $lines, 'level' => $level],
-            );
+            $this->upsertBest(self::GAME_TETRIS, $userId, [
+                'score' => $score, 'lines_cleared' => $lines, 'level' => $level,
+            ]);
         }
 
         $best = $isNewBest ? $score : (int) $row->score;
@@ -50,6 +49,39 @@ final class GameScoreService
             'isNewBest' => $isNewBest,
             'rank' => $this->rankOf(self::GAME_TETRIS, $best),
         ];
+    }
+
+    /** UNIQUE(game_key, user_id) 并发首报兜底：双端同刻 insert 必有一方撞唯一键
+     *  （updateOrCreate 自身不捕获冲突，会直接 500）。撞了就改走「只升不降」合并更新。 */
+    private function upsertBest(string $gameKey, int $userId, array $payload): void
+    {
+        try {
+            GameScore::query()->updateOrCreate(
+                ['game_key' => $gameKey, 'user_id' => $userId],
+                $payload,
+            );
+        } catch (QueryException $e) {
+            if (stripos($e->getMessage(), 'Duplicate entry') === false) {
+                throw $e;
+            }
+            /** @var null|GameScore $row */
+            $row = GameScore::query()
+                ->where('game_key', $gameKey)
+                ->where('user_id', $userId)
+                ->first();
+            if ($row === null) {
+                throw $e; // 冲突却找不到行，交给上层看清原因
+            }
+            $row->score = max((int) $row->score, (int) ($payload['score'] ?? 0));
+            $row->lines_cleared = max((int) $row->lines_cleared, (int) ($payload['lines_cleared'] ?? 0));
+            if (array_key_exists('level', $payload)) {
+                $row->level = (int) $payload['level'];
+            }
+            if (array_key_exists('progress_detail', $payload)) {
+                $row->progress_detail = (string) $payload['progress_detail'];
+            }
+            $row->save();
+        }
     }
 
     /**
@@ -150,10 +182,7 @@ final class GameScoreService
             if ($progress !== null) {
                 $payload['progress_detail'] = json_encode($progress, JSON_UNESCAPED_UNICODE);
             }
-            GameScore::query()->updateOrCreate(
-                ['game_key' => self::GAME_SOKOBAN, 'user_id' => $userId],
-                $payload,
-            );
+            $this->upsertBest(self::GAME_SOKOBAN, $userId, $payload);
         }
 
         $best = $isNewBest ? $score : (int) $row->score;

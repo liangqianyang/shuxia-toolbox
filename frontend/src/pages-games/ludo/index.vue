@@ -10,7 +10,7 @@
         <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
         <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
       </view>
-      <text class="lobby__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
+      <text class="lobby__rules" @tap="rulesOpen = true">玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -18,7 +18,7 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
-          <text class="room__sound" @tap="rulesOpen = true">❓</text>
+          <text class="room__sound" @tap="rulesOpen = true">?</text>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -154,16 +154,16 @@
         <!-- 聊天条（同 uno：消息竖向每行一条，💬 触发按钮靠左） -->
         <view class="chat-zone">
           <view class="chat-bar">
-            <view v-if="roomChat.recentChats.value.length" class="chat-feed">
-              <view v-for="m in roomChat.recentChats.value" :key="m.seq" class="chat-feed-item">
+            <view v-if="feedChats.length" class="chat-feed">
+              <view v-for="m in feedChats" :key="m.seq" class="chat-feed-item">
                 <text class="chat-feed-name">{{ seatNameOf(m.seat) }}：</text>
                 <text class="chat-feed-text" :class="{ 'chat-feed-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
               </view>
             </view>
-            <view class="chat-trigger" hover-class="press" @tap="roomChat.chatPanelOpen.value = true">
+            <view class="chat-trigger" hover-class="press" @tap="openChat">
               <text class="chat-trigger-icon">💬</text>
               <text class="chat-trigger-hint">快捷聊天…</text>
-              <text v-if="roomChat.unreadChat.value" class="chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+              <text v-if="chatUnread" class="chat-unread">{{ chatUnread > 9 ? '9+' : chatUnread }}</text>
             </view>
           </view>
         </view>
@@ -282,6 +282,11 @@ const roomChat = useRoomChat({
   nameOf: (m) => seatNameOf(m.seat),
   onIncoming: () => playLudoSound('chat'),
 })
+const feedChats = computed(() => roomChat.recentChats.value)
+const chatUnread = computed(() => roomChat.unreadChat.value)
+function openChat() {
+  roomChat.chatPanelOpen.value = true
+}
 const seatNameOf = (seat: number | null | undefined): string =>
   seat === null || seat === undefined ? '?' : (state.value?.players.find((p) => p.seat === seat)?.nickname ?? '?')
 
@@ -489,7 +494,10 @@ function ensureDiceAnim() {
 }
 
 function stopDiceAnimIfIdle() {
-  if (centerDice.value?.face == null) return // 还有摇骰会话在跑
+  // face==null 表示正在摇（轮播 roll 帧），别停表；
+  // 但安全网路径已把 centerDice 置 null 再进来（undefined==null 也为真），
+  // 那时必须停表，否则 120ms interval 永久空转泄漏页面作用域。
+  if (centerDice.value !== null && centerDice.value.face == null) return
   if (diceAnimTimer) {
     clearInterval(diceAnimTimer)
     diceAnimTimer = null
@@ -842,6 +850,12 @@ onHide(() => {
 
 onUnload(() => {
   stopSync()
+  // 页面级定时器兜底清理（摇骰安全网 4s 才停，卸载时直接收掉）
+  clearCenterDiceTimers()
+  if (diceAnimTimer) {
+    clearInterval(diceAnimTimer)
+    diceAnimTimer = null
+  }
 })
 
 onShareAppMessage(() => {
@@ -854,18 +868,18 @@ onShareAppMessage(() => {
 </script>
 
 <style lang="scss" scoped>
-// 「飞行棋」色板：与枫趣牌局同款奶油白底 + 墨绿 + 枫叶红主色 + 金黄强调（60/25/10/5）
-$felt: #21483D;
-$cream: #FFF8ED;
-$ink: #493E37;
-$red: #E85D4A;
+// v4 小清新：墨绿牌桌→白/冷墨、枫红→清新蓝、座位色转马卡龙（见 ludoRender.ts）；金黄只留 庄/平局高亮 等小点缀
+$felt: #2E4154;
+$cream: #FFFFFF;
+$ink: #2E4154;
+$red: #E8806F;
 $gold: #F4B942;
-$maple-light: #FBE4D5;
+$maple-light: #F2F6F9;
 
 .ludo {
   min-height: 100vh;
   box-sizing: border-box;
-  background: linear-gradient(180deg, $cream 0%, #FDF1E0 100%);
+  background: $bg;
   color: $ink;
 
   // 去掉小程序 button 默认的 ::after 描边；disabled 时微信会套默认灰色，需显式覆盖
@@ -884,13 +898,13 @@ $maple-light: #FBE4D5;
     width: 240rpx;
     height: 240rpx;
     border-radius: 52rpx;
-    box-shadow: 0 12rpx 32rpx rgba(73, 62, 55, 0.18);
+    box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.18);
   }
 
   &__title {
     margin-top: 32rpx;
     font-size: 52rpx;
-    font-weight: 700;
+    font-weight: 600;
     color: $felt;
     letter-spacing: 8rpx;
   }
@@ -898,19 +912,19 @@ $maple-light: #FBE4D5;
   &__subtitle {
     margin-top: 14rpx;
     font-size: 24rpx;
-    color: rgba(73, 62, 55, 0.6);
+    color: rgba(46, 65, 84, 0.6);
   }
 
   &__create {
     margin-top: 72rpx;
     width: 500rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
     font-size: 32rpx;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 48rpx;
 
-    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
 
   &__join {
@@ -923,17 +937,17 @@ $maple-light: #FBE4D5;
   &__rules {
     margin-top: 28rpx;
     font-size: 26rpx;
-    color: $ink;
+    color: #3b86b8;
     text-decoration: underline;
   }
 
-  // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
+  // 加入区样式与五子棋大厅同款：白底 + 蓝描边按钮
   &__input {
     width: 320rpx;
     height: 88rpx;
     padding: 0 24rpx;
     background: #ffffff;
-    border: 2rpx solid #f0e4d7;
+    border: 2rpx solid #dde6ec;
     border-radius: 20rpx;
     color: $ink;
     font-size: 28rpx;
@@ -948,8 +962,8 @@ $maple-light: #FBE4D5;
     line-height: 88rpx;
     border-radius: 20rpx;
     background: #ffffff;
-    color: #a8744b;
-    border: 2rpx solid #c8956c;
+    color: #3b86b8;
+    border: 2rpx solid #dde6ec;
     font-size: 28rpx;
     box-sizing: border-box;
 
@@ -998,7 +1012,7 @@ $maple-light: #FBE4D5;
     font-size: 24rpx;
     font-weight: 600;
     color: $red;
-    background: rgba(232, 93, 74, 0.12);
+    background: rgba(232, 128, 111, 0.12);
     border-radius: 28rpx;
     padding: 8rpx 24rpx;
   }
@@ -1014,9 +1028,9 @@ $maple-light: #FBE4D5;
   border-radius: 20rpx;
   padding: 16rpx 24rpx;
   font-size: 24rpx;
-  color: #8a6a1f;
+  color: #c99a34;
 
-  &__go { font-weight: 700; }
+  &__go { font-weight: 600; }
 }
 
 /* ---------- 等待室 ---------- */
@@ -1039,7 +1053,7 @@ $maple-light: #FBE4D5;
     background: #ffffff;
     border-radius: 24rpx;
     padding: 24rpx 12rpx 16rpx;
-    box-shadow: 0 6rpx 18rpx rgba(73, 62, 55, 0.08);
+    box-shadow: 0 6rpx 18rpx rgba(46, 65, 84, 0.08);
   }
 
   &__avatar {
@@ -1075,7 +1089,7 @@ $maple-light: #FBE4D5;
     background: $gold;
     border-radius: 12rpx;
     padding: 2rpx 10rpx;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   &__dot {
@@ -1085,9 +1099,9 @@ $maple-light: #FBE4D5;
     width: 16rpx;
     height: 16rpx;
     border-radius: 50%;
-    background: #4fbf6b;
+    background: #5fb98c;
 
-    &--off { background: #b8b0a8; }
+    &--off { background: #dde6ec; }
   }
 
   &__start,
@@ -1097,19 +1111,19 @@ $maple-light: #FBE4D5;
 
   &__start {
     width: 500rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
     font-size: 30rpx;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 48rpx;
 
-    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
 
   &__hint {
     text-align: center;
     font-size: 26rpx;
-    color: rgba(73, 62, 55, 0.6);
+    color: rgba(46, 65, 84, 0.6);
   }
 }
 
@@ -1132,11 +1146,11 @@ $maple-light: #FBE4D5;
   border-radius: 20rpx;
   padding: 12rpx 16rpx;
   position: relative;
-  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.06);
+  box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.06);
 
   &--current {
     border-color: $gold;
-    background: #FDF3D8;
+    background: #E9F4FB;
   }
 
   &--left { opacity: 0.5; }
@@ -1174,7 +1188,7 @@ $maple-light: #FBE4D5;
     width: 20rpx;
     height: 20rpx;
     border-radius: 50%;
-    background: #b8b0a8;
+    background: #dde6ec;
     border: 3rpx solid #ffffff;
   }
 
@@ -1199,13 +1213,13 @@ $maple-light: #FBE4D5;
     display: flex;
     gap: 10rpx;
     font-size: 20rpx;
-    color: rgba(73, 62, 55, 0.6);
+    color: rgba(46, 65, 84, 0.6);
   }
 
-  &__place { color: #8a6a1f; font-weight: 700; }
-  &__auto { color: #2f9e50; font-weight: 700; }
+  &__place { color: #c99a34; font-weight: 600; }
+  &__auto { color: #5fb98c; font-weight: 600; }
   &__idle { color: $red; }
-  &__lefttag { color: #9a9189; }
+  &__lefttag { color: #a4b3c0; }
 
   &__timer {
     font-size: 26rpx;
@@ -1234,8 +1248,8 @@ $maple-light: #FBE4D5;
   position: relative;
   background: $cream;
   border-radius: 24rpx;
-  border: 4rpx solid rgba(33, 72, 61, 0.14);
-  box-shadow: 0 12rpx 32rpx rgba(73, 62, 55, 0.16);
+  border: 4rpx solid rgba(46, 65, 84, 0.14);
+  box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.16);
 
   &__img {
     width: 100%;
@@ -1255,7 +1269,7 @@ $maple-light: #FBE4D5;
   &__img {
     width: 100%;
     height: 100%;
-    filter: drop-shadow(2rpx 4rpx 4rpx rgba(73, 62, 55, 0.35));
+    filter: drop-shadow(2rpx 4rpx 4rpx rgba(46, 65, 84, 0.35));
   }
 
   &--mine {
@@ -1263,7 +1277,7 @@ $maple-light: #FBE4D5;
     animation: plane-pulse 0.9s ease-in-out infinite;
 
     .plane__img {
-      filter: drop-shadow(0 0 10rpx rgba(244, 185, 66, 0.95)) drop-shadow(2rpx 4rpx 4rpx rgba(73, 62, 55, 0.35));
+      filter: drop-shadow(0 0 10rpx rgba(244, 185, 66, 0.95)) drop-shadow(2rpx 4rpx 4rpx rgba(46, 65, 84, 0.35));
     }
   }
 
@@ -1296,9 +1310,9 @@ $maple-light: #FBE4D5;
     width: 100%;
     aspect-ratio: 1;
     background: #fff;
-    border: 6rpx solid rgba(33, 72, 61, 0.9); /* 兜底色，行内样式按掷骰人座位色覆盖 */
+    border: 6rpx solid rgba(46, 65, 84, 0.9); /* 兜底色，行内样式按掷骰人座位色覆盖 */
     border-radius: 26%;
-    box-shadow: 0 6rpx 16rpx rgba(33, 72, 61, 0.45);
+    box-shadow: 0 6rpx 16rpx rgba(46, 65, 84, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1329,7 +1343,7 @@ $maple-light: #FBE4D5;
   line-height: 56rpx;
   padding: 0 28rpx;
   border-radius: 28rpx;
-  background: rgba(33, 72, 61, 0.92);
+  background: rgba(46, 65, 84, 0.92);
   color: $cream;
   font-size: 24rpx;
   opacity: 0;
@@ -1358,13 +1372,13 @@ $maple-light: #FBE4D5;
 
   &__whose {
     font-size: 24rpx;
-    color: rgba(73, 62, 55, 0.7);
+    color: rgba(46, 65, 84, 0.7);
   }
 
   &__countdown {
     font-size: 22rpx;
-    font-weight: 700;
-    color: #8a6a1f;
+    font-weight: 600;
+    color: #c99a34;
   }
 
   &__body {
@@ -1376,18 +1390,18 @@ $maple-light: #FBE4D5;
   &__roll {
     margin: 0;
     width: 280rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
     font-size: 30rpx;
-    font-weight: 800;
+    font-weight: 600;
     border-radius: 44rpx;
     animation: roll-breathe 1.4s ease-in-out infinite;
 
     &--move {
-      background: rgba(244, 185, 66, 0.3);
-      border: 3rpx solid rgba(244, 185, 66, 0.7);
+      background: rgba(88, 166, 220, 0.16);
+      border: 3rpx solid rgba(88, 166, 220, 0.65);
       animation: none;
-      color: #8a6a1f;
+      color: #3b86b8;
     }
 
     &[disabled] { opacity: 0.85; }
@@ -1396,10 +1410,10 @@ $maple-light: #FBE4D5;
   &__auto-on,
   &__wait {
     font-size: 24rpx;
-    color: rgba(73, 62, 55, 0.55);
+    color: rgba(46, 65, 84, 0.55);
   }
 
-  &__auto-on { color: #2f9e50; font-weight: 700; }
+  &__auto-on { color: #5fb98c; font-weight: 600; }
 
   &__actions { display: flex; }
 
@@ -1414,9 +1428,9 @@ $maple-light: #FBE4D5;
     border-radius: 32rpx;
 
     &--on {
-      background: #4fbf6b;
+      background: #5fb98c;
       color: #ffffff;
-      font-weight: 700;
+      font-weight: 600;
     }
   }
 }
@@ -1441,7 +1455,7 @@ $maple-light: #FBE4D5;
 .result-mask {
   position: fixed;
   inset: 0;
-  background: rgba(73, 62, 55, 0.55);
+  background: rgba(46, 65, 84, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1482,7 +1496,7 @@ $maple-light: #FBE4D5;
     display: flex;
     align-items: center;
     gap: 14rpx;
-    background: rgba(33, 72, 61, 0.06);
+    background: rgba(46, 65, 84, 0.06);
     border-radius: 16rpx;
     padding: 12rpx 16rpx;
 
@@ -1498,7 +1512,7 @@ $maple-light: #FBE4D5;
     justify-content: center;
     font-size: 24rpx;
     font-weight: 900;
-    background: rgba(33, 72, 61, 0.12);
+    background: rgba(46, 65, 84, 0.12);
     color: $felt;
 
     &--1 { background: $gold; color: $felt; }
@@ -1523,7 +1537,7 @@ $maple-light: #FBE4D5;
   &__name {
     flex: 1;
     font-size: 26rpx;
-    font-weight: 700;
+    font-weight: 600;
     color: $ink;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1532,7 +1546,7 @@ $maple-light: #FBE4D5;
 
   &__detail {
     font-size: 20rpx;
-    color: rgba(73, 62, 55, 0.6);
+    color: rgba(46, 65, 84, 0.6);
   }
 
   &__actions {
@@ -1544,17 +1558,17 @@ $maple-light: #FBE4D5;
   &__rematch {
     margin: 0;
     width: 240rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
     font-size: 28rpx;
-    font-weight: 800;
+    font-weight: 600;
     border-radius: 42rpx;
   }
 
   &__exit {
     margin: 0;
     width: 180rpx;
-    background: rgba(33, 72, 61, 0.08);
+    background: rgba(46, 65, 84, 0.08);
     color: $felt;
     font-size: 28rpx;
     border-radius: 42rpx;
@@ -1565,7 +1579,7 @@ $maple-light: #FBE4D5;
 .profile-mask {
   position: fixed;
   inset: 0;
-  background: rgba(73, 62, 55, 0.5);
+  background: rgba(46, 65, 84, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1602,7 +1616,7 @@ $maple-light: #FBE4D5;
     width: 128rpx;
     height: 128rpx;
     border-radius: 50%;
-    background: rgba(33, 72, 61, 0.08);
+    background: rgba(46, 65, 84, 0.08);
 
     &--placeholder {
       display: flex;
@@ -1615,7 +1629,7 @@ $maple-light: #FBE4D5;
 
   &__hint {
     font-size: 22rpx;
-    color: rgba(73, 62, 55, 0.6);
+    color: rgba(46, 65, 84, 0.6);
   }
 
   &__input {
@@ -1623,7 +1637,7 @@ $maple-light: #FBE4D5;
     width: 100%;
     height: 88rpx;
     background: #ffffff;
-    border: 3rpx solid rgba(33, 72, 61, 0.25);
+    border: 3rpx solid rgba(46, 65, 84, 0.25);
     border-radius: 20rpx;
     padding: 0 24rpx;
     font-size: 28rpx;
@@ -1636,7 +1650,7 @@ $maple-light: #FBE4D5;
     background: $gold;
     color: $felt;
     font-size: 30rpx;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 44rpx;
   }
 }
@@ -1646,38 +1660,38 @@ $maple-light: #FBE4D5;
 .opening {
   width: 82%;
   max-width: 640rpx;
-  background: #fff8ed;
+  background: #ffffff;
   border-radius: 28rpx;
-  border: 4rpx solid #21483d;
+  border: 2rpx solid #dde6ec;
   padding: 32rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20rpx;
 }
-.opening__title { font-size: 32rpx; font-weight: 800; color: #21483d; }
+.opening__title { font-size: 32rpx; font-weight: 600; color: #2e4154; }
 .opening__grid { display: flex; flex-wrap: wrap; gap: 16rpx; justify-content: center; }
 .opening__side {
   display: flex; flex-direction: column; align-items: center; gap: 6rpx; width: 156rpx;
-  background: rgba(33, 72, 61, 0.05); border-radius: 16rpx; padding: 14rpx 8rpx;
+  background: rgba(46, 65, 84, 0.05); border-radius: 16rpx; padding: 14rpx 8rpx;
   border: 3rpx solid transparent;
 }
 .opening__side--tie { border-color: #f4b942; background: rgba(244, 185, 66, 0.14); }
 .opening__avatar { width: 76rpx; height: 76rpx; border-radius: 50%; }
-.opening__name { font-size: 22rpx; color: #21483d; max-width: 140rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.opening__dice { font-size: 22rpx; color: #21483d; }
-.opening__sum { font-weight: 800; color: #e85d4a; font-size: 30rpx; }
-.opening__wait { font-size: 20rpx; color: #9aa79e; }
-.opening__countdown { font-size: 26rpx; font-weight: 800; color: #e85d4a; }
+.opening__name { font-size: 22rpx; color: #2e4154; max-width: 140rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opening__dice { font-size: 22rpx; color: #2e4154; }
+.opening__sum { font-weight: 600; color: #3b86b8; font-size: 30rpx; }
+.opening__wait { font-size: 20rpx; color: #a4b3c0; }
+.opening__countdown { font-size: 26rpx; font-weight: 600; color: #3b86b8; }
 .opening__btn {
-  width: 100%; height: 92rpx; line-height: 92rpx; font-size: 32rpx; font-weight: 700;
-  background: #e85d4a; color: #fff; border-radius: 18rpx; border: none;
+  width: 100%; height: 92rpx; line-height: 92rpx; font-size: 32rpx; font-weight: 600;
+  background: #58a6dc; color: #fff; border-radius: 18rpx; border: none;
 }
 .opening__btn[disabled] { opacity: 0.45; }
 .opening__side--win { border-color: #f4b942; background: rgba(244, 185, 66, 0.16); animation: opening-win-pulse 1s ease-in-out infinite; }
 .opening__side--dim { opacity: 0.55; }
 .opening__crown {
-  font-size: 20rpx; font-weight: 800; background: #f4b942; color: #21483d;
+  font-size: 20rpx; font-weight: 600; background: #f4b942; color: #2e4154;
   border-radius: 999rpx; padding: 4rpx 14rpx; box-shadow: 0 4rpx 10rpx rgba(0,0,0,0.25);
 }
 @keyframes opening-win-pulse {
@@ -1688,8 +1702,8 @@ $maple-light: #FBE4D5;
 /* ── 房间聊天 ── */
 .seat-bubble {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8rpx);
-  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(33, 72, 61, 0.15);
-  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(33, 72, 61, 0.18); font-size: 24rpx; color: #21483d;
+  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(46, 65, 84, 0.15);
+  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.18); font-size: 24rpx; color: #2e4154;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 12;
   animation: ludo-bubble-pop 0.18s ease-out;
 }
@@ -1705,24 +1719,24 @@ $maple-light: #FBE4D5;
   bottom: 0;
   z-index: 20;
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 248, 237, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   border-radius: 24rpx 24rpx 0 0;
-  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+  box-shadow: 0 -4rpx 20rpx rgba(46, 65, 84, 0.1);
 }
 .chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
 .chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: rgba(255, 255, 255, 0.85); border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
 .chat-feed-item { display: flex; align-items: baseline; font-size: 22rpx; }
-.chat-feed-name { color: #9aa79e; flex-shrink: 0; }
-.chat-feed-text { color: rgba(33, 72, 61, 0.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-feed-name { color: #3b86b8; font-weight: 600; flex-shrink: 0; }
+.chat-feed-text { color: rgba(46, 65, 84, 0.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-feed-text--emoji { font-size: 30rpx; }
 .chat-trigger {
   position: relative; display: flex; align-items: center; gap: 10rpx;
-  height: 60rpx; padding: 0 26rpx; background: #fff; border: 2rpx solid rgba(33, 72, 61, 0.12); border-radius: 30rpx;
+  height: 60rpx; padding: 0 26rpx; background: #e9f4fb; border-radius: 30rpx;
 }
 .chat-trigger-icon { font-size: 26rpx; }
-.chat-trigger-hint { font-size: 24rpx; color: rgba(33, 72, 61, 0.45); }
+.chat-trigger-hint { font-size: 24rpx; color: #3b86b8; }
 .chat-unread {
-  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: #e85d4a; color: #fff; font-size: 18rpx;
+  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: #e8806f; color: #fff; font-size: 18rpx;
   border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx; text-align: center;
 }
 </style>

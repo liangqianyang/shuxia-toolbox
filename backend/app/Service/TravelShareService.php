@@ -38,6 +38,11 @@ final class TravelShareService
         }
 
         $title = is_string($trip['title'] ?? null) ? trim((string) $trip['title']) : '未命名行程';
+        // 懒清理：云保存是低频动作，顺手删 30 天前的旧分享（此前只增不删，2MB/行会无限堆积）
+        TravelShare::query()
+            ->where('created_at', '<', date('Y-m-d H:i:s', time() - 30 * 86400))
+            ->limit(20)
+            ->delete();
         $code = $this->newCode();
         /** @var TravelShare $share */
         $share = TravelShare::query()->create([

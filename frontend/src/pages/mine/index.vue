@@ -1,63 +1,65 @@
 <template>
   <view class="mine">
-    <view class="mine__profile">
-      <image v-if="profileAvatarUrl" class="mine__avatar" :src="displayAvatarUrl" mode="aspectFill" />
-      <view v-else class="mine__avatar mine__avatar--fallback">🍁</view>
-      <view class="mine__profile-copy">
-        <text class="mine__name">{{ displayName }}</text>
-        <text class="mine__caption">{{ user ? '工具与偏好将同步到当前账号' : '登录后保存你的首页工具设置' }}</text>
+    <view class="mine__card">
+      <view class="mine__profile">
+        <image v-if="profileAvatarUrl" class="mine__avatar" :src="displayAvatarUrl" mode="aspectFill" />
+        <view v-else class="mine__avatar mine__avatar--fallback">🍁</view>
+        <view class="mine__profile-copy">
+          <text class="mine__name">{{ displayName }}</text>
+          <text class="mine__caption">{{ user ? '工具与偏好将同步到当前账号' : '登录后保存你的首页工具设置' }}</text>
+        </view>
+        <view v-if="!user" class="mine__pillbtn" hover-class="press" @tap="authorizeProfile">登录</view>
+        <view v-else class="mine__pillbtn" hover-class="press" @tap="toggleProfileEditor">编辑资料</view>
       </view>
-      <view v-if="!user" class="mine__login-btn" hover-class="press" @tap="authorizeProfile">登录</view>
-      <view v-else class="mine__profile-action" hover-class="press" @tap="toggleProfileEditor">编辑资料</view>
-    </view>
 
-    <view v-if="editingProfile" class="mine__profile-editor">
-      <view class="mine__editor-row">
-        <button class="mine__avatar-picker" open-type="chooseAvatar" @chooseavatar="chooseAvatar">
-          <image v-if="profileAvatarUrl" class="mine__avatar-picker-image" :src="displayAvatarUrl" mode="aspectFill" />
-          <text v-else class="mine__avatar-picker-fallback">🍁</text>
-          <text class="mine__avatar-picker-label">更换头像</text>
-        </button>
-        <view class="mine__nickname-field">
-          <text class="mine__field-label">昵称</text>
-          <input
-            class="mine__nickname-input"
-            v-model="profileNickname"
-            type="nickname"
-            maxlength="20"
-            placeholder="请输入昵称"
-          />
+      <view v-if="editingProfile" class="mine__profile-editor">
+        <view class="mine__editor-row">
+          <button class="mine__avatar-picker" open-type="chooseAvatar" @chooseavatar="chooseAvatar">
+            <image v-if="profileAvatarUrl" class="mine__avatar-picker-image" :src="displayAvatarUrl" mode="aspectFill" />
+            <text v-else class="mine__avatar-picker-fallback">🍁</text>
+            <text class="mine__avatar-picker-label">更换头像</text>
+          </button>
+          <view class="mine__nickname-field">
+            <text class="mine__field-label">昵称</text>
+            <input
+              class="mine__nickname-input"
+              v-model="profileNickname"
+              type="nickname"
+              maxlength="20"
+              placeholder="请输入昵称"
+            />
+          </view>
+        </view>
+        <view class="mine__editor-actions">
+          <view class="mine__cancel-btn" hover-class="press" @tap="cancelProfileEdit">取消</view>
+          <view class="mine__save-btn" :class="{ 'mine__save-btn--disabled': savingProfile }" hover-class="press" @tap="saveProfile">
+            {{ savingProfile ? '保存中' : '保存资料' }}
+          </view>
         </view>
       </view>
-      <view class="mine__editor-actions">
-        <view class="mine__cancel-btn" hover-class="press" @tap="cancelProfileEdit">取消</view>
-        <view class="mine__save-btn" :class="{ 'mine__save-btn--disabled': savingProfile }" hover-class="press" @tap="saveProfile">
-          {{ savingProfile ? '保存中' : '保存资料' }}
-        </view>
-      </view>
     </view>
 
-    <view class="mine__section">
-      <text class="mine__section-title">工具设置</text>
-      <view class="mine__menu">
-        <view class="mine__menu-row" hover-class="press" @tap="openToolLibrary">
-          <view class="mine__menu-icon">▦</view>
+    <AppSection title="工具设置" card>
+      <view class="mine__menu-row" hover-class="press" @tap="openToolLibrary">
+        <view class="mine__menu-icon" :style="{ background: libraryChip.tint, color: libraryChip.fg }">▦</view>
+        <view class="mine__menu-body">
           <text class="mine__menu-label">首页工具管理</text>
-          <text class="mine__menu-arrow">›</text>
         </view>
+        <text class="mine__menu-arrow">›</text>
       </view>
-    </view>
+    </AppSection>
 
-    <view v-if="isAdmin" class="mine__section">
-      <text class="mine__section-title">运营管理</text>
-      <view class="mine__menu">
-        <view class="mine__menu-row" hover-class="press" @tap="openAdmin">
-          <view class="mine__menu-icon">⚙</view>
+    <AppSection v-if="isAdmin" title="运营管理" card>
+      <view class="mine__menu-row" hover-class="press" @tap="openAdmin">
+        <view class="mine__menu-icon" :style="{ background: adminChip.tint, color: adminChip.fg }">⚙</view>
+        <view class="mine__menu-body">
           <text class="mine__menu-label">工具运营台</text>
-          <text class="mine__menu-arrow">›</text>
         </view>
+        <text class="mine__menu-arrow">›</text>
       </view>
-    </view>
+    </AppSection>
+
+    <view class="mine__footer">枫叶小屋 · v1.0.0</view>
     <AppBottomNav active="mine" />
   </view>
 </template>
@@ -65,7 +67,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import AppBottomNav from '@/components/AppBottomNav.vue'
+import AppSection from '@/components/AppSection.vue'
 import type { ToolboxUser } from '@/types/toolbox'
+import { pastel } from '@/utils/pastel'
 import {
   AUTH_STORAGE_KEY,
   fetchAccount,
@@ -75,6 +79,10 @@ import {
   storedUser,
   uploadAvatar,
 } from '@/services/toolbox'
+
+// menu 图标小方块淡彩色：照原型 mine 屏（工具管理=蓝、运营台=琥珀，取自 PASTEL 表相邻组）
+const libraryChip = pastel('travel')
+const adminChip = pastel('sokoban')
 
 const user = ref<ToolboxUser | null>(null)
 const isAdmin = ref(false)
@@ -179,20 +187,27 @@ function openAdmin() {
 <style lang="scss" scoped>
 .mine {
   min-height: 100vh;
-  padding: 56rpx 32rpx 180rpx;
+  padding: 32rpx 32rpx 200rpx;
+
+  &__card {
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-lg;
+    margin-bottom: $space-4;
+  }
 
   &__profile {
     display: flex;
     align-items: center;
-    gap: 22rpx;
-    padding: 24rpx 0 66rpx;
+    gap: 24rpx;
+    padding: 28rpx;
   }
 
   &__avatar {
-    width: 112rpx;
-    height: 112rpx;
-    border-radius: 56rpx;
-    background: $color-primary-light;
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 52rpx;
+    background: $blue-tint;
     flex-shrink: 0;
   }
 
@@ -200,7 +215,7 @@ function openAdmin() {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 52rpx;
+    font-size: 48rpx;
   }
 
   &__profile-copy {
@@ -208,39 +223,34 @@ function openAdmin() {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10rpx;
+    gap: 4rpx;
   }
 
   &__name {
-    color: $color-text;
-    font-size: 36rpx;
+    color: $ink;
+    font-size: 32rpx;
     font-weight: 700;
   }
 
   &__caption {
-    color: $color-text-secondary;
+    color: $ink3;
     font-size: 22rpx;
     line-height: 1.45;
   }
 
-  &__login-btn,
-  &__profile-action {
-    padding: 12rpx 8rpx;
-    color: $color-primary;
-    font-size: 25rpx;
+  &__pillbtn {
+    background: $blue;
+    color: #fff;
+    border-radius: $radius-pill;
+    padding: 12rpx 26rpx;
+    font-size: 24rpx;
     font-weight: 600;
     flex-shrink: 0;
   }
 
-  &__profile-action {
-    color: $color-primary-dark;
-  }
-
   &__profile-editor {
-    margin: -36rpx 0 52rpx;
-    padding: 24rpx 0;
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    padding: 28rpx;
+    border-top: 2rpx solid $line;
     display: flex;
     flex-direction: column;
     gap: 24rpx;
@@ -259,7 +269,7 @@ function openAdmin() {
     padding: 0;
     border: 0;
     border-radius: 64rpx;
-    background: $color-primary-light;
+    background: $blue-tint;
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
@@ -289,7 +299,7 @@ function openAdmin() {
     bottom: 0;
     left: 0;
     min-height: 40rpx;
-    background: rgba(74, 63, 53, 0.64);
+    background: rgba(46, 65, 84, 0.6);
     color: #fff;
     font-size: 19rpx;
     line-height: 40rpx;
@@ -305,17 +315,17 @@ function openAdmin() {
   }
 
   &__field-label {
-    color: $color-text-secondary;
+    color: $ink2;
     font-size: 22rpx;
   }
 
   &__nickname-input {
     height: 78rpx;
     padding: 0 20rpx;
-    border: 2rpx solid $color-border;
-    border-radius: $radius-sm;
+    border: 2rpx solid $line-strong;
+    border-radius: 20rpx;
     background: #fff;
-    color: $color-text;
+    color: $ink;
     font-size: 28rpx;
     box-sizing: border-box;
   }
@@ -329,7 +339,7 @@ function openAdmin() {
   &__cancel-btn,
   &__save-btn {
     min-height: 76rpx;
-    border-radius: $radius-sm;
+    border-radius: 20rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -338,61 +348,60 @@ function openAdmin() {
   }
 
   &__cancel-btn {
-    border: 2rpx solid $color-border;
-    color: $color-text-secondary;
+    border: 2rpx solid $line-strong;
+    background: $card;
+    color: $ink2;
   }
 
   &__save-btn {
-    background: $color-primary;
+    background: $blue;
     color: #fff;
   }
 
   &__save-btn--disabled {
-    opacity: 0.55;
-  }
-
-  &__section {
-    display: flex;
-    flex-direction: column;
-    gap: 16rpx;
-    margin-bottom: 44rpx;
-  }
-
-  &__section-title {
-    color: $color-text-secondary;
-    font-size: 24rpx;
-  }
-
-  &__menu {
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    opacity: 0.45;
   }
 
   &__menu-row {
-    min-height: 106rpx;
     display: flex;
     align-items: center;
-    gap: 18rpx;
+    gap: 20rpx;
+    padding: 24rpx 28rpx;
   }
 
   &__menu-icon {
-    width: 48rpx;
-    color: $color-primary;
-    font-size: 32rpx;
-    text-align: center;
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30rpx;
     flex-shrink: 0;
   }
 
-  &__menu-label {
+  &__menu-body {
     flex: 1;
-    color: $color-text;
-    font-size: 29rpx;
-    font-weight: 600;
+    min-width: 0;
+  }
+
+  &__menu-label {
+    color: $ink;
+    font-size: 28rpx;
+    font-weight: 500;
   }
 
   &__menu-arrow {
-    color: $color-text-secondary;
-    font-size: 42rpx;
+    color: $ink3;
+    font-size: 40rpx;
+    line-height: 1;
+  }
+
+  &__footer {
+    font-size: 20rpx;
+    color: $ink3;
+    text-align: center;
+    padding: 8rpx 0;
   }
 }
 </style>

@@ -19,11 +19,11 @@ export interface ChapterDef {
 }
 
 export const CHAPTERS: ChapterDef[] = [
-  { key: 'courtyard', name: '落叶庭院', tagline: '秋风吹落了满院枫叶，先把院子归置整齐', color: '#C08A1E' },
-  { key: 'woodshed', name: '柴房整备', tagline: '夜里凉了，木柴得码进柴房', color: '#E85D4A' },
-  { key: 'gallery', name: '枫径回廊', tagline: '枫径深处回廊曲折，别迷了路', color: '#1E9DBE' },
-  { key: 'depot', name: '清溪货栈', tagline: '溪水转凉前，把货栈的箱子理清', color: '#5B8FB9' },
-  { key: 'cellar', name: '雪线仓窖', tagline: '初雪将至，山上的仓窖还空着', color: '#8A6FA8' },
+  { key: 'courtyard', name: '落叶庭院', tagline: '秋风吹落了满院枫叶，先把院子归置整齐', color: '#C99A34' },
+  { key: 'woodshed', name: '柴房整备', tagline: '夜里凉了，木柴得码进柴房', color: '#E27966' },
+  { key: 'gallery', name: '枫径回廊', tagline: '枫径深处回廊曲折，别迷了路', color: '#4CA5B5' },
+  { key: 'depot', name: '清溪货栈', tagline: '溪水转凉前，把货栈的箱子理清', color: '#4E97CE' },
+  { key: 'cellar', name: '雪线仓窖', tagline: '初雪将至，山上的仓窖还空着', color: '#8E7CC3' },
 ]
 
 export const LEVELS_PER_CHAPTER = 20

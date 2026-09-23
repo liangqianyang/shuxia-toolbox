@@ -40,9 +40,17 @@ final class FoodRoomService
         }
 
         $code = $this->normalizeCode($code) ?: $this->newCode();
+        // 顺手清 7 天没动的旧饭局（行小量少，限 20 条防偶发慢查）
+        FoodRoom::query()
+            ->where('updated_at', '<', date('Y-m-d H:i:s', time() - 7 * 86400))
+            ->limit(20)
+            ->delete();
         /** @var FoodRoom $model */
         $model = FoodRoom::query()->firstOrNew(['code' => $code]);
-        $model->owner_user_id = $ownerUserId;
+        if (! $model->exists) {
+            // 房主只在创建时落定：饭局码本就允许多人凭码协作保存，但后来者不该把主也改了
+            $model->owner_user_id = $ownerUserId;
+        }
         $model->payload = $room;
         $model->save();
 
@@ -68,6 +76,11 @@ final class FoodRoomService
         /** @var null|FoodRoom $room */
         $room = FoodRoom::query()->where('code', $code)->first();
         if ($room === null || ! is_array($room->payload)) {
+            return null;
+        }
+        // 7 天未更新视为过期（前端提示语本就写「已过期」，这里补真实判定并懒删除）
+        if (strtotime((string) $room->updated_at) < time() - 7 * 86400) {
+            $room->delete();
             return null;
         }
 

@@ -22,6 +22,10 @@ export interface DeckTheme {
   primary: string
   /** 深色（卡面渐变底、页头渐变） */
   primaryDeep: string
+  /** v4 淡彩扁平：签种卡浅彩底（v4 原型 #fortune .deck） */
+  tint: string
+  /** v4 淡彩扁平：签种卡前景（图标/标题点缀，与 PASTEL 表同源） */
+  fg: string
   /** 纸色（签面/卡面底色） */
   paper: string
   /** 印章/点缀色 */
@@ -42,6 +46,8 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     // 紫竹林观音：签筒/主色取紫竹色，与关帝红、月老粉、答案之书藏青区分
     primary: '#6B5B95',
     primaryDeep: '#4A3F73',
+    tint: '#F1EDF9',
+    fg: '#8E7CC3',
     paper: '#F5F1E4',
     accent: '#B03A2E',
     ink: '#33312B',
@@ -56,6 +62,8 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     defaultCategory: 'career',
     primary: '#A03028',
     primaryDeep: '#661B16',
+    tint: '#FDEEEA',
+    fg: '#E27966',
     paper: '#F7F0DE',
     accent: '#8E1F18',
     ink: '#33312B',
@@ -72,6 +80,8 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     categories: ['love'],
     primary: '#C0557B',
     primaryDeep: '#86304E',
+    tint: '#FCEFF4',
+    fg: '#DE8FAB',
     paper: '#FBF1EE',
     accent: '#B03A5C',
     ink: '#3A2E30',
@@ -86,6 +96,8 @@ export const DECK_THEMES: Record<DeckKey, DeckTheme> = {
     defaultCategory: 'decision',
     primary: '#33477A',
     primaryDeep: '#1D2A52',
+    tint: '#E8F3FB',
+    fg: '#4E97CE',
     paper: '#F2EEE2',
     accent: '#C9A227',
     ink: '#2E2C26',
@@ -104,17 +116,17 @@ export const DECK_LIST: DeckTheme[] = [
   DECK_THEMES.book,
 ]
 
-/** 签级印章配色（上上最红，下下最灰）。 */
+/** 签级印章配色（上上最红，下下最深）。v4 柔化：仍按等级红→橙→金→灰蓝→墨递进，白字均可读。 */
 export const LEVEL_SEALS: Record<string, { color: string; label: string }> = {
-  上上: { color: '#B03A2E', label: '上上签' },
-  上吉: { color: '#C2501E', label: '上吉签' },
-  中吉: { color: '#A67C00', label: '中吉签' },
-  中平: { color: '#5D6D7E', label: '中平签' },
-  下下: { color: '#4A4A4A', label: '下下签' },
+  上上: { color: '#C96B5A', label: '上上签' },
+  上吉: { color: '#D98E4F', label: '上吉签' },
+  中吉: { color: '#C99A34', label: '中吉签' },
+  中平: { color: '#6E8093', label: '中平签' },
+  下下: { color: '#2E4154', label: '下下签' },
 }
 
 export function levelSeal(level: string): { color: string; label: string } {
-  return LEVEL_SEALS[level] ?? { color: '#5D6D7E', label: level ? `${level}签` : '' }
+  return LEVEL_SEALS[level] ?? { color: '#6E8093', label: level ? `${level}签` : '' }
 }
 
 /** 上上签触发洒金动画与特殊卡面边框。 */

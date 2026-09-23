@@ -1,79 +1,63 @@
 <template>
   <view class="admin">
-    <view class="admin__heading">
-      <text class="admin__eyebrow">运营管理</text>
+    <view class="admin__pagehead">
+      <text class="admin__kick">ADMIN</text>
       <text class="admin__title">工具运营台</text>
-      <text class="admin__subtitle">上架工具会出现在用户的工具集中</text>
+      <text class="admin__sub">上架工具会出现在用户的工具集中</text>
     </view>
 
     <!-- 全局功能开关：AI 关闭时服务端硬拦截所有 AI 接口，前端同步隐藏入口 -->
-    <view v-if="!accessError" class="admin__group">
-      <text class="admin__group-title">功能开关</text>
-      <view class="admin__tool">
-        <view class="admin__tool-top">
-          <view class="admin__icon">🤖</view>
-          <view class="admin__copy">
-            <text class="admin__name">AI 功能总开关</text>
-            <text class="admin__desc">控制 AI 解签、AI 行程规划等全部 AI 能力；关闭后所有 AI 接口立即不可用</text>
-          </view>
-          <switch :checked="aiEnabled" color="#c64f3d" @change="changeAiEnabled" />
+    <AppSection v-if="!accessError" title="功能开关" card>
+      <view v-for="(flag, index) in flags" :key="flag.key" class="admin__flag" :class="{ 'admin__flag--divided': index > 0 }">
+        <view class="admin__flag-chip" :style="{ background: flag.chipBg, color: flag.chipFg }">{{ flag.icon }}</view>
+        <view class="admin__flag-body">
+          <text class="admin__flag-name">{{ flag.name }}</text>
+          <text class="admin__flag-desc">{{ flag.desc }}</text>
         </view>
-        <view class="admin__tool-bottom">
-          <text class="admin__status" :class="{ 'admin__status--off': !aiEnabled }">{{ aiEnabled ? '已开启' : '已关闭' }}</text>
-        </view>
+        <switch :checked="flag.value" color="#58A6DC" @change="flag.onChange" />
       </view>
+    </AppSection>
 
-      <view class="admin__tool">
-        <view class="admin__tool-top">
-          <view class="admin__icon">💬</view>
-          <view class="admin__copy">
-            <text class="admin__name">牌局文字聊天</text>
-            <text class="admin__desc">枫趣牌局房间的自由文字消息（全部经微信内容审核）；关闭后仅保留快捷句和表情</text>
-          </view>
-          <switch :checked="unoChatTextEnabled" color="#c64f3d" @change="changeUnoChatTextEnabled" />
-        </view>
-        <view class="admin__tool-bottom">
-          <text class="admin__status" :class="{ 'admin__status--off': !unoChatTextEnabled }">{{ unoChatTextEnabled ? '已开启' : '已关闭' }}</text>
-        </view>
-      </view>
-
-      <view class="admin__tool">
-        <view class="admin__tool-top">
-          <view class="admin__icon">🏆</view>
-          <view class="admin__copy">
-            <text class="admin__name">游戏排行榜总开关</text>
-            <text class="admin__desc">控制俄罗斯方块/推箱子等全部游戏榜单；关闭后榜单入口隐藏、榜单接口立即不可用，成绩仍正常记录</text>
-          </view>
-          <switch :checked="gameRankEnabled" color="#c64f3d" @change="changeGameRankEnabled" />
-        </view>
-        <view class="admin__tool-bottom">
-          <text class="admin__status" :class="{ 'admin__status--off': !gameRankEnabled }">{{ gameRankEnabled ? '已开启' : '已关闭' }}</text>
-        </view>
-      </view>
-    </view>
-
-    <view v-if="groups.length" class="admin__list">
-      <view v-for="group in groups" :key="group.category" class="admin__group">
-        <text class="admin__group-title">{{ group.title }}</text>
-        <view v-for="(tool, index) in group.tools" :key="tool.key" class="admin__tool">
-          <view class="admin__tool-top">
-            <ToolIcon class="admin__icon" :icon="tool.icon" />
-            <view class="admin__copy">
-              <text class="admin__name">{{ tool.name }}</text>
-              <text class="admin__desc">{{ tool.description }}</text>
+    <template v-if="groups.length">
+      <AppSection v-for="group in groups" :key="group.category" :title="group.title" card>
+        <ToolCard
+          v-for="(tool, index) in group.tools"
+          :key="tool.key"
+          :icon="tool.icon"
+          :pastel="tool.key"
+          :title="tool.name"
+          :description="tool.description"
+          size="sm"
+          :chevron="false"
+          :divided="index > 0"
+        >
+          <template #right>
+            <switch :checked="tool.isPublished" color="#58A6DC" @change="changePublication(tool.key, $event)" />
+          </template>
+          <template #bottom>
+            <view class="admin__tool-bottom">
+              <text class="admin__status" :class="{ 'admin__status--off': !tool.isPublished }">
+                {{ tool.isPublished ? '已上架' : '已下架' }}
+              </text>
+              <view class="admin__order">
+                <view
+                  class="admin__order-btn"
+                  :class="{ 'admin__order-btn--disabled': index === 0 }"
+                  hover-class="press"
+                  @tap="moveTool(tool, -1)"
+                >↑</view>
+                <view
+                  class="admin__order-btn"
+                  :class="{ 'admin__order-btn--disabled': index === group.tools.length - 1 }"
+                  hover-class="press"
+                  @tap="moveTool(tool, 1)"
+                >↓</view>
+              </view>
             </view>
-            <switch :checked="tool.isPublished" color="#c64f3d" @change="changePublication(tool.key, $event)" />
-          </view>
-          <view class="admin__tool-bottom">
-            <text class="admin__status" :class="{ 'admin__status--off': !tool.isPublished }">{{ tool.isPublished ? '已上架' : '已下架' }}</text>
-            <view class="admin__order">
-              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === 0 }" hover-class="press" @tap="moveTool(tool, -1)">↑</view>
-              <view class="admin__order-btn" :class="{ 'admin__order-btn--disabled': index === group.tools.length - 1 }" hover-class="press" @tap="moveTool(tool, 1)">↓</view>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
+          </template>
+        </ToolCard>
+      </AppSection>
+    </template>
 
     <view v-else-if="accessError" class="admin__empty">
       <text class="admin__empty-icon">🍁</text>
@@ -86,7 +70,8 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { AdminTool, ToolCategory } from '@/types/toolbox'
-import ToolIcon from '@/components/ToolIcon.vue'
+import AppSection from '@/components/AppSection.vue'
+import ToolCard from '@/components/ToolCard.vue'
 import { fetchAdminFeatures, fetchAdminTools, saveAdminToolOrder, setAdminAiEnabled, setAdminGameRankEnabled, setAdminUnoChatTextEnabled, setAdminToolPublication } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
@@ -109,6 +94,40 @@ const groups = computed(() =>
     }))
     .filter((group) => group.tools.length > 0),
 )
+
+/** 功能开关行（chip 底色照原型 admin 屏：AI 红 tint / 聊天蓝 tint / 榜单琥珀 tint，均属淡彩小方块用途） */
+const flags = computed(() => [
+  {
+    key: 'ai',
+    icon: '🤖',
+    chipBg: '#FDEFEC',
+    chipFg: '#E8806F',
+    name: 'AI 功能总开关',
+    desc: '控制 AI 解签、AI 行程规划等全部 AI 能力；关闭后所有 AI 接口立即不可用',
+    value: aiEnabled.value,
+    onChange: changeAiEnabled,
+  },
+  {
+    key: 'chat',
+    icon: '💬',
+    chipBg: '#E8F3FB',
+    chipFg: '#4E97CE',
+    name: '牌局文字聊天',
+    desc: '枫趣牌局房间的自由文字消息（全部经微信内容审核）；关闭后仅保留快捷句和表情',
+    value: unoChatTextEnabled.value,
+    onChange: changeUnoChatTextEnabled,
+  },
+  {
+    key: 'rank',
+    icon: '🏆',
+    chipBg: '#FBF3E0',
+    chipFg: '#B7862B',
+    name: '游戏排行榜总开关',
+    desc: '控制俄罗斯方块/推箱子等全部游戏榜单；关闭后榜单入口隐藏、榜单接口立即不可用，成绩仍正常记录',
+    value: gameRankEnabled.value,
+    onChange: changeGameRankEnabled,
+  },
+])
 
 onShow(() => {
   void loadTools()
@@ -199,119 +218,105 @@ async function moveTool(tool: AdminTool, direction: number) {
 <style lang="scss" scoped>
 .admin {
   min-height: 100vh;
-  padding: 48rpx 32rpx 80rpx;
+  padding: 24rpx 32rpx 80rpx;
 
-  &__heading {
+  &__pagehead {
     display: flex;
     flex-direction: column;
-    gap: 10rpx;
-    padding: 32rpx 0 54rpx;
+    padding: 20rpx 4rpx 8rpx;
   }
 
-  &__eyebrow,
-  &__subtitle,
-  &__desc {
-    color: $color-text-secondary;
-    font-size: 22rpx;
+  &__kick {
+    font-size: 20rpx;
+    letter-spacing: 5rpx;
+    color: $blue-deep;
+    font-weight: 700;
+    margin-bottom: 8rpx;
   }
 
   &__title {
-    color: $color-text;
-    font-size: 44rpx;
+    font-size: 46rpx;
     font-weight: 700;
+    color: $ink;
+    line-height: 1.2;
   }
 
-  &__list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  &__group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 32rpx;
-  }
-
-  &__group-title {
+  &__sub {
     font-size: 24rpx;
-    font-weight: 600;
-    color: $color-text-secondary;
-    padding: 16rpx 0 8rpx;
-    border-bottom: 2rpx solid $color-border;
+    color: $ink2;
+    margin-top: 10rpx;
   }
 
-  &__tool {
-    padding: 22rpx 0;
-    border-bottom: 2rpx solid $color-border;
-    display: flex;
-    flex-direction: column;
-    gap: 16rpx;
-  }
-
-  &__tool-top,
-  &__tool-bottom,
-  &__order {
+  &__flag {
     display: flex;
     align-items: center;
+    gap: 20rpx;
+    padding: 24rpx 28rpx;
   }
 
-  &__tool-top {
-    gap: 18rpx;
+  &__flag--divided {
+    border-top: 2rpx solid $line;
   }
 
-  &__tool-bottom {
-    justify-content: space-between;
-  }
-
-  &__icon {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: $radius-sm;
-    background: $color-primary-light;
+  &__flag-chip {
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 18rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 38rpx;
+    font-size: 30rpx;
     flex-shrink: 0;
   }
 
-  &__copy {
-    min-width: 0;
+  &__flag-body {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8rpx;
+    gap: 4rpx;
   }
 
-  &__name {
-    color: $color-text;
-    font-size: 29rpx;
+  &__flag-name {
+    font-size: 26rpx;
     font-weight: 600;
+    color: $ink;
   }
 
-  &__desc {
-    line-height: 1.45;
+  &__flag-desc {
+    font-size: 20rpx;
+    color: $ink3;
+    line-height: 1.5;
+  }
+
+  &__tool-bottom {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   &__status {
-    color: #4f7658;
-    font-size: 23rpx;
+    color: $green;
+    font-size: 22rpx;
   }
 
   &__status--off {
-    color: $color-text-secondary;
+    color: $ink3;
   }
 
   &__order {
-    gap: 8rpx;
+    display: flex;
+    gap: 12rpx;
   }
 
   &__order-btn {
     width: 56rpx;
     height: 52rpx;
-    border: 2rpx solid $color-border;
-    border-radius: $radius-sm;
-    color: $color-primary;
+    border: 2rpx solid $line-strong;
+    border-radius: 16rpx;
+    background: $card;
+    color: $blue-deep;
     font-size: 26rpx;
     display: flex;
     align-items: center;
@@ -320,7 +325,7 @@ async function moveTool(tool: AdminTool, direction: number) {
   }
 
   &__order-btn--disabled {
-    color: $color-border;
+    color: $line-strong;
   }
 
   &__empty {
@@ -330,7 +335,7 @@ async function moveTool(tool: AdminTool, direction: number) {
     align-items: center;
     justify-content: center;
     gap: 16rpx;
-    color: $color-text-secondary;
+    color: $ink2;
     font-size: 26rpx;
     text-align: center;
   }

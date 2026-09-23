@@ -5,6 +5,8 @@
  */
 
 import { cdnUrl } from '@/utils/cdn'
+// 表情/贴纸白名单与 gameChat 完全同数据（PHP 侧两个类各自镜像，TS 侧共用一份常量防漂移）
+import { GAME_EMOJIS, GAME_STICKERS } from '@/pages-games/utils/gameChat'
 
 export interface PhraseGroup {
   key: string
@@ -69,27 +71,10 @@ export function adventurePhraseText(id: string): string | null {
 }
 
 /** 与后端 EMOJIS 白名单一致（发送时表情字符本身即 id）。 */
-export const ADVENTURE_EMOJIS = [
-  '😀', '😂', '🤣', '😎', '🤔', '😏',
-  '😭', '😡', '😱', '🥳', '😴', '🤡',
-  '👍', '👎', '🙏', '🤝', '💪', '🔥',
-  '⛰️', '🍁', '🍀', '⚡️', '💣', '🎉',
-  '⛄️', '🌫️', '🙈',
-]
+export const ADVENTURE_EMOJIS = GAME_EMOJIS
 
 /** 与后端 STICKERS 白名单一致：id → CDN 完整地址。 */
-export const ADVENTURE_STICKERS: Record<string, string> = {
-  god_hi: '/pages-adventure/static/stickers/god-hi.png',
-  god_smug: '/pages-adventure/static/stickers/god-smug.png',
-  god_bless: '/pages-adventure/static/stickers/god-bless.png',
-  god_snow: '/pages-adventure/static/stickers/god-snow.png',
-  god_angry: '/pages-adventure/static/stickers/god-angry.png',
-  elf_cheer: '/pages-adventure/static/stickers/elf-cheer.png',
-  elf_sad: '/pages-adventure/static/stickers/elf-sad.png',
-  elf_peek: '/pages-adventure/static/stickers/elf-peek.png',
-  elf_trap: '/pages-adventure/static/stickers/elf-trap.png',
-  elf_run: '/pages-adventure/static/stickers/elf-run.png',
-}
+export const ADVENTURE_STICKERS: Record<string, string> = GAME_STICKERS
 
 export function stickerUrl(id: string): string {
   const path = ADVENTURE_STICKERS[id]

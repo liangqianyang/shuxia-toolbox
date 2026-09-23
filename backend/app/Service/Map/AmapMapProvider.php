@@ -22,7 +22,7 @@ final class AmapMapProvider implements MapProvider
     private const string BICYCLING_URL = 'https://restapi.amap.com/v4/direction/bicycling';
     private const string TRANSIT_URL = 'https://restapi.amap.com/v3/direction/transit/integrated';
 
-    /** @var array<string, bool> */
+    /** @var array<string, array{at: int, ok: bool}> */
     private static array $staticMapAvailability = [];
 
     private readonly Client $client;
@@ -641,8 +641,10 @@ final class AmapMapProvider implements MapProvider
         }
 
         $cacheKey = hash('sha256', $key);
-        if (array_key_exists($cacheKey, self::$staticMapAvailability)) {
-            return self::$staticMapAvailability[$cacheKey];
+        // 探测结果带 10 分钟 TTL：一次网络抖动/配额瞬断不该把该 worker 永久打入兜底图（直到重启才恢复）
+        $cached = self::$staticMapAvailability[$cacheKey] ?? null;
+        if ($cached !== null && $cached['at'] >= time() - 600) {
+            return $cached['ok'];
         }
 
         $url = self::STATIC_MAP_URL . '?' . http_build_query([
@@ -670,7 +672,7 @@ final class AmapMapProvider implements MapProvider
             error_log('[AmapMapProvider] 高德静态图探测失败，已尝试兜底: ' . $e->getMessage());
         }
 
-        self::$staticMapAvailability[$cacheKey] = $ok;
+        self::$staticMapAvailability[$cacheKey] = ['at' => time(), 'ok' => $ok];
         return $ok;
     }
 

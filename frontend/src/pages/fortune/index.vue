@@ -1,5 +1,5 @@
 <template>
-  <view class="fortune" :style="{ background: pageBackground }">
+  <view class="fortune">
     <!-- 页头：标题 / 剩余次数 / 历史入口 -->
     <view class="fortune__header">
       <view class="fortune__header-side">
@@ -19,7 +19,7 @@
           v-for="d in DECK_LIST"
           :key="d.key"
           class="fortune__deck-card"
-          :style="{ background: `linear-gradient(150deg, ${d.primary}, ${d.primaryDeep})` }"
+          :style="{ background: d.tint }"
           hover-class="press"
           @tap="selectDeck(d.key)"
         >
@@ -36,10 +36,10 @@
     <!-- 阶段二：问事 -->
     <view v-else-if="stage === 'ask'" class="fortune__stage">
       <view class="fortune__ask-head">
-        <view class="fortune__back-pill" :style="{ borderColor: theme.primaryDeep, color: theme.primaryDeep }" hover-class="press" @tap="backToDeck">
+        <view class="fortune__back-pill" hover-class="press" @tap="backToDeck">
           <text class="fortune__back-pill-text">‹ 换签种</text>
         </view>
-        <text class="fortune__ask-title" :style="{ color: theme.primaryDeep }">{{ theme.icon }} {{ theme.name }}</text>
+        <text class="fortune__ask-title">{{ theme.icon }} {{ theme.name }}</text>
       </view>
 
       <template v-if="availableCategories.length > 1">
@@ -50,7 +50,6 @@
             :key="c.key"
             class="fortune__category"
             :class="{ 'fortune__category--active': category === c.key }"
-            :style="category === c.key ? { background: theme.primary, borderColor: theme.primary } : {}"
             hover-class="press"
             @tap="category = c.key"
           >
@@ -67,7 +66,7 @@
         maxlength="100"
       />
 
-      <button class="fortune__primary-btn" :style="{ background: theme.primary }" @tap="beginShake">
+      <button class="fortune__primary-btn" @tap="beginShake">
         诚心求签
       </button>
     </view>
@@ -82,7 +81,6 @@
         <button
           v-if="quota && quota.bonusLeft > 0"
           class="fortune__primary-btn"
-          :style="{ background: theme.primary }"
           open-type="share"
         >
           分享给好友 +1 签（今日还可加 {{ quota.bonusLeft }} 次）
@@ -95,13 +93,13 @@
         <view
           class="fortune__book"
           :class="{ 'fortune__book--flipping': shakeAnimating }"
-          :style="{ background: `linear-gradient(150deg, ${theme.primary}, ${theme.primaryDeep})` }"
+          :style="{ background: theme.tint }"
           @longpress="triggerDraw"
           hover-class="press"
           @tap="triggerDraw"
         >
           <view class="fortune__book-pages" />
-          <text class="fortune__book-title">答案之书</text>
+          <text class="fortune__book-title" :style="{ color: theme.fg }">答案之书</text>
           <text class="fortune__book-sub">THE BOOK OF ANSWERS</text>
         </view>
         <text class="fortune__shake-hint">{{ shakeAnimating ? '书页翻动中…' : theme.shakeHint }}</text>
@@ -116,10 +114,10 @@
           hover-class="press"
           @tap="triggerDraw"
         >
-          <view class="fortune__tube-sticks" :style="{ background: theme.primary }">
-            <view v-for="i in 7" :key="i" class="fortune__tube-stick" :style="{ background: i % 2 ? theme.primary : theme.primaryDeep }" />
+          <view class="fortune__tube-sticks">
+            <view v-for="i in 7" :key="i" class="fortune__tube-stick" :style="{ background: theme.fg }" />
           </view>
-          <view class="fortune__tube-body" :style="{ background: `linear-gradient(160deg, ${theme.primary}, ${theme.primaryDeep})` }">
+          <view class="fortune__tube-body" :style="{ background: theme.fg }">
             <text class="fortune__tube-word">签</text>
           </view>
         </view>
@@ -140,25 +138,25 @@
       </view>
 
       <!-- 灵签签面 -->
-      <view v-if="!isBook" class="fortune__stick-card" :style="{ background: theme.paper, borderColor: theme.primaryDeep }">
+      <view v-if="!isBook" class="fortune__stick-card">
         <view class="fortune__stick-head">
-          <text class="fortune__stick-no" :style="{ color: theme.ink }">第 {{ draw.stick.no }} 签</text>
+          <text class="fortune__stick-no">第 {{ draw.stick.no }} 签</text>
           <view class="fortune__seal" :style="{ background: seal.color }">
             <text class="fortune__seal-text">{{ seal.label.replace('签', '') }}</text>
           </view>
         </view>
-        <text v-if="draw.stick.title" class="fortune__stick-title" :style="{ color: theme.primaryDeep }">{{ draw.stick.title }}</text>
+        <text v-if="draw.stick.title" class="fortune__stick-title">{{ draw.stick.title }}</text>
         <view class="fortune__verse">
-          <text v-for="(line, i) in draw.stick.verse" :key="i" class="fortune__verse-line" :style="{ color: theme.ink }">{{ line }}</text>
+          <text v-for="(line, i) in draw.stick.verse" :key="i" class="fortune__verse-line">{{ line }}</text>
         </view>
-        <text v-if="draw.stick.gist" class="fortune__gist" :style="{ color: theme.primary }">【 {{ draw.stick.gist }} 】</text>
+        <text v-if="draw.stick.gist" class="fortune__gist">【 {{ draw.stick.gist }} 】</text>
         <text v-if="draw.stick.interpretation" class="fortune__interpretation">{{ draw.stick.interpretation }}</text>
       </view>
 
       <!-- 答案之书答案 -->
-      <view v-else class="fortune__stick-card fortune__stick-card--book" :style="{ background: theme.paper, borderColor: theme.primaryDeep }">
+      <view v-else class="fortune__stick-card fortune__stick-card--book">
         <text class="fortune__book-question">「 {{ effectiveQuestion }} 」</text>
-        <text class="fortune__book-answer" :style="{ color: theme.primaryDeep }">{{ draw.stick.answer }}</text>
+        <text class="fortune__book-answer">{{ draw.stick.answer }}</text>
         <text class="fortune__book-page">—— 第 {{ draw.stick.no }} 页 ——</text>
       </view>
 
@@ -175,10 +173,10 @@
             }"
           />
         </view>
-        <text v-if="grailResult" class="fortune__grail-result" :style="{ color: theme.primaryDeep }">
+        <text v-if="grailResult" class="fortune__grail-result">
           {{ GRAIL_COPY[grailResult].title }} · {{ GRAIL_COPY[grailResult].desc }}
         </text>
-        <text v-if="grailCastsLeft <= 0" class="fortune__grail-result" :style="{ color: theme.primaryDeep }">
+        <text v-if="grailCastsLeft <= 0" class="fortune__grail-result">
           三掷已过，圣意已决，不必再问。
         </text>
         <button class="fortune__ghost-btn" :disabled="grailThrowing || grailCastsLeft <= 0" @tap="castGrail">
@@ -189,7 +187,7 @@
       <!-- AI 大师解签（全局 AI 开关关闭时整块隐藏，服务端同时硬拦截） -->
       <view v-if="aiEnabled" class="fortune__reading">
         <template v-if="reading">
-          <text class="fortune__reading-title" :style="{ color: theme.primaryDeep }">大师详解</text>
+          <text class="fortune__reading-title">大师详解</text>
           <view class="fortune__reading-block">
             <text class="fortune__reading-label">签意</text>
             <text class="fortune__reading-text">{{ reading.meaning }}</text>
@@ -202,14 +200,13 @@
             <text class="fortune__reading-label">行动建议</text>
             <text class="fortune__reading-text">{{ reading.action }}</text>
           </view>
-          <view class="fortune__reading-lucky" :style="{ background: theme.primaryDeep }">
+          <view class="fortune__reading-lucky">
             <text class="fortune__reading-lucky-text">✦ {{ reading.luckyHint }}</text>
           </view>
         </template>
         <button
           v-else
           class="fortune__primary-btn"
-          :style="{ background: theme.primary }"
           :disabled="interpretLoading"
           hover-class="press"
           @tap="requestInterpret"
@@ -221,10 +218,10 @@
 
       <!-- 操作区 -->
       <view class="fortune__actions">
-        <button class="fortune__primary-btn" :style="{ background: theme.primary }" :disabled="exporting" @tap="saveCard">
+        <button class="fortune__primary-btn" :disabled="exporting" @tap="saveCard">
           {{ exporting ? '生成中…' : '保存签卡' }}
         </button>
-        <button class="fortune__primary-btn fortune__primary-btn--share" :style="{ background: theme.primaryDeep }" :disabled="exporting" @tap="shareCard">
+        <button class="fortune__primary-btn fortune__primary-btn--share" :disabled="exporting" @tap="shareCard">
           分享签卡
         </button>
       </view>
@@ -288,9 +285,6 @@ const availableCategories = computed(() => deckCategories(theme.value))
 const seal = computed(() => levelSeal(String(draw.value?.stick.level ?? '')))
 const topStick = computed(() => !isBook.value && isTopStick(draw.value?.stick.level))
 const quotaExhausted = computed(() => quota.value !== null && quota.value.remaining <= 0)
-const pageBackground = computed(() =>
-  stage.value === 'deck' ? '#FFF8F0' : `linear-gradient(180deg, ${theme.value.primaryDeep}14, #FFF8F0 40%)`,
-)
 
 const categoryName = computed(() => FORTUNE_CATEGORIES.find((c) => c.key === category.value)?.label ?? '其他')
 
@@ -369,7 +363,7 @@ watch(topStick, (value) => {
     confetti.value = []
     return
   }
-  const colors = ['#C9A227', '#E5C15D', '#B03A2E', '#F0D68A']
+  const colors = ['#C9A227', '#E5C15D', '#C96B5A', '#F0D68A']
   confetti.value = Array.from({ length: 26 }, (_, i) => ({
     key: i,
     left: `${Math.random() * 100}%`,
@@ -527,6 +521,7 @@ function goHistory(): void {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: $bg;
 
   &__header {
     display: flex;
@@ -595,24 +590,36 @@ function goHistory(): void {
     align-items: center;
     border-radius: $radius-lg;
     padding: 36rpx 32rpx;
-    box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.12);
+    border: 2rpx solid $line;
   }
 
-  &__deck-icon { font-size: 64rpx; margin-right: 24rpx; }
+  // 白 icon 方块（原型 .deck .dicon）
+  &__deck-icon {
+    width: 88rpx;
+    height: 88rpx;
+    line-height: 88rpx;
+    text-align: center;
+    font-size: 44rpx;
+    margin-right: 24rpx;
+    border-radius: $radius-md;
+    background: #ffffff;
+    border: 2rpx solid $line;
+    flex-shrink: 0;
+  }
 
   &__deck-text { flex: 1; display: flex; flex-direction: column; }
 
   &__deck-name {
-    color: #fff;
+    color: $color-text;
     font-size: 36rpx;
     font-weight: 700;
     font-family: "Songti SC", "STSong", serif;
     letter-spacing: 4rpx;
   }
 
-  &__deck-tagline { color: rgba(255, 255, 255, 0.85); font-size: 24rpx; margin-top: 8rpx; }
+  &__deck-tagline { color: $color-text-secondary; font-size: 24rpx; margin-top: 8rpx; }
 
-  &__deck-arrow { color: rgba(255, 255, 255, 0.7); font-size: 48rpx; }
+  &__deck-arrow { color: $ink3; font-size: 48rpx; }
 
   // ---------- 问事 ----------
 
@@ -621,11 +628,12 @@ function goHistory(): void {
   &__back-pill {
     width: 160rpx;
     padding: 10rpx 0;
-    border: 2rpx solid;
+    border: 2rpx solid $color-primary;
     border-radius: 999rpx;
     text-align: center;
     background: $color-card;
     box-shadow: $shadow-card;
+    color: $color-primary-dark;
   }
 
   &__back-pill-text { font-size: 24rpx; font-weight: 600; }
@@ -636,6 +644,7 @@ function goHistory(): void {
     font-size: 34rpx;
     font-weight: 700;
     font-family: "Songti SC", "STSong", serif;
+    color: $color-text;
     margin-right: 160rpx;
   }
 
@@ -660,7 +669,12 @@ function goHistory(): void {
     font-size: 26rpx;
     color: $color-text;
 
-    &--active { color: #fff; }
+    &--active {
+      background: $color-primary-light;
+      border-color: $color-primary;
+      color: $color-primary-dark;
+      font-weight: 600;
+    }
   }
 
   &__question {
@@ -679,24 +693,32 @@ function goHistory(): void {
   &__primary-btn {
     margin-top: 48rpx;
     width: 100%;
-    border-radius: 999rpx;
+    border-radius: $radius-md;
+    background: $color-primary;
     color: #fff;
     font-size: 30rpx;
     font-weight: 600;
     padding: 8rpx 0;
 
     &::after { border: none; }
-    &--share { margin-top: 20rpx; }
+
+    &--share {
+      margin-top: 20rpx;
+      background: #ffffff;
+      border: 2rpx solid $line-strong;
+      color: $color-text;
+    }
   }
 
   &__ghost-btn {
     margin-top: 24rpx;
     width: 100%;
-    border-radius: 999rpx;
-    background: transparent;
-    color: $color-text-secondary;
+    border-radius: $radius-md;
+    background: $color-primary-light;
+    color: $color-primary-dark;
     font-size: 28rpx;
-    border: 2rpx solid $color-border;
+    font-weight: 500;
+    border: 2rpx solid transparent;
 
     &::after { border: none; }
   }
@@ -731,13 +753,13 @@ function goHistory(): void {
     justify-content: center;
     gap: 8rpx;
     padding-top: 6rpx;
-    background: transparent !important;
   }
 
   &__tube-stick {
     width: 18rpx;
     height: 120rpx;
     border-radius: 6rpx;
+    opacity: 0.85;
   }
 
   &__tube-body {
@@ -750,7 +772,7 @@ function goHistory(): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.2);
+    box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.12);
   }
 
   &__tube-word {
@@ -768,7 +790,7 @@ function goHistory(): void {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.25);
+    box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.12);
     position: relative;
     overflow: hidden;
 
@@ -792,14 +814,13 @@ function goHistory(): void {
   }
 
   &__book-title {
-    color: #E9C767;
     font-size: 52rpx;
     font-weight: 700;
     font-family: "Songti SC", "STSong", serif;
     letter-spacing: 8rpx;
   }
 
-  &__book-sub { color: rgba(255, 255, 255, 0.55); font-size: 18rpx; margin-top: 12rpx; letter-spacing: 2rpx; }
+  &__book-sub { color: $ink3; font-size: 18rpx; margin-top: 12rpx; letter-spacing: 2rpx; }
 
   &__shake-hint { margin-top: 48rpx; color: $color-text-secondary; font-size: 26rpx; letter-spacing: 2rpx; }
 
@@ -815,7 +836,8 @@ function goHistory(): void {
 
   &__stick-card {
     border-radius: $radius-lg;
-    border: 3rpx solid;
+    border: 2rpx solid $line;
+    background: $color-card;
     padding: 48rpx 40rpx;
     display: flex;
     flex-direction: column;
@@ -836,6 +858,7 @@ function goHistory(): void {
     font-size: 40rpx;
     font-weight: 700;
     font-family: "Songti SC", "STSong", serif;
+    color: $color-text;
   }
 
   &__seal {
@@ -861,6 +884,7 @@ function goHistory(): void {
     font-size: 30rpx;
     margin-top: 16rpx;
     font-family: "Songti SC", "STSong", serif;
+    color: $color-primary-dark;
   }
 
   &__verse { margin: 40rpx 0 24rpx; display: flex; flex-direction: column; gap: 16rpx; }
@@ -870,9 +894,10 @@ function goHistory(): void {
     font-family: "Songti SC", "STSong", serif;
     text-align: center;
     letter-spacing: 6rpx;
+    color: $color-text;
   }
 
-  &__gist { font-size: 28rpx; font-weight: 600; margin-bottom: 24rpx; }
+  &__gist { font-size: 28rpx; font-weight: 600; margin-bottom: 24rpx; color: $color-primary-dark; }
 
   &__interpretation { font-size: 26rpx; color: $color-text-secondary; line-height: 1.8; }
 
@@ -885,6 +910,7 @@ function goHistory(): void {
     text-align: center;
     line-height: 1.6;
     letter-spacing: 4rpx;
+    color: $color-primary-dark;
   }
 
   &__book-page { font-size: 24rpx; color: $color-text-secondary; margin-top: 48rpx; }
@@ -907,13 +933,12 @@ function goHistory(): void {
   &__grail-cup {
     width: 110rpx;
     height: 72rpx;
-    background: linear-gradient(180deg, #B03A2E, #7B241C);
+    background: $fill;
+    border: 3rpx solid $line-strong;
     border-radius: 110rpx 110rpx 16rpx 16rpx;
-    box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.2);
 
     &--flat {
       border-radius: 16rpx 16rpx 110rpx 110rpx;
-      background: linear-gradient(0deg, #B03A2E, #7B241C);
     }
 
     &--throwing { animation: cup-roll 0.3s linear infinite; }
@@ -925,7 +950,7 @@ function goHistory(): void {
     100% { transform: rotate(360deg) translateY(0); }
   }
 
-  &__grail-result { font-size: 26rpx; line-height: 1.7; text-align: center; margin: 8rpx 0 4rpx; }
+  &__grail-result { font-size: 26rpx; line-height: 1.7; text-align: center; margin: 8rpx 0 4rpx; color: $color-primary-dark; }
 
   // ---------- AI 解签 ----------
 
@@ -942,6 +967,7 @@ function goHistory(): void {
     font-size: 32rpx;
     font-weight: 700;
     font-family: "Songti SC", "STSong", serif;
+    color: $color-text;
     margin-bottom: 24rpx;
   }
 
@@ -955,9 +981,10 @@ function goHistory(): void {
     margin-top: 24rpx;
     border-radius: $radius-md;
     padding: 20rpx 24rpx;
+    background: $color-primary-light;
   }
 
-  &__reading-lucky-text { color: #F5D98A; font-size: 26rpx; }
+  &__reading-lucky-text { color: $color-primary-dark; font-size: 26rpx; }
 
   &__reading-error { display: block; text-align: center; color: $color-danger; font-size: 26rpx; margin-top: 16rpx; }
 

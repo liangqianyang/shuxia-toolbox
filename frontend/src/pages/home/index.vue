@@ -1,57 +1,79 @@
 <template>
-  <!-- 拖动排序时锁定页面滚动（page-meta 必须是页面第一个节点） -->
-  <page-meta :page-style="draggingToolKey ? 'overflow: hidden;' : ''">
-    <view class="home">
-    <view class="home__header">
-      <view class="home__header-copy">
-        <text class="home__title">枫叶小屋</text>
-        <text class="home__slogan">常用工具</text>
-      </view>
-      <view class="home__sort-btn" :class="{ 'home__sort-btn--active': sorting }" hover-class="press" @tap="toggleSortMode">
-        {{ sorting ? '完成' : '排序' }}
-      </view>
-    </view>
-
-    <view v-if="sorting" class="home__sort-state">长按卡片后上下拖动排序，完成后自动保存</view>
-
-    <view v-if="tools.length" class="home__tools">
-      <view
-        v-for="tool in tools"
-        :key="tool.key"
-        class="home__tool-card card"
-        :class="{ 'home__tool-card--dragging': draggingToolKey === tool.key, 'home__tool-card--sorting': sorting }"
-        hover-class="press"
-        @tap.stop="onToolTap(tool)"
-        @longpress.stop="beginSort(tool.key)"
-        @touchmove="onToolDragMove($event)"
-        @touchend.stop="endToolDrag"
-        @touchcancel.stop="endToolDrag"
-      >
-        <ToolIcon class="home__tool-icon" :icon="tool.icon" />
-        <view class="home__tool-body">
-          <text class="home__tool-title">{{ tool.name }}</text>
-          <text class="home__tool-desc">{{ toolDescription(tool) }}</text>
+  <!-- 拖动排序时锁定页面滚动（page-meta 是配置节点、不渲染内容，页面内容必须放在它外面） -->
+  <page-meta :page-style="draggingToolKey ? 'overflow: hidden;' : ''" />
+  <view class="home">
+      <view class="home__pagehead">
+        <view class="home__pagehead-copy">
+          <text class="home__kick">MAPLE HOUSE · 枫叶小屋</text>
+          <text class="home__title">常用工具</text>
+          <text class="home__sub">长按卡片可拖动排序</text>
         </view>
-        <text v-if="toolBadge(tool)" class="home__tool-badge">{{ toolBadge(tool) }}</text>
-        <text class="home__tool-order" v-if="sorting">↕</text>
-        <text class="home__tool-arrow" v-else>›</text>
+        <view class="home__iconbtn" :class="{ 'home__iconbtn--active': sorting }" hover-class="press" @tap="toggleSortMode">
+          <text>{{ sorting ? '完成' : '↕' }}</text>
+        </view>
       </view>
-    </view>
 
-    <view v-else-if="!loading" class="home__empty">
-      <text class="home__empty-icon">🍁</text>
-      <text>暂时没有可展示的工具</text>
-    </view>
-    <AppBottomNav active="home" />
-    </view>
-  </page-meta>
+      <view v-if="sorting" class="hintline home__sorthint">长按卡片后上下拖动排序，完成后自动保存</view>
+
+      <AppSection v-if="toolItems.length" title="工具" card>
+        <ToolCard
+          v-for="(tool, index) in toolItems"
+          :key="tool.key"
+          class="home__tool-card"
+          :class="{ 'home__tool-card--dragging': draggingToolKey === tool.key }"
+          :icon="tool.icon"
+          :pastel="tool.key"
+          :title="tool.name"
+          :description="toolDescription(tool)"
+          :badge="toolBadge(tool)"
+          :divided="index > 0"
+          :pressable="!sorting"
+          @tap.stop="onToolTap(tool)"
+          @longpress.stop="beginSort(tool.key)"
+          @touchmove="onToolDragMove($event)"
+          @touchend.stop="endToolDrag"
+          @touchcancel.stop="endToolDrag"
+        />
+      </AppSection>
+
+      <AppSection v-if="gameItems.length" title="游戏" card>
+        <ToolCard
+          v-for="(game, index) in gameItems"
+          :key="game.key"
+          class="home__game-card"
+          :class="{ 'home__game-card--dragging': draggingToolKey === game.key }"
+          :icon="game.icon"
+          :pastel="game.key"
+          :title="game.name"
+          :description="game.description"
+          :divided="index > 0"
+          :pressable="!sorting"
+          @tap.stop="onToolTap(game)"
+          @longpress.stop="beginSort(game.key)"
+          @touchmove="onToolDragMove($event)"
+          @touchend.stop="endToolDrag"
+          @touchcancel.stop="endToolDrag"
+        >
+          <template #right>
+            <text class="tag tag--blue">已在首页</text>
+          </template>
+        </ToolCard>
+      </AppSection>
+
+      <view v-if="!toolItems.length && !gameItems.length && !loading" class="home__empty">
+        <text class="home__empty-icon">🍁</text>
+        <text>暂时没有可展示的工具</text>
+      </view>
+      <AppBottomNav active="home" />
+  </view>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppBottomNav from '@/components/AppBottomNav.vue'
-import ToolIcon from '@/components/ToolIcon.vue'
+import AppSection from '@/components/AppSection.vue'
+import ToolCard from '@/components/ToolCard.vue'
 import type { ToolboxHomeData, ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
 import { fetchAnniversaries } from '@/services/anniversary'
@@ -80,6 +102,10 @@ const loading = ref(true)
 const sorting = ref(false)
 const draggingToolKey = ref('')
 const toolPositions = ref<ToolPosition[]>([])
+
+/** v4 分组列表：工具/游戏分组展示；tools 顺序 = 工具组顺序 + 游戏组顺序（保存顺序随之） */
+const toolItems = computed(() => tools.value.filter((tool) => (tool.category || 'tool') !== 'game'))
+const gameItems = computed(() => tools.value.filter((tool) => tool.category === 'game'))
 
 onShow(() => {
   void loadTools()
@@ -151,21 +177,31 @@ function beginSort(toolKey: string) {
   void refreshToolPositions()
 }
 
+/** 被拖动项所属分组（拖动只在组内重排，两组测量选择器也因此分开） */
+function dragGroupIsGame(): boolean {
+  const dragged = tools.value.find((tool) => tool.key === draggingToolKey.value)
+  return dragged?.category === 'game'
+}
+
 function onToolDragMove(event: TouchEvent) {
   if (!sorting.value || !draggingToolKey.value) return
   const pointerY = event.touches?.[0]?.clientY
-  if (typeof pointerY !== 'number' || toolPositions.value.length !== tools.value.length) return
+  if (typeof pointerY !== 'number') return
 
-  const fromIndex = tools.value.findIndex((tool) => tool.key === draggingToolKey.value)
+  const groupIsGame = dragGroupIsGame()
+  const group = groupIsGame ? gameItems.value : toolItems.value
+  if (group.length !== toolPositions.value.length) return
+
+  const fromIndex = group.findIndex((tool) => tool.key === draggingToolKey.value)
   if (fromIndex < 0) return
   const matchedIndex = toolPositions.value.findIndex((position) => pointerY < position.top + position.height / 2)
-  const nextIndex = matchedIndex === -1 ? tools.value.length - 1 : matchedIndex
+  const nextIndex = matchedIndex === -1 ? group.length - 1 : matchedIndex
   if (nextIndex === fromIndex) return
 
-  const nextTools = [...tools.value]
-  const [dragged] = nextTools.splice(fromIndex, 1)
-  nextTools.splice(nextIndex, 0, dragged)
-  tools.value = nextTools
+  const nextGroup = [...group]
+  const [dragged] = nextGroup.splice(fromIndex, 1)
+  nextGroup.splice(nextIndex, 0, dragged)
+  tools.value = groupIsGame ? [...toolItems.value, ...nextGroup] : [...nextGroup, ...gameItems.value]
   void refreshToolPositions()
 }
 
@@ -190,8 +226,9 @@ async function finishSort() {
 
 async function refreshToolPositions() {
   await nextTick()
+  const selector = dragGroupIsGame() ? '.home__game-card' : '.home__tool-card'
   uni.createSelectorQuery()
-    .selectAll('.home__tool-card')
+    .selectAll(selector)
     .boundingClientRect((rectangles) => {
       const rects = Array.isArray(rectangles) ? rectangles : []
       toolPositions.value = rects.map((rectangle) => ({ top: Number(rectangle.top ?? 0), height: Number(rectangle.height ?? 0) }))
@@ -203,136 +240,73 @@ async function refreshToolPositions() {
 <style lang="scss" scoped>
 .home {
   min-height: 100vh;
-  padding: 48rpx 32rpx 180rpx;
+  padding: 24rpx 32rpx 200rpx;
 
-  &__header {
+  &__pagehead {
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 20rpx;
-    padding: 40rpx 0 56rpx;
+    padding: 20rpx 4rpx 8rpx;
   }
 
-  &__header-copy {
+  &__pagehead-copy {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 12rpx;
+  }
+
+  &__kick {
+    font-size: 20rpx;
+    letter-spacing: 5rpx;
+    color: $blue-deep;
+    font-weight: 700;
+    margin-bottom: 8rpx;
   }
 
   &__title {
-    font-size: 44rpx;
+    font-size: 46rpx;
     font-weight: 700;
-    color: $color-text;
-    letter-spacing: 4rpx;
+    color: $ink;
+    line-height: 1.2;
   }
 
-  &__slogan {
-    font-size: $font-caption;
-    color: $color-text-secondary;
-    letter-spacing: 8rpx;
-  }
-
-  &__sort-btn {
-    min-width: 80rpx;
-    padding: 12rpx 8rpx;
-    color: $color-text-secondary;
+  &__sub {
     font-size: 24rpx;
-    font-weight: 600;
-    text-align: right;
-    flex-shrink: 0;
+    color: $ink2;
+    margin-top: 10rpx;
   }
 
-  &__sort-btn--active {
-    color: $color-primary;
-  }
-
-  &__sort-state {
-    margin: -28rpx 0 20rpx;
-    color: $color-primary;
-    font-size: 22rpx;
-  }
-
-  &__tools {
-    display: flex;
-    flex-direction: column;
-    gap: 24rpx;
-  }
-
-  &__tool-card {
-    display: flex;
-    align-items: center;
-    gap: 28rpx;
-    transition: transform 160ms ease, opacity 160ms ease;
-  }
-
-  &__tool-card--sorting {
-    border-color: rgba($color-primary, 0.35);
-  }
-
-  &__tool-card--dragging {
-    transform: scale(0.98);
-    opacity: 0.72;
-  }
-
-  &__tool-icon {
-    width: 96rpx;
-    height: 96rpx;
-    border-radius: $radius-md;
-    background-color: $color-primary-light;
+  &__iconbtn {
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: 24rpx;
+    background: $card;
+    border: 2rpx solid $line-strong;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 52rpx;
+    color: $ink2;
+    font-size: 30rpx;
     flex-shrink: 0;
+    box-sizing: border-box;
   }
 
-  &__tool-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8rpx;
-    flex: 1;
-    min-width: 0;
-  }
-
-  &__tool-title {
-    font-size: $font-title;
+  &__iconbtn--active {
+    background: $blue-tint;
+    border-color: $blue;
+    color: $blue-deep;
     font-weight: 600;
-    color: $color-text;
   }
 
-  &__tool-desc {
-    font-size: $font-caption;
-    color: $color-text-secondary;
-    line-height: 1.45;
+  &__sorthint {
+    margin: 20rpx 0 24rpx;
   }
 
-  &__tool-badge {
-    min-width: 36rpx;
-    height: 36rpx;
-    padding: 0 10rpx;
-    border-radius: 999rpx;
-    background: $color-danger;
-    color: #fff;
-    font-size: 20rpx;
-    font-weight: 700;
-    line-height: 36rpx;
-    text-align: center;
-    flex-shrink: 0;
-  }
-
-  &__tool-arrow,
-  &__tool-order {
-    width: 40rpx;
-    color: $color-text-secondary;
-    font-size: 48rpx;
-    text-align: center;
-    flex-shrink: 0;
-  }
-
-  &__tool-order {
-    color: $color-primary;
-    font-size: 32rpx;
+  &__tool-card--dragging,
+  &__game-card--dragging {
+    transform: scale(0.98);
+    opacity: 0.72;
   }
 
   &__empty {
@@ -342,7 +316,7 @@ async function refreshToolPositions() {
     align-items: center;
     justify-content: center;
     gap: 16rpx;
-    color: $color-text-secondary;
+    color: $ink2;
     font-size: 26rpx;
   }
 

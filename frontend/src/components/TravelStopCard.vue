@@ -467,8 +467,8 @@ async function pickPhoto(): Promise<void> {
     gap: 12rpx;
     padding: 16rpx 20rpx;
     border-radius: $radius-md;
-    background-color: #fff8ef;
-    border: 2rpx solid #ead6bf;
+    background-color: $blue-tint;
+    border: 2rpx solid $line;
   }
 
   &__handbook-input {
@@ -575,7 +575,7 @@ async function pickPhoto(): Promise<void> {
     padding: 8rpx 0;
 
     &--disabled {
-      color: #b8a797;
+      color: $ink3;
     }
 
     &--locked {
@@ -584,7 +584,7 @@ async function pickPhoto(): Promise<void> {
     }
 
     &--del {
-      color: #d9534f;
+      color: $red;
     }
   }
 
@@ -646,9 +646,9 @@ async function pickPhoto(): Promise<void> {
     color: $color-text-secondary;
 
     &--active {
-      border-color: $color-primary;
-      background-color: #fff3e6;
-      color: $color-primary-dark;
+      border-color: $blue;
+      background-color: $blue-tint;
+      color: $blue-deep;
       font-weight: 600;
     }
   }
@@ -694,8 +694,8 @@ async function pickPhoto(): Promise<void> {
     gap: 6rpx;
     padding: 14rpx 18rpx;
     border-radius: $radius-md;
-    background-color: #fff8ef;
-    border: 2rpx solid #ead6bf;
+    background-color: $blue-tint;
+    border: 2rpx solid $line;
   }
 
   &__leg-reason-label,

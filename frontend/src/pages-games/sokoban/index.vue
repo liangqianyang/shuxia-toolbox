@@ -1,6 +1,6 @@
 <template>
   <view class="sok">
-    <!-- ═══════════ 主页（选关,奶油暖色皮肤,照原型帧 01） ═══════════ -->
+    <!-- ═══════════ 主页（选关,v4 小清新皮肤,结构不变） ═══════════ -->
     <scroll-view v-if="panel === 'home'" class="sok__home" scroll-y :show-scrollbar="false">
       <view class="sok__hero">
         <view class="sok__deco">
@@ -76,7 +76,7 @@
       <view class="sok__home-safe"></view>
     </scroll-view>
 
-    <!-- ═══════════ 对局面板（照原型帧 02-04） ═══════════ -->
+    <!-- ═══════════ 对局面板（v4 · 撤销/重开上移顶栏,底部只留 dpad） ═══════════ -->
     <view v-else class="sok__game">
       <view class="sok__bar">
         <view class="sok__back-btn" hover-class="press" @tap="showExit = true">
@@ -87,27 +87,26 @@
           <text class="sok__bar-chapter">{{ chapterOf(levelId).name }}</text>
         </view>
         <view class="sok__flex"></view>
-        <view class="sok__bar-stat">
-          <text class="sok__bar-num">{{ view?.steps ?? 0 }}</text>
-          <text class="sok__bar-label">步数</text>
-        </view>
-        <view class="sok__bar-stat">
-          <text class="sok__bar-num sok__bar-num--gold">≤{{ view?.level.threeStar ?? 0 }}</text>
-          <text class="sok__bar-label">三星步数</text>
-        </view>
+        <!-- 撤销/重开上移顶栏（防误触：不可逆操作离开方向键区,重开二次确认） -->
+        <view class="sok__action sok__action--blue" hover-class="press" @tap="undoTap"><text>撤销</text></view>
+        <view class="sok__action" hover-class="press" @tap="hintTap"><text>提示</text></view>
+        <view class="sok__action-icon" hover-class="press" @tap="resetTap"><text>↺</text></view>
+      </view>
+      <view class="sok__statline">
+        <text>步数 {{ view?.steps ?? 0 }} · 三星 ≤{{ view?.level.threeStar ?? 0 }}</text>
       </view>
 
       <view class="sok__stage">
         <view class="sok__stage-inner" :style="{ width: layout.boardW + 'px', height: layout.boardH + 'px' }">
           <canvas
-            v-show="!gameOver && !showExit && !showStuck"
+            v-show="!gameOver && !showExit && !showStuck && !showReset"
             id="sok-board"
             type="2d"
             class="sok__canvas"
             :style="{ width: layout.boardW + 'px', height: layout.boardH + 'px' }"
           ></canvas>
           <view
-            v-show="!gameOver && !showExit && !showStuck"
+            v-show="!gameOver && !showExit && !showStuck && !showReset"
             class="sok__hit"
             @touchstart="onTouchStart"
             @touchmove.stop="onTouchMove"
@@ -117,47 +116,60 @@
         </view>
       </view>
 
-      <!-- 十字方向键（照原型 Sok/方向键：滑动之外的点按操作,居中三行,按下枫叶金） -->
+      <!-- 十字方向键（只留加大 dpad,长按连走;滑动之外的点按操作,按下蓝 tint） -->
       <view class="sok__dpad">
         <view class="sok__dpad-row">
           <view class="sok__dpad-cell"></view>
-          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(0)">
+          <view
+            class="sok__dpad-key"
+            hover-class="sok__dpad-key--press"
+            hover-stay-time="100"
+            @touchstart="dpadPress(0)"
+            @touchend="stopDpadRepeat"
+            @touchcancel="stopDpadRepeat"
+          >
             <view class="sok__dpad-arrow sok__dpad-arrow--up"></view>
           </view>
           <view class="sok__dpad-cell"></view>
         </view>
         <view class="sok__dpad-row">
-          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(3)">
+          <view
+            class="sok__dpad-key"
+            hover-class="sok__dpad-key--press"
+            hover-stay-time="100"
+            @touchstart="dpadPress(3)"
+            @touchend="stopDpadRepeat"
+            @touchcancel="stopDpadRepeat"
+          >
             <view class="sok__dpad-arrow sok__dpad-arrow--left"></view>
           </view>
           <view class="sok__dpad-hub">
             <view class="sok__dpad-leaf"></view>
           </view>
-          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(1)">
+          <view
+            class="sok__dpad-key"
+            hover-class="sok__dpad-key--press"
+            hover-stay-time="100"
+            @touchstart="dpadPress(1)"
+            @touchend="stopDpadRepeat"
+            @touchcancel="stopDpadRepeat"
+          >
             <view class="sok__dpad-arrow sok__dpad-arrow--right"></view>
           </view>
         </view>
         <view class="sok__dpad-row">
           <view class="sok__dpad-cell"></view>
-          <view class="sok__dpad-key" hover-class="sok__dpad-key--press" hover-stay-time="100" @tap="dpadTap(2)">
+          <view
+            class="sok__dpad-key"
+            hover-class="sok__dpad-key--press"
+            hover-stay-time="100"
+            @touchstart="dpadPress(2)"
+            @touchend="stopDpadRepeat"
+            @touchcancel="stopDpadRepeat"
+          >
             <view class="sok__dpad-arrow sok__dpad-arrow--down"></view>
           </view>
           <view class="sok__dpad-cell"></view>
-        </view>
-      </view>
-
-      <view class="sok__pad">
-        <view class="sok__pad-btn" hover-class="press" @tap="undoTap">
-          <text class="sok__pad-icon">↩</text>
-          <text>撤销</text>
-        </view>
-        <view class="sok__pad-btn" hover-class="press" @tap="resetTap">
-          <text class="sok__pad-icon">↺</text>
-          <text>重开</text>
-        </view>
-        <view class="sok__pad-btn sok__pad-btn--gold" hover-class="press" @tap="hintTap">
-          <text class="sok__pad-icon">💡</text>
-          <text>提示</text>
         </view>
       </view>
       <view class="sok__hint">
@@ -178,7 +190,21 @@
         </view>
       </view>
 
-      <!-- 结算（照原型帧 06-08：三星/二星/章完成共用一卡,徽章与按钮组按状态变体） -->
+      <!-- 重开二次确认（破坏性操作上移顶栏后的防误触兜底） -->
+      <view v-if="showReset" class="sok__mask">
+        <view class="sok__card">
+          <view class="sok__card-man">
+            <view class="sok__deco-hat sok__deco-hat--lg"></view>
+            <view class="sok__deco-face sok__deco-face--lg"></view>
+          </view>
+          <text class="sok__card-title">重开本关？</text>
+          <text class="sok__card-sub">当前步数不会保留</text>
+          <view class="sok__card-btn sok__card-btn--primary" hover-class="press" @tap="confirmReset"><text>重开</text></view>
+          <view class="sok__card-btn" hover-class="press" @tap="showReset = false"><text>再想想</text></view>
+        </view>
+      </view>
+
+      <!-- 结算（三星/二星/章完成共用一卡,徽章与按钮组按状态变体） -->
       <view v-if="gameOver && result" class="sok__mask">
         <view class="sok__card">
           <view class="sok__card-deco">
@@ -266,7 +292,7 @@
 
 <script setup lang="ts">
 /**
- * 推箱子页（单机,布局照 Pen 原型 docs/sokoban-redesign/ 九帧）：
+ * 推箱子页（单机,v4 小清新皮肤：选关结构不动,对局撤销/重开上移顶栏+加大 dpad 长按连走）：
  * 主页 = 装饰行 + 星数丸（点开总星数榜）+ 音效/规则钮 + 章节卡（内嵌关卡格）;
  * 对局 = 数据栏 + 弹性居中棋盘（canvas + 四向滑动 hit 层）+ 十字方向键 + 撤销/重开/提示 + 三个浮层。
  * 引擎 utils/sokoban.ts、求解器 sokobanSolver.ts、关卡 sokobanLevels.ts、
@@ -309,6 +335,7 @@ const panel = ref<'home' | 'game'>('home')
 const showRules = ref(false)
 const showExit = ref(false)
 const showStuck = ref(false)
+const showReset = ref(false)
 const showRank = ref(false)
 const gameOver = ref(false)
 const result = ref<ResultCard | null>(null)
@@ -494,10 +521,37 @@ function onTouchCancel(e: unknown): void {
   swipe?.onTouchCancel(e)
 }
 
-// ---------- 虚拟方向键（照原型 Sok/方向键,与滑动共用 move;方向码 0上/1右/2下/3左） ----------
+// ---------- 虚拟方向键（与滑动共用 move;方向码 0上/1右/2下/3左;长按连走） ----------
 
-function dpadTap(dir: SokobanDir): void {
+const DPAD_REPEAT_DELAY_MS = 300
+const DPAD_REPEAT_INTERVAL_MS = 160
+let dpadRepeatTimer: ReturnType<typeof setTimeout> | null = null
+let dpadLoopTimer: ReturnType<typeof setInterval> | null = null
+
+function stopDpadRepeat(): void {
+  if (dpadRepeatTimer !== null) {
+    clearTimeout(dpadRepeatTimer)
+    dpadRepeatTimer = null
+  }
+  if (dpadLoopTimer !== null) {
+    clearInterval(dpadLoopTimer)
+    dpadLoopTimer = null
+  }
+}
+
+/** 按下立即走一格,长按 300ms 后每 160ms 连走;弹层出现即停（遮罩会盖住手,连走不能穿透）。 */
+function dpadPress(dir: SokobanDir): void {
+  stopDpadRepeat()
   move(dir)
+  dpadRepeatTimer = setTimeout(() => {
+    dpadLoopTimer = setInterval(() => {
+      if (gameOver.value || showExit.value || showStuck.value || showReset.value || panel.value !== 'game') {
+        stopDpadRepeat()
+        return
+      }
+      move(dir)
+    }, DPAD_REPEAT_INTERVAL_MS)
+  }, DPAD_REPEAT_DELAY_MS)
 }
 
 // ---------- 面板切换与关卡流程 ----------
@@ -526,8 +580,8 @@ async function startLevel(id: number): Promise<void> {
 /** 算棋盘格子：文档流布局(照 tetris)——canvas 与按钮是兄弟节点,再大也只会把按钮往下推,永远不会盖住。 */
 function sizeBoard(level: ReturnType<typeof parseLevel>): void {
   const availW = win.windowWidth - SIDE_PAD_PX
-  // 预留 数据栏+十字方向键(约220px)+按钮排+提示行+页边距(宁大勿小,超出只是页面可滚动)
-  const availH = Math.max(240, win.windowHeight - 400)
+  // 预留 顶栏+步数行+十字方向键(约212px)+提示行+页边距(宁大勿小,超出只是页面可滚动)
+  const availH = Math.max(240, win.windowHeight - 350)
   layout.value = computeSokobanLayout(availW, availH, level.w, level.h)
   rebuildSwipe()
 }
@@ -650,13 +704,18 @@ async function restoreAndResume(): Promise<void> {
   }
 }
 
-// ---------- 对局按钮 ----------
+// ---------- 对局按钮（撤销/提示/重开在顶栏,重开走二次确认） ----------
 
 function undoTap(): void {
   if (!undo()) playSokobanSound('walk')
 }
 
 function resetTap(): void {
+  showReset.value = true
+}
+
+function confirmReset(): void {
+  showReset.value = false
   restartLevel()
   playSokobanSound('undo')
 }
@@ -718,10 +777,10 @@ function openRank(): void {
 }
 
 function rankColor(r: number): string {
-  if (r === 1) return '#C08A1E'
-  if (r === 2) return '#8A93A6'
-  if (r === 3) return '#B4764A'
-  return '#7D6F60'
+  if (r === 1) return '#C99A34'
+  if (r === 2) return '#6E8093'
+  if (r === 3) return '#CC6F4E'
+  return '#A4B3C0'
 }
 
 // ---------- 杂项 ----------
@@ -737,11 +796,16 @@ onMounted(() => {
   void refreshFeatures() // 拉游戏榜单总开关（默认关）
   void restoreAndResume() // 云端进度恢复 + 自动续关
   // #ifdef H5
-  setTimeout(() => { startLevel(63) }, 300)
+  // 截图管线用（docs/design/screenshots-after 的推箱子对局截图）：只在 dev H5 生效，
+  // 生产 H5 构建不含——此前裸挂导致任何 H5 访客进页 300ms 被强制跳进第 63 关
+  if (import.meta.env.DEV) {
+    setTimeout(() => { startLevel(63) }, 300)
+  }
   // #endif
 })
 
 onUnload(() => {
+  stopDpadRepeat()
   destroy()
   releaseCanvas()
 })
@@ -789,24 +853,19 @@ const rulesSections = [
 </script>
 
 <style lang="scss" scoped>
-$s-bg: #fff8f0;
-$s-panel: #ffffff;
-$s-panel-2: #f7eddf;
-$s-line: #f0e4d7;
-$s-text: #4a3f35;
-$s-dim: #7d6f60;
-$s-gold: #f4b942;
-$s-gold-deep: #c08a1e;
-$s-gold-ink: #6b4a12;
-$s-red: #e85d4a;
-$s-scrim: rgba(62, 50, 38, 0.72);
-$s-wall: #b4855c;
-$s-box: #d9a05b;
+// v4 小清新皮肤（原型 play-sokoban）:冷调蓝白 + 白卡发丝线,星标/提示金 = 小面积内容点缀
+$s-ink: $ink;
+$s-dim: $ink2;
+$s-faint: $ink3;
+$s-line: $line;
+$s-line-strong: $line-strong;
+$s-amber: #c99a34; // 星标 amber（PASTEL sokoban fg,白底可读档）
+$s-red: $red;
 
 .sok {
   min-height: 100vh;
-  background: $s-bg;
-  color: $s-text;
+  background: $bg;
+  color: $s-ink;
   display: flex;
   flex-direction: column;
 }
@@ -842,7 +901,8 @@ $s-box: #d9a05b;
   top: 5rpx;
   width: 46rpx;
   height: 46rpx;
-  background: #fffdf8;
+  background: #fff;
+  border: 2rpx solid $s-line-strong;
   border-radius: 50%;
 }
 /* 双眼（照原型 Sok/小人：中心左 5/32、右 2.5/32、上 4/32） */
@@ -854,7 +914,7 @@ $s-box: #d9a05b;
   width: 4.5rpx;
   height: 4.5rpx;
   border-radius: 50%;
-  background: #4a3f35;
+  background: $s-ink;
 }
 .sok__deco-face::before {
   left: 14rpx;
@@ -880,7 +940,7 @@ $s-box: #d9a05b;
   top: -11rpx;
   width: 20rpx;
   height: 20rpx;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23E85D4A'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23E8806F'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   /* 枫叶帽 = 原型 lucide leaf @11,-2 转 35°（CCW）,SVG 真路径 */
@@ -891,7 +951,7 @@ $s-box: #d9a05b;
   display: block;
   width: 62rpx;
   height: 62rpx;
-  border: none;
+  border: 2rpx solid $s-line-strong;
 }
 .sok__deco-hat--lg {
   position: absolute;
@@ -899,7 +959,7 @@ $s-box: #d9a05b;
   top: -15rpx;
   width: 26rpx;
   height: 26rpx;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23E85D4A'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23E8806F'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   transform: rotate(-35deg);
@@ -913,13 +973,13 @@ $s-box: #d9a05b;
 .sok__deco-box {
   width: 52rpx;
   height: 52rpx;
-  background: $s-box;
-  border: 3rpx solid #b37f42;
+  background: #f3ce79;
+  border: 3rpx solid #c99a34;
   border-radius: 12rpx;
 }
 .sok__deco-box--gold {
-  background: $s-gold;
-  border-color: $s-gold-deep;
+  background: #f4b942;
+  border-color: #c99a34;
 }
 .sok__deco-box--lg {
   width: 64rpx;
@@ -931,7 +991,7 @@ $s-box: #d9a05b;
   border-radius: 50%;
 }
 .sok__deco-dot--gold {
-  background: $s-gold;
+  background: #f4b942;
 }
 .sok__deco-dot--red {
   background: $s-red;
@@ -946,19 +1006,19 @@ $s-box: #d9a05b;
 }
 .sok__title {
   font-size: $font-display;
-  font-weight: 800;
-  color: $s-text;
+  font-weight: 600;
+  color: $s-ink;
 }
 .sok__star-pill {
   display: flex;
   align-items: center;
   gap: 6rpx;
-  background: $s-panel-2;
+  background: $fill;
   border-radius: $radius-pill;
   padding: 6rpx 18rpx;
 }
 .sok__star-pill-icon {
-  color: $s-gold-deep;
+  color: $s-amber;
   font-size: $font-body;
 }
 .sok__star-pill-num {
@@ -968,12 +1028,14 @@ $s-box: #d9a05b;
 .sok__icon-btn {
   width: 64rpx;
   height: 64rpx;
-  background: $s-panel-2;
+  background: $card;
+  border: 2rpx solid $s-line-strong;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: $font-body;
+  color: $s-dim;
 }
 .sok__subtitle {
   display: block;
@@ -988,13 +1050,13 @@ $s-box: #d9a05b;
   gap: $space-3;
 }
 .sok__chapter {
-  background: $s-panel;
+  background: $card;
   border: 2rpx solid $s-line;
-  border-radius: $radius-md;
+  border-radius: $radius-lg;
   padding: $space-3 $space-3 $space-2;
 }
 .sok__chapter.is-locked {
-  background: $s-panel-2;
+  background: $fill;
   border-color: transparent;
 }
 .sok__chapter-head {
@@ -1008,22 +1070,22 @@ $s-box: #d9a05b;
   border-radius: 50%;
 }
 .sok__chapter.is-locked .sok__chapter-dot {
-  background: #b9a98f !important;
+  background: $s-faint !important;
 }
 .sok__chapter-name {
   font-size: $font-title;
-  font-weight: 700;
-  color: $s-text;
+  font-weight: 600;
+  color: $s-ink;
 }
 .sok__chapter.is-locked .sok__chapter-name {
-  color: #b9a98f;
+  color: $s-faint;
 }
 .sok__chapter-progress {
   font-size: $font-caption;
   color: $s-dim;
 }
 .sok__chapter.is-locked .sok__chapter-progress {
-  color: #b9a98f;
+  color: $s-faint;
 }
 .sok__chapter-tag {
   display: block;
@@ -1041,26 +1103,27 @@ $s-box: #d9a05b;
   /* 一行 5 个：固定 rpx 宽——calc 百分比在真机会被 px 取整挤掉第 5 个
      （页边距 24×2 + 卡边距 24×2 + 边框 2×2 → 内容 650rpx,5×122 + 4×8 = 642 ✓） */
   width: 122rpx;
-  background: $s-panel-2;
+  background: $fill;
   border-radius: $radius-sm;
   padding: $space-1 0 6rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2rpx;
+  box-sizing: border-box;
 }
 .sok__level.is-current {
-  background: #fff6e3;
-  border: 2rpx solid $s-gold;
+  background: $blue-tint;
+  border: 2rpx solid $blue;
 }
 .sok__level-num {
   font-size: $font-title;
-  font-weight: 700;
-  color: $s-text;
+  font-weight: 600;
+  color: $s-ink;
   line-height: 1.1;
 }
 .sok__level.is-current .sok__level-num {
-  color: $s-gold-deep;
+  color: $blue-deep;
 }
 .sok__level-stars {
   display: flex;
@@ -1068,10 +1131,10 @@ $s-box: #d9a05b;
 }
 .sok__level-star {
   font-size: 18rpx;
-  color: #dccdb6;
+  color: $s-line-strong;
 }
 .sok__level-star.is-on {
-  color: $s-gold-deep;
+  color: $s-amber;
 }
 .sok__chapter-lock {
   display: flex;
@@ -1084,13 +1147,13 @@ $s-box: #d9a05b;
 }
 .sok__chapter-lock-text {
   font-size: $font-caption;
-  color: #b9a98f;
+  color: $s-faint;
 }
 .sok__home-foot {
   margin-top: $space-3;
   text-align: center;
   font-size: $font-micro;
-  color: #8b7b6b;
+  color: $s-faint;
 }
 .sok__home-safe {
   height: calc(40rpx + env(safe-area-inset-bottom));
@@ -1108,16 +1171,18 @@ $s-box: #d9a05b;
   display: flex;
   align-items: center;
   gap: $space-2;
-  height: 96rpx;
+  min-height: 96rpx;
 }
 .sok__back-btn {
-  width: 72rpx;
-  height: 72rpx;
-  background: $s-panel-2;
+  width: 64rpx;
+  height: 64rpx;
+  background: $card;
+  border: 2rpx solid $s-line-strong;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
 }
 .sok__back-icon {
   font-size: 44rpx;
@@ -1131,31 +1196,55 @@ $s-box: #d9a05b;
 }
 .sok__bar-name {
   font-size: $font-title;
-  font-weight: 700;
+  font-weight: 600;
 }
 .sok__bar-chapter {
   font-size: $font-micro;
   color: $s-dim;
 }
-.sok__bar-stat {
+/* 顶栏右侧：撤销(蓝 tint 胶囊)/提示(白胶囊)/重开(图标,二次确认) */
+.sok__action {
+  height: 64rpx;
+  padding: 0 26rpx;
+  background: $card;
+  border: 2rpx solid $s-line-strong;
+  border-radius: $radius-pill;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
+  font-size: $font-caption;
+  color: $s-ink;
+  flex: none;
 }
-.sok__bar-num {
-  font-size: 44rpx;
-  font-weight: 800;
-  line-height: 1.1;
+.sok__action--blue {
+  background: $blue-tint;
+  border-color: $blue;
+  color: $blue-deep;
+  font-weight: 600;
 }
-.sok__bar-num--gold {
-  color: $s-gold-deep;
-}
-.sok__bar-label {
-  font-size: $font-micro;
+.sok__action-icon {
+  width: 64rpx;
+  height: 64rpx;
+  background: $card;
+  border: 2rpx solid $s-line-strong;
+  border-radius: $radius-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
   color: $s-dim;
+  flex: none;
+}
+.sok__statline {
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $font-micro;
+  color: $s-faint;
 }
 .sok__stage {
-  /* 文档流(tetris 家法)：高度=画布高度,按钮排在画布之后——原生组件层级再高也无重叠区可盖 */
+  /* 文档流(tetris 家法)：高度=画布高度,方向键排在画布之后——原生组件层级再高也无重叠区可盖 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1176,7 +1265,7 @@ $s-box: #d9a05b;
   z-index: 1;
 }
 
-/* ---------- 十字方向键（照原型 Sok/方向键:64px 键帽×2=128rpx,圆角16×2,键距10×2） ---------- */
+/* ---------- 十字方向键（只留加大 dpad:128×116 键帽,键距 20rpx,长按连走,按下蓝 tint） ---------- */
 .sok__dpad {
   display: flex;
   flex-direction: column;
@@ -1190,40 +1279,40 @@ $s-box: #d9a05b;
 }
 .sok__dpad-cell {
   width: 128rpx;
-  height: 128rpx;
+  height: 116rpx;
 }
 .sok__dpad-hub {
   width: 128rpx;
-  height: 128rpx;
+  height: 116rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .sok__dpad-key {
   width: 128rpx;
-  height: 128rpx;
+  height: 116rpx;
   box-sizing: border-box;
-  background: $s-panel;
-  border: 2rpx solid $s-line;
-  border-radius: 32rpx;
+  background: $card;
+  border: 2rpx solid $s-line-strong;
+  border-radius: $radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .sok__dpad-key--press {
-  background: $s-gold;
-  border-color: $s-gold;
+  background: $blue-tint;
+  border-color: $blue;
 }
-/* 箭头 = 原型 lucide arrow-up（线条风,圆头描边）,四方向旋转复用;按下换深金描边 */
+/* 箭头 = 原型 lucide arrow-up（线条风,圆头描边）,四方向旋转复用;按下换深蓝描边 */
 .sok__dpad-arrow {
   width: 44rpx;
   height: 44rpx;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%234A3F35'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%232E4154'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
 .sok__dpad-key--press .sok__dpad-arrow {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%236B4A12'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%233B86B8'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M12%2019V5'/%3E%3Cpath%20d='m5%2012%207-7%207%207'/%3E%3C/svg%3E");
 }
 .sok__dpad-arrow--right {
   transform: rotate(90deg);
@@ -1234,48 +1323,21 @@ $s-box: #d9a05b;
 .sok__dpad-arrow--left {
   transform: rotate(-90deg);
 }
-/* 中心枫叶标（原型 lucide leaf @ $sok-star-off,纯装饰不可点） */
+/* 中心枫叶标（纯装饰不可点） */
 .sok__dpad-leaf {
   width: 40rpx;
   height: 40rpx;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23DCCDB6'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23DDE6EC'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M11%2020A7%207%200%200%201%209.8%206.1C15.5%205%2017%204.48%2019%202c1%202%202%204.18%202%208%200%205.5-4.78%2010-10%2010Z'/%3E%3Cpath%20d='M2%2021c0-3%201.85-5.36%205.08-6C9.5%2014.52%2012%2013%2013%2012'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
-.sok__pad {
-  display: flex;
-  gap: $space-2;
-  padding: $space-2 0 0;
-}
-.sok__pad-btn {
-  flex: 1;
-  height: 96rpx;
-  background: $s-panel;
-  border: 2rpx solid $s-line;
-  border-radius: $radius-pill;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $space-1;
-  font-size: $font-body;
-  color: $s-text;
-}
-.sok__pad-btn--gold {
-  background: $s-gold;
-  border-color: $s-gold;
-  color: $s-gold-ink;
-  font-weight: 700;
-}
-.sok__pad-icon {
-  font-size: $font-body;
-}
 .sok__hint {
-  height: 72rpx;
+  min-height: 72rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: $font-micro;
-  color: $s-gold-deep;
+  color: $blue-deep;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -1287,7 +1349,7 @@ $s-box: #d9a05b;
   right: 0;
   bottom: 0;
   left: 0;
-  background: $s-scrim;
+  background: rgba(46, 65, 84, 0.45);
   z-index: 50;
   display: flex;
   align-items: center;
@@ -1296,9 +1358,8 @@ $s-box: #d9a05b;
 }
 .sok__card {
   width: 100%;
-  /* 原型卡底是 $tet-bg 奶油色(#FFF8F0)而非纯白——#FFFDF8 的脸在纯白上会隐形 */
-  background: #fff8f0;
-  border-radius: 40rpx;
+  background: $card;
+  border-radius: $radius-lg;
   padding: 56rpx 44rpx 40rpx;
   display: flex;
   flex-direction: column;
@@ -1312,7 +1373,7 @@ $s-box: #d9a05b;
 }
 .sok__card-title {
   font-size: $font-display;
-  font-weight: 800;
+  font-weight: 600;
 }
 .sok__card-sub {
   font-size: $font-body;
@@ -1326,17 +1387,17 @@ $s-box: #d9a05b;
 }
 .sok__card-star {
   font-size: 56rpx;
-  color: #dccdb6;
+  color: $s-line-strong;
 }
 .sok__card-star.is-mid {
   font-size: 80rpx;
 }
 .sok__card-star.is-on {
-  color: $s-gold;
+  color: $s-amber;
 }
 .sok__card-badge {
-  background: rgba(244, 185, 66, 0.15);
-  color: $s-gold-deep;
+  background: $blue-tint;
+  color: $blue-deep;
   border-radius: $radius-pill;
   padding: 6rpx 24rpx;
   font-size: $font-micro;
@@ -1353,19 +1414,19 @@ $s-box: #d9a05b;
 .sok__card-btn {
   width: 100%;
   height: 88rpx;
-  border-radius: 28rpx;
-  background: $s-panel-2;
+  border-radius: $radius-md;
+  background: $fill;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8rpx;
   font-size: $font-body;
-  color: $s-text;
+  color: $s-ink;
 }
 .sok__card-btn--primary {
-  background: $s-gold;
-  color: $s-gold-ink;
-  font-weight: 700;
+  background: $blue;
+  color: #fff;
+  font-weight: 600;
 }
 .sok__card-arrow {
   font-size: $font-title;
@@ -1376,8 +1437,8 @@ $s-box: #d9a05b;
 .sok__rank {
   width: 100%;
   max-height: 72vh;
-  background: #fff8f0;
-  border-radius: 40rpx;
+  background: $card;
+  border-radius: $radius-lg;
   padding: $space-3 $space-3 $space-2;
   display: flex;
   flex-direction: column;
@@ -1390,7 +1451,7 @@ $s-box: #d9a05b;
 }
 .sok__rank-title {
   font-size: $font-title;
-  font-weight: 800;
+  font-weight: 600;
 }
 .sok__rank-close {
   font-size: $font-title;
@@ -1408,16 +1469,16 @@ $s-box: #d9a05b;
 }
 .sok__rank-retry {
   margin-top: $space-2;
-  color: $s-gold-deep;
+  color: $blue-deep;
 }
 .sok__rank-mine {
   display: flex;
   justify-content: space-between;
-  background: #fff6e3;
+  background: $blue-tint;
   border-radius: $radius-sm;
   padding: $space-2;
   font-size: $font-caption;
-  color: $s-gold-deep;
+  color: $blue-deep;
   margin-bottom: $space-2;
 }
 .sok__rank-row {
@@ -1429,11 +1490,11 @@ $s-box: #d9a05b;
   font-size: $font-caption;
 }
 .sok__rank-row.is-me {
-  background: #fff6e3;
+  background: $fill;
 }
 .sok__rank-no {
   width: 48rpx;
-  font-weight: 800;
+  font-weight: 600;
 }
 .sok__rank-name {
   flex: 1;

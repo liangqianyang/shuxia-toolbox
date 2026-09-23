@@ -84,7 +84,7 @@ function closeSheet() {
     position: fixed;
     inset: 0;
     z-index: 95;
-    background: rgba(74, 63, 53, 0.55);
+    background: $scrim;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -103,7 +103,7 @@ function closeSheet() {
     width: 72rpx;
     height: 8rpx;
     border-radius: 999rpx;
-    background: #e0d5c5;
+    background: $line-strong;
     margin: 0 auto 8rpx;
   }
 
@@ -132,7 +132,7 @@ function closeSheet() {
     padding: 20rpx 24rpx;
     border: 2rpx solid $color-border;
     border-radius: $radius-md;
-    background: #fffdfb;
+    background: #ffffff;
   }
 
   &__role--active {
@@ -162,7 +162,7 @@ function closeSheet() {
     gap: 12rpx;
     padding: 24rpx;
     border-radius: $radius-md;
-    background: #f6efe7;
+    background: $fill;
   }
 
   &__ready-code {
@@ -186,10 +186,11 @@ function closeSheet() {
     align-items: center;
     justify-content: center;
     border-radius: $radius-md;
-    background: linear-gradient(180deg, #d95440, #b8402e);
+    background: $color-primary;
+    box-shadow: 0 6rpx 16rpx rgba($color-primary, 0.16);
     color: #ffffff;
     font-size: 28rpx;
-    font-weight: 700;
+    font-weight: 600;
 
     &::after {
       border: none;

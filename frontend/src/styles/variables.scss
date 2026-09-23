@@ -1,23 +1,89 @@
-/* 品牌设计 token —— 枫叶小屋：暖白底 + 奶茶色，柔和治愈 */
-$color-bg: #fff8f0;
-$color-card: #ffffff;
-$color-primary: #c8956c;
-$color-primary-dark: #a8744b;
-$color-primary-light: #f3e3d3;
-$color-text: #4a3f35;
-$color-text-secondary: #7d6f60;
-$color-border: #f0e4d7;
-$color-danger: #e06a5a;
+/* 品牌设计 token —— 枫叶小屋 v4「小清新 FRESH BLUE」
+   规范：docs/design/maple-paper-system.md（v4 小清新）
+   浅蓝唯一主色、扁平无渐变、蓝灰墨色三档、卡片纯白 + 发丝线。
+   旧变量名（$color-*）保留为兼容别名，值全部指向 v4，让已用 token 的页面自动换肤；
+   硬编码杂色由后续 Phase 逐页清理。 */
 
+/* ---------- 中性层（蓝白纸面） ---------- */
+$bg: #f6f9fb; // 页面底（近白冷调）
+$card: #ffffff; // 卡片、弹层
+$fill: #f2f6f9; // 次级面板/输入底/chip
+$line: #eaf0f4; // 发丝线/常规描边
+$line-strong: #dde6ec; // 强描边/棋盘格线
+
+/* ---------- 墨色三档（蓝灰） ---------- */
+$ink: #2e4154; // 主文字
+$ink2: #6e8093; // 次级文字
+$ink3: #a4b3c0; // 占位/禁用/最弱文字
+
+/* ---------- 主色（清新蓝，唯一主色） ---------- */
+$blue: #58a6dc; // 按钮、选中态、链接、图标点缀
+$blue-deep: #3b86b8; // 小字级蓝文字、按压态
+$blue-tint: #e9f4fb; // 蓝浅底（徽章/标签/图标 chip）
+
+/* ---------- 功能色（柔） ---------- */
+$green: #5fb98c; // 成功
+$red: #e8806f; // 警示/危险
+// 黄色不做实底填充（v4 拍板）：$amber #EFB54E 只允许极小面积内容点缀（星标/飘叶），默认不用
+$amber: #efb54e;
+
+/* ---------- 弹窗遮罩（唯一） ---------- */
+$scrim: rgba(46, 65, 84, 0.45); // 基于 $ink 的冷调遮罩
+
+/* ---------- 淡彩图标表（16 组 tint/fg，照原型 JS PASTEL 表） ----------
+   用途：工具/游戏个性 = 图标小方块与标签的底色/前景色，不撑满页面。
+   取值用 pastel-tint('key') / pastel-fg('key')。 */
+$pastel: (
+  beads: (#fff1e4, #e08a4c),
+  travel: (#e8f3fb, #4e97ce),
+  fortune: (#f1edf9, #8e7cc3),
+  food: (#fff6e0, #d9a032),
+  lottery: (#fdeeea, #e27966),
+  anniversary: (#fceff4, #de8fab),
+  gomoku: (#ecf1f5, #5c7389),
+  uno: (#fdeeea, #e27966),
+  ludo: (#e8f4f6, #4ca5b5),
+  adventure: (#ecf5ea, #67a75b),
+  tetris: (#e8f5fa, #3fa3c4),
+  sokoban: (#fbf3df, #c99a34),
+  jungle: (#eff6ec, #79a66b),
+  junqi: (#f5eee6, #a98858),
+  xiangqi: (#fbefea, #cc6f4e),
+  tictactoe: (#eaf4fa, #5d9fc6),
+);
+
+@function pastel-tint($key) {
+  @return nth(map-get($pastel, $key), 1);
+}
+
+@function pastel-fg($key) {
+  @return nth(map-get($pastel, $key), 2);
+}
+
+/* ---------- 兼容别名（旧名 → v4 值） ----------
+   存量页面已用旧名的地方自动换肤；新代码一律直接用上面的 v4 令牌。 */
+$color-bg: $bg; // 页面底
+$color-card: $card; // 卡片
+$color-border: $line; // 描边
+$color-primary: $blue; // 主色
+$color-primary-dark: $blue-deep; // 主色深档
+$color-primary-light: $blue-tint; // 主色浅底
+$color-text: $ink; // 主文字
+$color-text-secondary: $ink2; // 次级文字
+$color-danger: $red; // 危险/警示
+
+/* ---------- 圆角 ---------- */
 $radius-lg: 32rpx;
 $radius-md: 20rpx;
 $radius-sm: 12rpx;
 $radius-pill: 999rpx;
 
-$shadow-card: 0 8rpx 32rpx rgba(168, 116, 75, 0.08);
-$shadow-sticky: 0 6rpx 16rpx rgba(74, 63, 53, 0.06);
-$shadow-float: 0 16rpx 40rpx rgba(74, 63, 53, 0.18);
+/* ---------- 阴影（全局禁渐变，只留极淡一层；冷调基色，禁纯黑） ---------- */
+$shadow-card: 0 8rpx 32rpx rgba(46, 65, 84, 0.05);
+$shadow-sticky: 0 6rpx 16rpx rgba(46, 65, 84, 0.04);
+$shadow-float: 0 16rpx 40rpx rgba(46, 65, 84, 0.12);
 
+/* ---------- 字阶 ---------- */
 $font-display: 44rpx;
 $font-title: 36rpx;
 $font-body: 28rpx;

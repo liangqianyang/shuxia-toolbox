@@ -32,6 +32,13 @@ export interface ActivePiece {
 
 export type TetrisPhase = 'playing' | 'clearing' | 'over'
 
+/**
+ * 下落速度模式：progressive = Guideline 等级加速（越消越快，默认）；
+ * constant = 恒定速度（重力间隔恒取起始等级的基础档，不随消行加速）。
+ * 等级与计分照常上涨（榜单不拆分），只有重力间隔二选一。
+ */
+export type SpeedMode = 'progressive' | 'constant'
+
 export type TetrisEvent =
   | { t: 'moved' }
   | { t: 'rotated' }
@@ -56,6 +63,8 @@ export interface TetrisState {
   lines: number
   level: number
   startLevel: number
+  /** 重力速度模式（对局内可经 setSpeedMode 即时切换）。 */
+  speedMode: SpeedMode
   phase: TetrisPhase
   /** clearing 相位的满行行号。 */
   clearingRows: number[]
@@ -77,6 +86,7 @@ export type GameAction =
   | { t: 'softDrop' }
   | { t: 'hardDrop' }
   | { t: 'hold' }
+  | { t: 'setSpeedMode'; mode: SpeedMode }
   | { t: 'tick'; dtMs: number }
 
 const PIECE_IDS: PieceId[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
@@ -293,7 +303,7 @@ function refillQueue(queue: PieceId[], bag: PieceId[], rng: () => number): { que
   return { queue: nextQueue, bag: nextBag }
 }
 
-export function createGame(startLevel: number, rng: () => number = Math.random): TetrisState {
+export function createGame(startLevel: number, rng: () => number = Math.random, speedMode: SpeedMode = 'progressive'): TetrisState {
   const level = Math.max(1, Math.floor(startLevel))
   const filled = refillQueue([], [], rng)
   const state: TetrisState = {
@@ -307,6 +317,7 @@ export function createGame(startLevel: number, rng: () => number = Math.random):
     lines: 0,
     level,
     startLevel: level,
+    speedMode,
     phase: 'playing',
     clearingRows: [],
     clearingCols: [],
@@ -547,6 +558,11 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
         events: [],
       }
     }
+    case 'setSpeedMode': {
+      // 对局内即时切换（结束后无意义；同值返回原引用跳过重绘）
+      if (state.phase === 'over' || state.speedMode === action.mode) return state
+      return { ...state, speedMode: action.mode, events: [] }
+    }
     case 'tick': {
       const dtMs = Math.max(0, action.dtMs)
       if (state.phase === 'over') return state
@@ -565,9 +581,10 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
         return { ...state, lockMs, events: [] }
       }
       // 空中：攒重力计时，够一个间隔就落一格（重力白落不计分，软降才 +1）。
+      // constant 模式恒取起始等级的基础档（不随消行加速）；progressive 走 Guideline 曲线。
       let gravityMs = state.gravityMs + dtMs
       let y = active.y
-      const interval = gravityIntervalMs(state.level)
+      const interval = state.speedMode === 'constant' ? gravityIntervalMs(state.startLevel) : gravityIntervalMs(state.level)
       while (gravityMs >= interval) {
         gravityMs -= interval
         if (collides(state.board, active.id, active.x, y + 1, active.rot)) {

@@ -1,35 +1,38 @@
 /**
  * 俄罗斯方块 canvas 渲染器：纯 2D API（类型对 CanvasRenderingContext2D，同 sheetRenderer 家法），
  * 无 #ifdef、无 uni/wx——canvas 节点获取归页面（canvasAdapter），本文件只管"给状态画一帧"。
- * 配色与布局按 Pen 原型稿（冷调墨蓝街机皮肤）：深墨蓝底 + 深色右栏面板 + 圆角斜面格子。
+ * 配色 v4 小清新（原型 #play-tetris）：fill 浅灰板 + 白格发丝线 + 马卡龙方块 + 白色右栏。
  * 每次状态变化整幅重绘（clearRect 清全幅——右栏透明区不清屏会残留旧帧叠成马赛克）。
  */
 
 import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/pages-games/utils/tetris'
 
-/** 经典 7 色（柔和版）。 */
+/** 马卡龙淡彩 11 色（原型 pc 表 6 色 + 同族补 5；M 闪块保留金色 = 内容点缀）。 */
 export const PIECE_COLORS: Record<PieceId, string> = {
-  I: '#3EC6E0',
-  O: '#F2C14E',
-  T: '#A86EE8',
-  S: '#5CC26A',
-  Z: '#E05F5F',
-  J: '#6E8DF2',
-  L: '#E8974E',
-  M: '#F4B942',
-  D: '#43B7A0',
-  V: '#E58FB1',
-  X: '#5C6BC0',
+  I: '#A9CFEA',
+  O: '#F2CE7E',
+  T: '#C3B2E4',
+  S: '#9AD4B4',
+  Z: '#F5A99C',
+  J: '#8CCFC5',
+  L: '#E8A06B',
+  M: '#F0C24C',
+  D: '#F0B6CE',
+  V: '#C5DB8F',
+  X: '#93A8C4',
 }
 
-export const BOARD_BG = '#F7EEDF'
-export const BOARD_GRID = '#E9DCC8'
-export const BOARD_FRAME = '#D8C4A8'
-/** 右栏白色面板（亮色皮肤:奶油页 + 白面板 + 暖棕标签）。 */
+export const BOARD_BG = '#F2F6F9'
+export const BOARD_GRID = '#EAF0F4'
+export const BOARD_FRAME = '#DDE6EC'
+/** 空格白块 + 发丝线描边（原型 .tgrid i）。 */
+const EMPTY_CELL = '#FFFFFF'
+/** 右栏白色面板（v4：白面板 + 发丝线 + 冷调标签）。 */
 const RAIL_PANEL = '#FFFFFF'
-const RAIL_TEXT = '#7D6F60'
-const ACTION_COLOR = '#1E9DBE'
-/** 消行闪烁色:浅底上白色闪不出来,用品牌金。 */
+const RAIL_LINE = '#EAF0F4'
+const RAIL_TEXT = '#A4B3C0'
+const ACTION_COLOR = '#3B86B8'
+/** 消行闪烁色:浅底上白色闪不出来,用品牌金（内容特效点缀）。 */
 const CLEAR_FLASH = '#F4B942'
 /** 单格闪块（M）明暗翻转间隔:每相位 300ms（过快会闪眼）。 */
 const MONO_BLINK_MS = 300
@@ -186,13 +189,13 @@ function drawRailPanel(
   ctx.fillStyle = RAIL_PANEL
   roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, rad)
   ctx.fill()
-  // highlight = 即将出生的「下一块」：金框金标，与后面的「后续」拉开视觉层级
-  ctx.strokeStyle = highlight ? '#F4B942' : BOARD_FRAME
+  // highlight = 即将出生的「下一块」：蓝框蓝标（v4 主色强调），与后面的「后续」拉开视觉层级
+  ctx.strokeStyle = highlight ? '#58A6DC' : RAIL_LINE
   ctx.lineWidth = highlight ? 1.8 : 1
   roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, rad)
   ctx.stroke()
-  ctx.fillStyle = highlight ? '#C08A1E' : RAIL_TEXT
-  ctx.font = `700 ${labelPx}px sans-serif`
+  ctx.fillStyle = highlight ? '#3B86B8' : RAIL_TEXT
+  ctx.font = `600 ${labelPx}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.fillText(label, x + w / 2, y + rad * 0.8)
@@ -258,21 +261,19 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
 
   ctx.clearRect(0, 0, layout.totalW, layout.totalH)
 
-  // 棋盘底 + 网格 + 边框
+  // 棋盘底 + 空格白块（原型 .tgrid：fill 底 + 白格发丝线,格线由空格描边提供） + 边框
   ctx.fillStyle = BOARD_BG
   ctx.fillRect(boardX, boardY, boardW, boardH)
+  ctx.fillStyle = EMPTY_CELL
   ctx.strokeStyle = BOARD_GRID
   ctx.lineWidth = 1
-  ctx.beginPath()
-  for (let x = 1; x < BOARD_W; x++) {
-    ctx.moveTo(boardX + x * cell + 0.5, boardY)
-    ctx.lineTo(boardX + x * cell + 0.5, boardY + boardH)
+  for (let y = 0; y < BOARD_H; y++) {
+    for (let x = 0; x < BOARD_W; x++) {
+      roundRectPath(ctx, boardX + x * cell + 1, boardY + y * cell + 1, cell - 2, cell - 2, Math.max(2, cell * 0.12))
+      ctx.fill()
+      ctx.stroke()
+    }
   }
-  for (let y = 1; y < BOARD_H; y++) {
-    ctx.moveTo(boardX, boardY + y * cell + 0.5)
-    ctx.lineTo(boardX + boardW, boardY + y * cell + 0.5)
-  }
-  ctx.stroke()
   ctx.strokeStyle = BOARD_FRAME
   ctx.lineWidth = 1.5
   ctx.strokeRect(boardX + 0.75, boardY + 0.75, boardW - 1.5, boardH - 1.5)

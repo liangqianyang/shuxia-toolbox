@@ -421,20 +421,20 @@ function drawStampSeal(ctx: CanvasRenderingContext2D, cx: number, cy: number, ra
   // Outer ring
   ctx.beginPath()
   ctx.arc(0, 0, radius, 0, Math.PI * 2)
-  ctx.strokeStyle = '#c0392b'
+  ctx.strokeStyle = '#c96b5a'
   ctx.lineWidth = 5
   ctx.stroke()
 
   // Inner ring
   ctx.beginPath()
   ctx.arc(0, 0, radius - 12, 0, Math.PI * 2)
-  ctx.strokeStyle = '#c0392b'
+  ctx.strokeStyle = '#c96b5a'
   ctx.lineWidth = 2
   ctx.stroke()
 
   // "纪" character centered
   setFont(ctx, 48, 700)
-  ctx.fillStyle = '#c0392b'
+  ctx.fillStyle = '#c96b5a'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText('纪', 0, 2)

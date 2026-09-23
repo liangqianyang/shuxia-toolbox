@@ -6,7 +6,7 @@ interface ApiEnvelope<T> {
   data: T
 }
 
-interface LoginResponse {
+export interface LoginResponse {
   token: string
   expiresAt: string
   user: ToolboxUser
@@ -147,6 +147,76 @@ async function ensureToken(): Promise<string> {
   return (await loginWithWechat({})).token
 }
 
+/** 拉起 wx.login 换 code（页面自管登录态时复用，业务请求请走 requestUserApi/apiRequest）。 */
+export function wxLoginCode(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.login({
+      provider: 'weixin',
+      success: (result) => result.code ? resolve(result.code) : reject(new Error('微信登录未返回 code')),
+      fail: () => reject(new Error('微信登录失败')),
+    })
+  })
+}
+
+/** getUserProfile 弹窗拉资料；desc 会显示在微信授权弹窗里，可按工具定制。拒绝授权时 reject，调用方自行兜底。 */
+export function getWechatProfile(desc = '用于展示枫叶小屋中的头像和昵称'): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const api = typeof wx !== 'undefined' && typeof wx.getUserProfile === 'function' ? wx : null
+    if (!api) {
+      resolve({})
+      return
+    }
+    api.getUserProfile({
+      desc,
+      success: (result: { userInfo?: Record<string, unknown> }) => resolve(result.userInfo ?? {}),
+      fail: (error: { errMsg?: string }) => reject(new Error(error.errMsg || '用户未授权微信资料')),
+    })
+  })
+}
+
+/** code+profile 换会话并持久化 token/user；返回值供页面同步自己的响应式状态。 */
+export async function loginWechat(profile: Record<string, unknown> = {}): Promise<LoginResponse> {
+  return loginWithWechat(profile)
+}
+
+/**
+ * 低层通用请求（信封解包 + X-API-Key / X-User-Token 头）。
+ * 页面级自助请求统一走这里，避免各页复制 uni.request 样板后超时/错误语义各自漂移。
+ * opts.userToken: true = 读存储会话；字符串 = 显式 token（页面自管登录态）；false/'' = 不带。
+ */
+export function apiRequest<T>(
+  path: string,
+  method: 'GET' | 'POST',
+  data?: Record<string, unknown>,
+  opts: { userToken?: string | boolean, timeout?: number } = {},
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = { 'X-API-Key': API_KEY }
+    const token = typeof opts.userToken === 'string'
+      ? opts.userToken
+      : opts.userToken === true
+        ? String(uni.getStorageSync(AUTH_STORAGE_KEY) || '')
+        : ''
+    if (token) headers['X-User-Token'] = token
+    uni.request({
+      url: `${API_BASE}${path}`,
+      method,
+      data,
+      header: headers,
+      timeout: opts.timeout ?? 8000,
+      success: (result) => {
+        const body = result.data as ApiEnvelope<T>
+        if (!body || body.code !== 0) {
+          reject(new Error(body?.message || '接口返回异常'))
+          return
+        }
+        resolve(body.data)
+      },
+      fail: (error) => reject(new Error(error.errMsg || '网络请求失败')),
+    })
+  })
+}
+
 async function loginWithWechat(profile: Record<string, unknown>): Promise<LoginResponse> {
   const code = await wxLoginCode()
   const data = await request<LoginResponse>('/api/auth/wechat-login', 'POST', { code, profile }, false)
@@ -158,31 +228,6 @@ async function loginWithWechat(profile: Record<string, unknown>): Promise<LoginR
 function clearSession() {
   uni.removeStorageSync(AUTH_STORAGE_KEY)
   uni.removeStorageSync(USER_STORAGE_KEY)
-}
-
-function wxLoginCode(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: (result) => result.code ? resolve(result.code) : reject(new Error('微信登录未返回 code')),
-      fail: () => reject(new Error('微信登录失败')),
-    })
-  })
-}
-
-function getWechatProfile(): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const api = typeof wx !== 'undefined' && typeof wx.getUserProfile === 'function' ? wx : null
-    if (!api) {
-      resolve({})
-      return
-    }
-    api.getUserProfile({
-      desc: '用于展示枫叶小屋中的头像和昵称',
-      success: (result: { userInfo?: Record<string, unknown> }) => resolve(result.userInfo ?? {}),
-      fail: (error: { errMsg?: string }) => reject(new Error(error.errMsg || '用户未授权微信资料')),
-    })
-  })
 }
 
 function request<T>(path: string, method: 'GET' | 'POST', data?: Record<string, unknown>, withUserToken = false, timeout = 8000): Promise<T> {

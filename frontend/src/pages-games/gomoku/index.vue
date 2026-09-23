@@ -19,7 +19,7 @@
         />
         <button class="gomoku__join-btn" :disabled="busy" @tap="onJoin">加入</button>
       </view>
-      <text class="gomoku__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
+      <text class="gomoku__rules" @tap="rulesOpen = true">玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -30,7 +30,7 @@
           <text class="gomoku__code-value">{{ state.code }}</text>
           <text class="gomoku__code-hint">点击复制</text>
         </view>
-        <text class="gomoku__rules-btn" @tap="rulesOpen = true">❓ 玩法</text>
+        <text class="gomoku__rules-btn" @tap="rulesOpen = true">玩法</text>
         <button v-if="state.status === 'waiting'" class="gomoku__invite" open-type="share">邀请好友</button>
       </view>
 
@@ -154,16 +154,16 @@
       <!-- 聊天条（同 uno：消息竖向每行一条，💬 触发按钮靠左） -->
       <view class="gomoku__chat-zone">
         <view class="gomoku__chat-bar">
-          <view v-if="roomChat.recentChats.value.length" class="gomoku__chat-feed">
-            <view v-for="m in roomChat.recentChats.value" :key="m.seq" class="gomoku__chat-item">
+          <view v-if="feedChats.length" class="gomoku__chat-feed">
+            <view v-for="m in feedChats" :key="m.seq" class="gomoku__chat-item">
               <text class="gomoku__chat-name">{{ roleNameOf(m.role ?? 'black') }}：</text>
               <text class="gomoku__chat-text" :class="{ 'gomoku__chat-text--emoji': m.kind === 'emoji' }">{{ m.kind === 'sticker' ? '[贴纸]' : m.kind === 'phrase' ? gamePhraseText(m.text) ?? m.text : m.text }}</text>
             </view>
           </view>
-          <view class="gomoku__chat-trigger" hover-class="press" @tap="roomChat.chatPanelOpen.value = true">
+          <view class="gomoku__chat-trigger" hover-class="press" @tap="openChat">
             <text class="gomoku__chat-trigger-icon">💬</text>
             <text class="gomoku__chat-trigger-hint">快捷聊天…</text>
-            <text v-if="roomChat.unreadChat.value" class="gomoku__chat-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+            <text v-if="chatUnread" class="gomoku__chat-unread">{{ chatUnread > 9 ? '9+' : chatUnread }}</text>
           </view>
         </view>
       </view>
@@ -208,6 +208,11 @@ const roomChat = useRoomChat({
   send: (kind, payload) => sendChat(kind, payload),
   nameOf: (m) => roleNameOf(m.role ?? 'black'),
 })
+const feedChats = computed(() => roomChat.recentChats.value)
+const chatUnread = computed(() => roomChat.unreadChat.value)
+function openChat() {
+  roomChat.chatPanelOpen.value = true
+}
 const roleNameOf = (role: string): string =>
   role === 'black' ? (state.value?.black?.nickname ?? '黑方') : (state.value?.white?.nickname ?? '白方')
 
@@ -299,7 +304,13 @@ watch(
         if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
         rpsCountdown.value = rps.ttl
         rpsCountdownTimer = setInterval(() => {
-          if (rpsCountdown.value > 0) rpsCountdown.value--
+          if (rpsCountdown.value > 0) {
+            rpsCountdown.value--
+          } else if (rpsCountdownTimer) {
+            // 数到 0 自清，别留 interval 每秒空转
+            clearInterval(rpsCountdownTimer)
+            rpsCountdownTimer = null
+          }
         }, 1000)
       }
     }
@@ -308,7 +319,13 @@ watch(
       if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
       rpsCountdown.value = rps?.ttl ?? 0
       rpsCountdownTimer = setInterval(() => {
-        if (rpsCountdown.value > 0) rpsCountdown.value--
+        if (rpsCountdown.value > 0) {
+          rpsCountdown.value--
+        } else if (rpsCountdownTimer) {
+          // 数到 0 自清，别留 interval 每秒空转
+          clearInterval(rpsCountdownTimer)
+          rpsCountdownTimer = null
+        }
       }, 1000)
     }
     if (status === 'playing') {
@@ -365,13 +382,13 @@ function drawBoard() {
   const { ctx } = boardNode
   const { size, padding, cell } = metrics
 
-  // 木纹底色 + 边框
+  // 减淡木纹底（v4：#FBF5E8,原型 .goboard 同款）+ 边框
   ctx.clearRect(0, 0, size, size)
-  ctx.fillStyle = '#eed3a8'
+  ctx.fillStyle = '#fbf5e8'
   ctx.fillRect(0, 0, size, size)
 
   // 网格线
-  ctx.strokeStyle = '#a57c4f'
+  ctx.strokeStyle = '#d8c9a8'
   ctx.lineWidth = 1
   ctx.beginPath()
   for (let i = 0; i < 15; i++) {
@@ -384,7 +401,7 @@ function drawBoard() {
   ctx.stroke()
 
   // 星位
-  ctx.fillStyle = '#8a6335'
+  ctx.fillStyle = '#c2b189'
   STAR_POINTS.forEach(([x, y]) => {
     const { px, py } = intersectionToPoint(x, y, metrics)
     ctx.beginPath()
@@ -402,7 +419,7 @@ function drawBoard() {
     // 最后一手红圈
     if (current.lastMove) {
       const { px, py } = intersectionToPoint(current.lastMove.x, current.lastMove.y, metrics)
-      ctx.strokeStyle = '#e06a5a'
+      ctx.strokeStyle = '#58a6dc'
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.arc(px, py, cell * 0.3, 0, Math.PI * 2)
@@ -416,7 +433,7 @@ function drawBoard() {
       drawStone(ctx, px, py, cell * 0.44, myColor.value !== 'white')
       ctx.restore()
       // 确认提示圈
-      ctx.strokeStyle = '#e06a5a'
+      ctx.strokeStyle = '#58a6dc'
       ctx.lineWidth = 2
       ctx.setLineDash([4, 4])
       ctx.beginPath()
@@ -430,7 +447,7 @@ function drawBoard() {
       const last = current.winLine[current.winLine.length - 1]
       const a = intersectionToPoint(first[0], first[1], metrics)
       const b = intersectionToPoint(last[0], last[1], metrics)
-      ctx.strokeStyle = '#d4a017'
+      ctx.strokeStyle = '#c99a34'
       ctx.lineWidth = cell * 0.16
       ctx.lineCap = 'round'
       ctx.beginPath()
@@ -445,11 +462,11 @@ function drawBoard() {
 function drawStone(ctx: CanvasRenderingContext2D, px: number, py: number, r: number, black: boolean) {
   const gradient = ctx.createRadialGradient(px - r * 0.3, py - r * 0.3, r * 0.1, px, py, r)
   if (black) {
-    gradient.addColorStop(0, '#6b6258')
-    gradient.addColorStop(1, '#241f1a')
+    gradient.addColorStop(0, '#4a5a6a')
+    gradient.addColorStop(1, '#25303c')
   } else {
     gradient.addColorStop(0, '#ffffff')
-    gradient.addColorStop(1, '#ddd2c2')
+    gradient.addColorStop(1, '#d8e0e8')
   }
   ctx.fillStyle = gradient
   ctx.beginPath()
@@ -519,7 +536,6 @@ watch(
     prevMovesCount = next.movesCount
     prevStatus = next.status
   },
-  { deep: true },
 )
 
 // ---------- 文案 ----------
@@ -616,6 +632,9 @@ onHide(() => {
 })
 
 onUnload(() => {
+
+  // 页面级倒计时兜底清理（卸载时 interval 一并收掉）
+  if (rpsCountdownTimer) { clearInterval(rpsCountdownTimer); rpsCountdownTimer = null }
   stopSync()
 })
 
@@ -842,11 +861,11 @@ onShareAppMessage(() => ({
     border-radius: 50%;
 
     &--black {
-      background: radial-gradient(circle at 35% 35%, #6b6258, #241f1a);
+      background: radial-gradient(circle at 35% 35%, #4a5a6a, #25303c);
     }
 
     &--white {
-      background: radial-gradient(circle at 35% 35%, #ffffff, #ddd2c2);
+      background: radial-gradient(circle at 35% 35%, #ffffff, #d8e0e8);
       border: 1rpx solid $color-border;
     }
   }
@@ -855,10 +874,10 @@ onShareAppMessage(() => ({
     width: 14rpx;
     height: 14rpx;
     border-radius: 50%;
-    background: #6fbf73;
+    background: $green;
 
     &--off {
-      background: #c8beb2;
+      background: $line-strong;
     }
   }
 
@@ -1004,16 +1023,16 @@ onShareAppMessage(() => ({
 
 /* ── 猜拳定选边 ── */
 .gomoku__rps-mask {
-  position: fixed; inset: 0; background: rgba(33, 42, 38, 0.55); z-index: 90;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(46, 65, 84, 0.45); z-index: 90;
   display: flex; align-items: center; justify-content: center;
 }
 .gomoku__rps {
   width: 82%; max-width: 620rpx; background: $color-card; border-radius: 28rpx;
-  border: 4rpx solid #493e37; padding: 32rpx; display: flex; flex-direction: column;
+  border: 2rpx solid $line-strong; padding: 32rpx; display: flex; flex-direction: column;
   align-items: center; gap: 20rpx;
 }
 .gomoku__rps-body { display: flex; flex-direction: column; align-items: center; gap: 18rpx; width: 100%; }
-.gomoku__rps-title { font-size: 32rpx; font-weight: 800; color: $color-text; }
+.gomoku__rps-title { font-size: 32rpx; font-weight: 600; color: $color-text; }
 .gomoku__rps-sub { font-size: 22rpx; color: $color-text-secondary; }
 .gomoku__rps-sides, .gomoku__rps-reveal { display: flex; align-items: center; gap: 28rpx; }
 .gomoku__rps-side { display: flex; flex-direction: column; align-items: center; gap: 8rpx; min-width: 160rpx; padding: 14rpx 10rpx; border-radius: 16rpx; border: 3rpx solid transparent; }
@@ -1023,18 +1042,18 @@ onShareAppMessage(() => ({
   50% { transform: scale(1.06); }
 }
 .gomoku__rps-stone { width: 84rpx; height: 84rpx; border-radius: 50%; }
-.gomoku__rps-stone--black { background: #2b2b2b; border: 4rpx solid #0f0f0f; }
-.gomoku__rps-stone--white { background: #fafafa; border: 4rpx solid #d9d2c7; }
+.gomoku__rps-stone--black { background: #33404d; border: 4rpx solid #22303c; }
+.gomoku__rps-stone--white { background: #ffffff; border: 4rpx solid $line-strong; }
 .gomoku__rps-name { font-size: 24rpx; color: $color-text; max-width: 180rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gomoku__rps-status { font-size: 20rpx; color: $color-text-secondary; }
-.gomoku__rps-pick { font-size: 26rpx; font-weight: 800; color: $color-text; }
-.gomoku__rps-vs { font-size: 34rpx; font-weight: 900; color: #e85d4a; }
+.gomoku__rps-pick { font-size: 26rpx; font-weight: 600; color: $color-text; }
+.gomoku__rps-vs { font-size: 34rpx; font-weight: 600; color: $blue-deep; }
 .gomoku__rps-btns { display: flex; gap: 14rpx; flex-wrap: wrap; justify-content: center; }
 .gomoku__rps-btn {
-  min-width: 140rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; font-weight: 700;
-  background: #e85d4a; color: #fff; border-radius: 16rpx; border: none; padding: 0 24rpx;
+  min-width: 140rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; font-weight: 600;
+  background: $blue; color: #fff; border-radius: 16rpx; border: none; padding: 0 24rpx;
 }
-.gomoku__rps-btn--wide { min-width: 240rpx; background: #21483d; }
+.gomoku__rps-btn--wide { min-width: 240rpx; background: $blue-deep; }
 .gomoku__rps-btn[disabled] { opacity: 0.45; }
 .gomoku__rps-wait { font-size: 24rpx; color: $color-text-secondary; }
 
@@ -1042,8 +1061,8 @@ onShareAppMessage(() => ({
 .gomoku__player { position: relative; }
 .gomoku__bubble {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8rpx);
-  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid rgba(73, 62, 55, 0.15);
-  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.18); font-size: 24rpx; color: #493e37;
+  max-width: 300rpx; padding: 10rpx 20rpx; background: #fff; border: 2rpx solid $line;
+  border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.12); font-size: 24rpx; color: $ink;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 12;
   animation: gomoku-bubble-pop 0.18s ease-out;
 }
@@ -1059,9 +1078,10 @@ onShareAppMessage(() => ({
   bottom: 0;
   z-index: 20;
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 248, 237, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 2rpx solid $line;
   border-radius: 24rpx 24rpx 0 0;
-  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+  box-shadow: 0 -4rpx 20rpx rgba(46, 65, 84, 0.08);
 }
 
 .gomoku__room {
@@ -1071,17 +1091,17 @@ onShareAppMessage(() => ({
 .gomoku__chat-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 10rpx; }
 .gomoku__chat-feed { display: flex; flex-direction: column; gap: 4rpx; width: 100%; background: $color-card; border: 2rpx solid $color-border; border-radius: 18rpx; padding: 10rpx 20rpx; box-sizing: border-box; }
 .gomoku__chat-item { display: flex; align-items: baseline; font-size: 22rpx; }
-.gomoku__chat-name { color: $color-text-secondary; flex-shrink: 0; }
+.gomoku__chat-name { color: $blue-deep; font-weight: 600; flex-shrink: 0; }
 .gomoku__chat-text { color: $color-text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gomoku__chat-text--emoji { font-size: 30rpx; }
 .gomoku__chat-trigger {
   position: relative; display: flex; align-items: center; gap: 10rpx;
-  height: 60rpx; padding: 0 26rpx; background: $color-card; border: 2rpx solid $color-border; border-radius: 30rpx;
+  height: 60rpx; padding: 0 26rpx; background: $blue-tint; border-radius: 30rpx;
 }
 .gomoku__chat-trigger-icon { font-size: 26rpx; }
-.gomoku__chat-trigger-hint { font-size: 24rpx; color: $color-text-secondary; }
+.gomoku__chat-trigger-hint { font-size: 24rpx; color: $blue-deep; }
 .gomoku__chat-unread {
-  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: #e85d4a; color: #fff; font-size: 18rpx;
+  position: absolute; top: -10rpx; right: -6rpx; min-width: 30rpx; box-sizing: border-box; background: $red; color: #fff; font-size: 18rpx;
   border-radius: 999rpx; padding: 0 8rpx; line-height: 28rpx; text-align: center;
 }
 </style>

@@ -50,7 +50,7 @@
         <switch
           :checked="params.autoGridSize"
           :disabled="disabled"
-          color="#C8956C"
+          color="#58A6DC"
           @change="onAutoGridChange"
         />
       </view>
@@ -62,7 +62,7 @@
           :step="2"
           :value="params.gridLongSide"
           :disabled="disabled"
-          activeColor="#C8956C"
+          activeColor="#58A6DC"
           block-size="24"
           @change="onGridLongSideChange"
         />
@@ -94,7 +94,7 @@
       <switch
         :checked="params.removeBackground"
         :disabled="disabled"
-        color="#C8956C"
+        color="#58A6DC"
         @change="onRemoveBackgroundChange"
       />
     </view>
@@ -109,7 +109,7 @@
       <switch
         :checked="params.ownedOnly"
         :disabled="disabled"
-        color="#C8956C"
+        color="#58A6DC"
         @change="onOwnedOnlyChange"
       />
     </view>
@@ -254,15 +254,15 @@ function onGridLongSideChange(event: { detail: { value: number } }) {
     width: 120rpx;
     padding: 16rpx 8rpx;
     border-radius: $radius-md;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
 
     &--active {
-      background-color: $color-primary;
-      border-color: $color-primary;
+      background-color: $blue-tint;
+      border-color: $blue;
 
       .param-panel__use-label {
-        color: #ffffff;
+        color: $blue-deep;
         font-weight: 600;
       }
     }
@@ -274,32 +274,32 @@ function onGridLongSideChange(event: { detail: { value: number } }) {
 
   &__use-label {
     font-size: $font-caption;
-    color: $color-text-secondary;
+    color: $ink2;
   }
 
   &__adv-toggle {
     align-self: flex-start;
     padding: 10rpx 28rpx;
     border-radius: 999rpx;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
-    color: $color-text-secondary;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
+    color: $ink2;
     font-size: $font-caption;
   }
 
   &__chip {
     padding: 12rpx 28rpx;
     border-radius: 999rpx;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
     font-size: $font-caption;
-    color: $color-text-secondary;
+    color: $ink2;
     transition: all 0.15s;
 
     &--active {
-      background-color: $color-primary;
-      border-color: $color-primary;
-      color: #ffffff;
+      background-color: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
       font-weight: 600;
     }
   }
@@ -310,13 +310,13 @@ function onGridLongSideChange(event: { detail: { value: number } }) {
     justify-content: space-between;
     padding: 20rpx 28rpx;
     border-radius: $radius-md;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
     font-size: $font-body;
   }
 
   &__picker-arrow {
-    color: $color-text-secondary;
+    color: $ink2;
   }
 
   &__switch-label {
@@ -342,9 +342,9 @@ function onGridLongSideChange(event: { detail: { value: number } }) {
     align-self: flex-start;
     padding: 10rpx 28rpx;
     border-radius: 999rpx;
-    background-color: $color-bg;
-    border: 2rpx solid $color-primary-light;
-    color: $color-primary-dark;
+    background-color: $card;
+    border: 2rpx solid rgba($blue, 0.4);
+    color: $blue-deep;
     font-size: $font-caption;
     font-weight: 600;
     margin-bottom: 16rpx;

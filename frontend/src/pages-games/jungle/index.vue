@@ -23,7 +23,7 @@
         />
         <button class="jungle__join-btn" :disabled="busy" @tap="onJoin">加入</button>
       </view>
-      <text class="jungle__rules-link" hover-class="press" @tap="rulesOpen = true">❓ 玩法说明</text>
+      <text class="jungle__rules-link" hover-class="press" @tap="rulesOpen = true">玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -129,7 +129,7 @@
         <view class="jungle__chatbar-trigger" hover-class="press" @tap="openChat">
           <text class="jungle__chatbar-icon">💬</text>
           <text class="jungle__chatbar-hint">快捷嘴炮…</text>
-          <text v-if="roomChat.unreadChat.value" class="jungle__chatbar-unread">{{ roomChat.unreadChat.value > 9 ? '9+' : roomChat.unreadChat.value }}</text>
+          <text v-if="chatUnread" class="jungle__chatbar-unread">{{ chatUnread > 9 ? '9+' : chatUnread }}</text>
         </view>
       </view>
     </view>
@@ -343,24 +343,24 @@ import { useFeatures } from '@/composables/useFeatures'
 import { gamePhraseText } from '@/pages-games/utils/gameChat'
 
 // ---------- 原型色板（prototypes/枫叶小屋原型.pen 斗兽棋四帧，dou-* 变量实值） ----------
-const COLOR_LAND = '#F7EEDF'
-const COLOR_GRID = '#E8D9C4'
+const COLOR_LAND = '#FBF5E8'
+const COLOR_GRID = '#E5D9BC'
 const COLOR_WATER = '#C9E7F0'
 const COLOR_WAVE_1 = '#FFFFFFB3'
 const COLOR_WAVE_2 = '#FFFFFF80'
-const COLOR_TRAP = '#F7DFD3'
-const COLOR_TRAP_TEXT = '#C05B4A'
-const COLOR_DEN = '#4A3F35'
-const COLOR_DEN_TEXT = '#FFF8F0'
-const COLOR_RED = '#E85D4A'
-const COLOR_RED_DEEP = '#B8402E'
-const COLOR_BLUE = '#5B8FB9'
-const COLOR_BLUE_DEEP = '#3D6E96'
+const COLOR_TRAP = '#F9E4DA'
+const COLOR_TRAP_TEXT = '#C96B5A'
+const COLOR_DEN = '#2E4154'
+const COLOR_DEN_TEXT = '#FFFFFF'
+const COLOR_RED = '#E8806F'
+const COLOR_RED_DEEP = '#D96A58'
+const COLOR_BLUE = '#4A86B8'
+const COLOR_BLUE_DEEP = '#3B86B8'
 const COLOR_GOLD = '#F4B942'
 const COLOR_GOLD_DOT = '#F4B94299'
 const COLOR_GOLD_TINT = '#F4B94240'
 const COLOR_WATER_RING = '#FFFFFFB3'
-const COLOR_BADGE = '#FFF8F0'
+const COLOR_BADGE = '#FFFFFF'
 
 const rulesOpen = ref(false)
 
@@ -398,6 +398,7 @@ const avatarOf = (url: string) => resolveAvatarUrl(url)
 
 // ---------- 底部聊天条（照 UNO：关掉面板后消息常驻可见） ----------
 const feedChats = computed(() => roomChat.recentChats.value)
+const chatUnread = computed(() => roomChat.unreadChat.value)
 const chatNameOf = (m: RoomChatMessage): string =>
   m.role === 'red' ? (state.value?.red?.nickname ?? '红方') : (state.value?.blue?.nickname ?? '蓝方')
 const chatBodyOf = (m: RoomChatMessage): string =>
@@ -499,7 +500,13 @@ watch(
         if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
         rpsCountdown.value = rps.ttl
         rpsCountdownTimer = setInterval(() => {
-          if (rpsCountdown.value > 0) rpsCountdown.value--
+          if (rpsCountdown.value > 0) {
+            rpsCountdown.value--
+          } else if (rpsCountdownTimer) {
+            // 数到 0 自清，别留 interval 每秒空转
+            clearInterval(rpsCountdownTimer)
+            rpsCountdownTimer = null
+          }
         }, 1000)
       }
     }
@@ -508,7 +515,13 @@ watch(
       if (rpsCountdownTimer) clearInterval(rpsCountdownTimer)
       rpsCountdown.value = rps?.ttl ?? 0
       rpsCountdownTimer = setInterval(() => {
-        if (rpsCountdown.value > 0) rpsCountdown.value--
+        if (rpsCountdown.value > 0) {
+          rpsCountdown.value--
+        } else if (rpsCountdownTimer) {
+          // 数到 0 自清，别留 interval 每秒空转
+          clearInterval(rpsCountdownTimer)
+          rpsCountdownTimer = null
+        }
       }, 1000)
     }
     if (status === 'playing') {
@@ -869,7 +882,6 @@ watch(
     prevStatus = next.status
     prevTurn = next.turn
   },
-  { deep: true },
 )
 
 // ---------- 操作 ----------
@@ -926,7 +938,7 @@ function onBack() {
     uni.showModal({
       title: '离开房间',
       content: '对局还没结束，离开将判负，确定吗？',
-      confirmColor: '#E85D4A',
+      confirmColor: '#58A6DC',
       success: (res) => {
         if (res.confirm) void onLeaveAndBack()
       },
@@ -951,7 +963,7 @@ function onResign() {
   uni.showModal({
     title: '认输',
     content: '确定认输结束本局吗？',
-    confirmColor: '#E85D4A',
+    confirmColor: '#58A6DC',
     success: (res) => {
       if (!res.confirm) return
       void guard(async () => {
@@ -988,6 +1000,9 @@ onHide(() => {
 })
 
 onUnload(() => {
+
+  // 页面级倒计时兜底清理（卸载时 interval 一并收掉）
+  if (rpsCountdownTimer) { clearInterval(rpsCountdownTimer); rpsCountdownTimer = null }
   stopSync()
 })
 
@@ -1002,7 +1017,7 @@ onShareAppMessage(() => ({
   min-height: 100vh;
   padding: 0 16px 24rpx;
   box-sizing: border-box;
-  background: #fff8f0;
+  background: #f6f9fb;
 
   /* ── 大厅 ── */
   &__lobby {
@@ -1033,23 +1048,23 @@ onShareAppMessage(() => ({
       justify-content: center;
       color: #fff;
       font-size: 48rpx;
-      font-weight: 700;
+      font-weight: 600;
 
       &--blue {
-        background: #5b8fb9;
-        border: 4rpx solid #3d6e96;
+        background: #4a86b8;
+        border: 4rpx solid #3b86b8;
       }
 
       &--red {
-        background: #e85d4a;
-        border: 4rpx solid #b8402e;
+        background: #e8806f;
+        border: 4rpx solid #d96a58;
       }
     }
 
     &-vs {
       font-size: 36rpx;
-      font-weight: 900;
-      color: #c08a1e;
+      font-weight: 600;
+      color: #6e8093;
     }
 
     &-title {
@@ -1071,8 +1086,8 @@ onShareAppMessage(() => ({
     height: 96rpx;
     line-height: 96rpx;
     border-radius: $radius-lg;
-    background: #f4b942;
-    color: #6b4a12;
+    background: #58a6dc;
+    color: #ffffff;
     font-size: $font-body;
     font-weight: 600;
     border: none;
@@ -1091,7 +1106,7 @@ onShareAppMessage(() => ({
   &__rules-link {
     margin-top: 28rpx;
     font-size: $font-body;
-    color: #c08a1e;
+    color: #3b86b8;
     text-decoration: underline;
   }
 
@@ -1117,8 +1132,9 @@ onShareAppMessage(() => ({
       line-height: 88rpx;
       border-radius: $radius-md;
       background: $color-card;
-      color: #c08a1e;
-      border: 2rpx solid #f4b942;
+      color: #58a6dc;
+      border: 2rpx solid #58a6dc;
+      box-sizing: border-box;
       font-size: $font-body;
 
       &::after {
@@ -1139,7 +1155,7 @@ onShareAppMessage(() => ({
     width: 80rpx;
     height: 80rpx;
     border-radius: 50%;
-    background: #f7eddf;
+    background: #f2f6f9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1213,15 +1229,15 @@ onShareAppMessage(() => ({
 
     &-hint {
       font-size: 32rpx;
-      color: #b9a98f;
+      color: #a4b3c0;
     }
 
     &--blue {
-      background: #f7eddf;
+      background: #f2f6f9;
     }
 
     &--red {
-      background: #f9e0da;
+      background: #fdefec;
       margin-left: 6rpx;
     }
   }
@@ -1267,11 +1283,11 @@ onShareAppMessage(() => ({
     line-height: 32rpx;
 
     &--blue {
-      background: #5b8fb9;
+      background: #4a86b8;
     }
 
     &--red {
-      background: #e85d4a;
+      background: #e8806f;
     }
   }
 
@@ -1279,10 +1295,10 @@ onShareAppMessage(() => ({
     width: 14rpx;
     height: 14rpx;
     border-radius: 50%;
-    background: #6fbf73;
+    background: #5fb98c;
 
     &--off {
-      background: #c8beb2;
+      background: #dde6ec;
     }
   }
 
@@ -1292,7 +1308,7 @@ onShareAppMessage(() => ({
     margin-top: 6rpx;
 
     &--mine {
-      color: #c08a1e;
+      color: #c99a34;
       font-weight: 600;
     }
   }
@@ -1303,8 +1319,8 @@ onShareAppMessage(() => ({
     line-height: 64rpx;
     padding: 0 32rpx;
     border-radius: $radius-md;
-    background: #f4b942;
-    color: #6b4a12;
+    background: #58a6dc;
+    color: #ffffff;
     font-size: $font-caption;
     font-weight: 600;
     border: none;
@@ -1322,7 +1338,7 @@ onShareAppMessage(() => ({
 
     &-label {
       font-size: 18rpx;
-      color: #b9a98f;
+      color: #a4b3c0;
       margin-bottom: 6rpx;
     }
 
@@ -1335,17 +1351,17 @@ onShareAppMessage(() => ({
       width: 44rpx;
       height: 44rpx;
       border-radius: 50%;
-      background: #efe6d8;
+      background: #f2f6f9;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #b9a98f;
+      color: #a4b3c0;
       font-size: 22rpx;
     }
 
     &-empty {
       font-size: 20rpx;
-      color: #b9a98f;
+      color: #a4b3c0;
     }
   }
 
@@ -1355,7 +1371,7 @@ onShareAppMessage(() => ({
     margin: 0 auto;
     padding: 28rpx;
     background: #fff;
-    border: 2rpx solid #f0e4d7;
+    border: 2rpx solid #eaf0f4;
     border-radius: 32rpx;
     box-sizing: border-box;
     box-shadow: $shadow-card;
@@ -1383,7 +1399,7 @@ onShareAppMessage(() => ({
     width: 96rpx;
     height: 96rpx;
     border-radius: 50%;
-    background: #f7eddf;
+    background: #f2f6f9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1419,9 +1435,9 @@ onShareAppMessage(() => ({
     align-items: flex-start;
     gap: 12rpx;
     padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
-    background: rgba(255, 248, 237, 0.95);
+    background: rgba(255, 255, 255, 0.96);
     border-radius: 24rpx 24rpx 0 0;
-    box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+    box-shadow: 0 -4rpx 20rpx rgba(46, 65, 84, 0.1);
 
     &-feed {
       width: 100%;
@@ -1430,7 +1446,7 @@ onShareAppMessage(() => ({
       flex-direction: column;
       gap: 4rpx;
       background: #fff;
-      border: 2rpx solid #f0e4d7;
+      border: 2rpx solid #eaf0f4;
       border-radius: 18rpx;
       padding: 10rpx 20rpx;
       overflow: hidden;
@@ -1444,12 +1460,12 @@ onShareAppMessage(() => ({
     }
 
     &-name {
-      color: #7d6f60;
+      color: #6e8093;
       flex-shrink: 0;
     }
 
     &-text {
-      color: #4a3f35;
+      color: #2e4154;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1466,7 +1482,7 @@ onShareAppMessage(() => ({
       gap: 10rpx;
       height: 60rpx;
       padding: 0 26rpx;
-      background: #f7eddf;
+      background: #e9f4fb;
       border-radius: 30rpx;
       flex-shrink: 0;
     }
@@ -1477,7 +1493,7 @@ onShareAppMessage(() => ({
 
     &-hint {
       font-size: 24rpx;
-      color: #7d6f60;
+      color: #6e8093;
     }
 
     &-unread {
@@ -1486,7 +1502,7 @@ onShareAppMessage(() => ({
       right: -6rpx;
       min-width: 30rpx;
       box-sizing: border-box;
-      background: #e85d4a;
+      background: #e8806f;
       color: #fff;
       font-size: 18rpx;
       border-radius: 999rpx;
@@ -1501,7 +1517,7 @@ onShareAppMessage(() => ({
 .jungle__rps-mask {
   position: fixed;
   inset: 0;
-  background: rgba(62, 50, 38, 0.72);
+  background: rgba(46, 65, 84, 0.45);
   z-index: 90;
   display: flex;
   align-items: center;
@@ -1512,7 +1528,7 @@ onShareAppMessage(() => ({
   max-width: 620rpx;
   background: #fff;
   border-radius: 40rpx;
-  border: 4rpx solid #4a3f35;
+  border: 4rpx solid #2e4154;
   padding: 32rpx;
   display: flex;
   flex-direction: column;
@@ -1528,12 +1544,12 @@ onShareAppMessage(() => ({
 }
 .jungle__rps-title {
   font-size: 32rpx;
-  font-weight: 800;
-  color: #4a3f35;
+  font-weight: 600;
+  color: #2e4154;
 }
 .jungle__rps-sub {
   font-size: 22rpx;
-  color: #7d6f60;
+  color: #6e8093;
 }
 .jungle__rps-sides {
   display: flex;
@@ -1572,19 +1588,19 @@ onShareAppMessage(() => ({
   justify-content: center;
   color: #fff;
   font-size: 36rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 .jungle__rps-chip--red {
-  background: #e85d4a;
-  border: 4rpx solid #b8402e;
+  background: #e8806f;
+  border: 4rpx solid #d96a58;
 }
 .jungle__rps-chip--blue {
-  background: #5b8fb9;
-  border: 4rpx solid #3d6e96;
+  background: #4a86b8;
+  border: 4rpx solid #3b86b8;
 }
 .jungle__rps-name {
   font-size: 24rpx;
-  color: #4a3f35;
+  color: #2e4154;
   max-width: 180rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1592,17 +1608,17 @@ onShareAppMessage(() => ({
 }
 .jungle__rps-status {
   font-size: 20rpx;
-  color: #7d6f60;
+  color: #6e8093;
 }
 .jungle__rps-pick {
   font-size: 26rpx;
-  font-weight: 800;
-  color: #4a3f35;
+  font-weight: 600;
+  color: #2e4154;
 }
 .jungle__rps-vs {
   font-size: 34rpx;
-  font-weight: 900;
-  color: #e85d4a;
+  font-weight: 600;
+  color: #e8806f;
 }
 .jungle__rps-btns {
   display: flex;
@@ -1615,8 +1631,8 @@ onShareAppMessage(() => ({
   height: 76rpx;
   line-height: 76rpx;
   font-size: 28rpx;
-  font-weight: 700;
-  background: #4a3f35;
+  font-weight: 600;
+  background: #2e4154;
   color: #fff;
   border-radius: 16rpx;
   border: none;
@@ -1624,25 +1640,25 @@ onShareAppMessage(() => ({
 }
 .jungle__rps-btn--red {
   min-width: 240rpx;
-  background: #e85d4a;
+  background: #e8806f;
 }
 .jungle__rps-btn--blue {
   min-width: 240rpx;
-  background: #5b8fb9;
+  background: #4a86b8;
 }
 .jungle__rps-btn[disabled] {
   opacity: 0.45;
 }
 .jungle__rps-wait {
   font-size: 24rpx;
-  color: #7d6f60;
+  color: #6e8093;
 }
 
 /* ── 结算遮罩 ── */
 .jungle__scrim {
   position: fixed;
   inset: 0;
-  background: rgba(62, 50, 38, 0.72);
+  background: rgba(46, 65, 84, 0.45);
   z-index: 95;
   display: flex;
   align-items: center;
@@ -1674,17 +1690,17 @@ onShareAppMessage(() => ({
 }
 .jungle__result-title {
   font-size: 44rpx;
-  font-weight: 700;
-  color: #4a3f35;
+  font-weight: 600;
+  color: #2e4154;
 }
 .jungle__result-sub {
   font-size: 24rpx;
-  color: #7d6f60;
+  color: #6e8093;
   text-align: center;
 }
 .jungle__result-stats {
   width: 100%;
-  background: #f7eddf;
+  background: #f2f6f9;
   border-radius: 24rpx;
   padding: 24rpx 28rpx;
   display: flex;
@@ -1699,7 +1715,7 @@ onShareAppMessage(() => ({
 }
 .jungle__stat-label {
   font-size: 24rpx;
-  color: #7d6f60;
+  color: #6e8093;
 }
 .jungle__stat-values {
   display: flex;
@@ -1708,25 +1724,25 @@ onShareAppMessage(() => ({
 }
 .jungle__stat-num {
   font-size: 32rpx;
-  font-weight: 700;
+  font-weight: 600;
 
   &--red {
-    color: #e85d4a;
+    color: #e8806f;
   }
 
   &--blue {
-    color: #5b8fb9;
+    color: #4a86b8;
   }
 }
 .jungle__stat-colon {
   font-size: 28rpx;
-  color: #7d6f60;
+  color: #6e8093;
 }
 .jungle__result-badge {
   padding: 8rpx 24rpx;
   border-radius: 999rpx;
   background: rgba(244, 185, 66, 0.15);
-  color: #c08a1e;
+  color: #c99a34;
   font-size: 22rpx;
   font-weight: 600;
 }
@@ -1735,8 +1751,8 @@ onShareAppMessage(() => ({
   height: 96rpx;
   line-height: 96rpx;
   border-radius: 28rpx;
-  background: #f4b942;
-  color: #6b4a12;
+  background: #58a6dc;
+  color: #ffffff;
   font-size: 30rpx;
   font-weight: 600;
   border: none;
@@ -1750,8 +1766,8 @@ onShareAppMessage(() => ({
   height: 88rpx;
   line-height: 88rpx;
   border-radius: 28rpx;
-  background: #f7eddf;
-  color: #4a3f35;
+  background: #f2f6f9;
+  color: #2e4154;
   font-size: 28rpx;
   border: none;
 
@@ -1764,7 +1780,7 @@ onShareAppMessage(() => ({
 .jungle__rules-scrim {
   position: fixed;
   inset: 0;
-  background: rgba(62, 50, 38, 0.72);
+  background: rgba(46, 65, 84, 0.45);
   z-index: 96;
 }
 .jungle__drawer {
@@ -1773,7 +1789,7 @@ onShareAppMessage(() => ({
   right: 0;
   bottom: 0;
   height: 82vh;
-  background: #fff8f0;
+  background: #f6f9fb;
   border-radius: 40rpx 40rpx 0 0;
   padding: 32rpx 44rpx 28rpx;
   display: flex;
@@ -1788,18 +1804,18 @@ onShareAppMessage(() => ({
 }
 .jungle__drawer-title {
   font-size: 32rpx;
-  font-weight: 700;
-  color: #4a3f35;
+  font-weight: 600;
+  color: #2e4154;
 }
 .jungle__drawer-close {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: #f7eddf;
+  background: #f2f6f9;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7d6f60;
+  color: #6e8093;
   font-size: 26rpx;
 }
 .jungle__drawer-scroll {
@@ -1814,16 +1830,16 @@ onShareAppMessage(() => ({
 }
 .jungle__rule-label {
   align-self: flex-start;
-  background: #4a3f35;
+  background: #2e4154;
   border-radius: 12rpx;
   padding: 6rpx 20rpx;
   color: #fff;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 .jungle__rule-text {
   font-size: 26rpx;
-  color: #4a3f35;
+  color: #2e4154;
   line-height: 1.6;
 }
 .jungle__rank-chain {
@@ -1837,25 +1853,25 @@ onShareAppMessage(() => ({
   height: 48rpx;
   border-radius: 50%;
   background: #fff;
-  border: 2rpx solid #e8d9c4;
+  border: 2rpx solid #eaf0f4;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #4a3f35;
+  color: #2e4154;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 .jungle__rank-gt {
   font-size: 20rpx;
-  font-weight: 700;
-  color: #7d6f60;
+  font-weight: 600;
+  color: #6e8093;
 }
 .jungle__rule-note {
   align-self: flex-start;
-  background: #f9e0da;
+  background: #fdefec;
   border-radius: 999rpx;
   padding: 8rpx 20rpx;
-  color: #b8402e;
+  color: #d96a58;
   font-size: 22rpx;
   font-weight: 600;
 }
@@ -1865,7 +1881,7 @@ onShareAppMessage(() => ({
 .jungle__mini-cell {
   width: 56rpx;
   height: 56rpx;
-  border: 2rpx solid #e8d9c4;
+  border: 2rpx solid #eaf0f4;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -1873,7 +1889,7 @@ onShareAppMessage(() => ({
   position: relative;
 
   &--land {
-    background: #f7eedf;
+    background: #f2f6f9;
   }
 
   &--water {
@@ -1885,7 +1901,7 @@ onShareAppMessage(() => ({
   }
 
   &--den {
-    background: #4a3f35;
+    background: #2e4154;
   }
 
   &--jump {
@@ -1902,20 +1918,20 @@ onShareAppMessage(() => ({
   justify-content: center;
   color: #fff;
   font-size: 20rpx;
-  font-weight: 700;
+  font-weight: 600;
 
   &--red {
-    background: #e85d4a;
+    background: #e8806f;
   }
 
   &--blue {
-    background: #5b8fb9;
+    background: #4a86b8;
   }
 }
 .jungle__mini-arrow {
-  color: #c08a1e;
+  color: #c99a34;
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 600;
 }
 .jungle__mini-mark {
   color: #c05b4a;
@@ -1923,14 +1939,14 @@ onShareAppMessage(() => ({
   font-weight: 600;
 
   &--den {
-    color: #fff8f0;
+    color: #f6f9fb;
   }
 }
 .jungle__rule-tail {
   display: block;
   text-align: center;
   font-size: 22rpx;
-  color: #7d6f60;
+  color: #6e8093;
   padding-bottom: 16rpx;
 }
 
@@ -1945,11 +1961,11 @@ onShareAppMessage(() => ({
   max-width: 360rpx;
   padding: 10rpx 20rpx;
   background: #fff;
-  border: 2rpx solid rgba(74, 63, 53, 0.15);
+  border: 2rpx solid rgba(46, 65, 84, 0.15);
   border-radius: 18rpx;
-  box-shadow: 0 4rpx 12rpx rgba(74, 63, 53, 0.18);
+  box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.18);
   font-size: 24rpx;
-  color: #4a3f35;
+  color: #2e4154;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

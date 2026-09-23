@@ -1469,6 +1469,26 @@ function testTetris() {
   const atLeftWall = craft({ active: { id: 'T', x: 0, y: 15, rot: 0 } })
   assert(applyAction(atLeftWall, { t: 'move', dx: -1 }) === atLeftWall, '移动：左墙被挡返回原引用')
 
+  // 速度模式：constant 恒取起始等级基础档（不随消行加速）；setSpeedMode 对局内即时切换
+  assert(createGame(5, rng, 'constant').speedMode === 'constant', '速度模式：createGame 接受 constant')
+  assert(createGame(5, rng).speedMode === 'progressive', '速度模式：默认 progressive')
+  {
+    const base = { active: { id: 'T' as const, x: 4, y: 0, rot: 0 }, startLevel: 1, level: 4, lines: 30 }
+    // 4 级 progressive 间隔 ≈473ms；constant 恒取起始档 1000ms
+    const prog = applyAction(craft({ ...base, speedMode: 'progressive' }), { t: 'tick', dtMs: 600 })
+    assert(prog.active?.y === 1, '速度 progressive：600ms 越过 4 级间隔落一格')
+    const cst = applyAction(craft({ ...base, speedMode: 'constant' }), { t: 'tick', dtMs: 600 })
+    assert(cst.active?.y === 0, '速度 constant：600ms 不足起始档 1000ms 不落')
+    const cst2 = applyAction(cst, { t: 'tick', dtMs: 500 })
+    assert(cst2.active?.y === 1, '速度 constant：累计满基础档仍落（不是冻结）')
+    // setSpeedMode：即时切换（新引用驱动重绘），同值原引用，结束后不生效
+    const switched = applyAction(prog, { t: 'setSpeedMode', mode: 'constant' })
+    assert(switched !== prog && switched.speedMode === 'constant', 'setSpeedMode：即时切换并返回新引用')
+    assert(applyAction(switched, { t: 'setSpeedMode', mode: 'constant' }) === switched, 'setSpeedMode：同值返回原引用')
+    const over = applyAction({ ...craft({ ...base, speedMode: 'progressive' }), phase: 'over' }, { t: 'setSpeedMode', mode: 'constant' })
+    assert(over.speedMode === 'progressive', 'setSpeedMode：结束后不生效')
+  }
+
   // 重力 tick
   let falling = craft({ active: { id: 'T', x: 4, y: 0, rot: 0 } })
   falling = applyAction(falling, { t: 'tick', dtMs: 999 })

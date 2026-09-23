@@ -1,24 +1,56 @@
 <template>
   <view class="games">
-    <view class="games__heading">
-      <text class="games__eyebrow">枫叶小屋</text>
+    <view class="games__pagehead">
+      <text class="games__kick">GAMES</text>
       <text class="games__title">游戏</text>
-      <text class="games__subtitle">{{ games.length }} 个已上架游戏</text>
+      <text class="games__sub">{{ games.length }} 个已上架游戏</text>
     </view>
 
-    <view v-if="games.length" class="games__list">
-      <view v-for="game in games" :key="game.key" class="games__card card" hover-class="press" @tap="openGame(game)">
-        <ToolIcon class="games__icon" :icon="game.icon" />
-        <view class="games__copy">
-          <view class="games__name-row">
-            <text class="games__name">{{ game.name }}</text>
-            <text v-if="selectedKeys.includes(game.key)" class="games__selected">已在首页</text>
-          </view>
-          <text class="games__description">{{ game.description }}</text>
-        </view>
-        <text class="games__arrow">›</text>
-      </view>
-    </view>
+    <template v-if="games.length">
+      <AppSection title="派对联机" count="房间码同玩" card>
+        <ToolCard
+          v-for="(game, index) in onlineGames"
+          :key="game.key"
+          :icon="game.icon"
+          :pastel="game.key"
+          :title="game.name"
+          :description="game.description"
+          :divided="index > 0"
+          :chevron="false"
+          pressable
+          @tap="openGame(game)"
+        >
+          <template #right>
+            <view class="games__tags">
+              <text v-if="selectedKeys.includes(game.key)" class="tag tag--blue">已在首页</text>
+              <text class="tag tag--blue">联机</text>
+            </view>
+          </template>
+        </ToolCard>
+      </AppSection>
+
+      <AppSection title="单机消遣" count="离线可玩" card>
+        <ToolCard
+          v-for="(game, index) in singleGames"
+          :key="game.key"
+          :icon="game.icon"
+          :pastel="game.key"
+          :title="game.name"
+          :description="game.description"
+          :divided="index > 0"
+          :chevron="false"
+          pressable
+          @tap="openGame(game)"
+        >
+          <template #right>
+            <view class="games__tags">
+              <text v-if="selectedKeys.includes(game.key)" class="tag tag--blue">已在首页</text>
+              <text class="tag tag--gray">单机</text>
+            </view>
+          </template>
+        </ToolCard>
+      </AppSection>
+    </template>
 
     <view v-else-if="!loading" class="games__empty">
       <text class="games__empty-icon">🎮</text>
@@ -30,15 +62,22 @@
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppBottomNav from '@/components/AppBottomNav.vue'
-import ToolIcon from '@/components/ToolIcon.vue'
+import AppSection from '@/components/AppSection.vue'
+import ToolCard from '@/components/ToolCard.vue'
 import type { ToolboxTool } from '@/types/toolbox'
 import { fetchHomeTools } from '@/services/toolbox'
+
+/** 联机白名单（纯前端分组，不改 tool_catalog）：不在名单里的一律按单机展示（安全默认） */
+const ONLINE_KEYS = ['gomoku', 'uno', 'ludo', 'adventure', 'jungle', 'junqi', 'xiangqi', 'tictactoe']
 
 const games = ref<ToolboxTool[]>([])
 const selectedKeys = ref<string[]>([])
 const loading = ref(true)
+
+const onlineGames = computed(() => games.value.filter((game) => ONLINE_KEYS.includes(game.key)))
+const singleGames = computed(() => games.value.filter((game) => !ONLINE_KEYS.includes(game.key)))
 
 onShow(() => {
   void loadGames()
@@ -65,94 +104,39 @@ function openGame(game: ToolboxTool) {
 <style lang="scss" scoped>
 .games {
   min-height: 100vh;
-  padding: 48rpx 32rpx 180rpx;
+  padding: 24rpx 32rpx 200rpx;
 
-  &__heading {
+  &__pagehead {
     display: flex;
     flex-direction: column;
-    gap: 10rpx;
-    padding: 40rpx 0 56rpx;
+    padding: 20rpx 4rpx 8rpx;
   }
 
-  &__eyebrow,
-  &__subtitle {
-    color: $color-text-secondary;
-    font-size: 24rpx;
+  &__kick {
+    font-size: 20rpx;
+    letter-spacing: 5rpx;
+    color: $blue-deep;
+    font-weight: 700;
+    margin-bottom: 8rpx;
   }
 
   &__title {
-    color: $color-text;
-    font-size: 44rpx;
+    font-size: 46rpx;
     font-weight: 700;
+    color: $ink;
+    line-height: 1.2;
   }
 
-  &__list {
-    display: flex;
-    flex-direction: column;
-    gap: 24rpx;
+  &__sub {
+    font-size: 24rpx;
+    color: $ink2;
+    margin-top: 10rpx;
   }
 
-  &__card {
-    display: flex;
-    align-items: center;
-    gap: 24rpx;
-  }
-
-  &__icon {
-    width: 88rpx;
-    height: 88rpx;
-    border-radius: $radius-md;
-    background: $color-primary-light;
+  &__tags {
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 46rpx;
-    flex-shrink: 0;
-  }
-
-  &__copy {
-    min-width: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 9rpx;
-  }
-
-  &__name-row {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-  }
-
-  &__name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    color: $color-text;
-    font-size: 30rpx;
-    font-weight: 600;
-  }
-
-  &__selected {
-    padding: 5rpx 10rpx;
-    border-radius: $radius-sm;
-    background: $color-primary-light;
-    color: $color-primary-dark;
-    font-size: 20rpx;
-    flex-shrink: 0;
-  }
-
-  &__description {
-    color: $color-text-secondary;
-    font-size: 22rpx;
-    line-height: 1.45;
-  }
-
-  &__arrow {
-    color: $color-text-secondary;
-    font-size: 46rpx;
+    gap: 8rpx;
     flex-shrink: 0;
   }
 
@@ -163,7 +147,7 @@ function openGame(game: ToolboxTool) {
     align-items: center;
     justify-content: center;
     gap: 16rpx;
-    color: $color-text-secondary;
+    color: $ink2;
     font-size: 26rpx;
   }
 

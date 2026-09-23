@@ -1,7 +1,7 @@
 /**
  * 推箱子 canvas 渲染（照 tetrisRender.ts 家法）：纯 2D API、无 uni/wx 依赖、整幅重绘。
- * 程序化绘制全部棋子（墙/格底/落叶点/木箱/归位金箱/小人），皮肤色板照 Pen 原型
- * （docs/sokoban-redesign/）：奶油底 + 棕木框 + 金色行动色，无外部图片资产。
+ * 程序化绘制全部棋子（墙/格底/落叶点/木箱/归位金箱/小人），v4 小清新配色（原型 #play-sokoban）：
+ * 白板 + 沙色墙 #E9DBC4 + amber 箱 + 蓝环落叶点，小人/叶子内容个性保留。
  */
 
 import type { SokobanState } from './sokoban'
@@ -13,17 +13,17 @@ export interface SokobanLayout {
 }
 
 const C = {
-  board: '#F7EEDF',
-  checker: '#F1E4CE',
-  wall: '#B4855C',
-  wallEdge: '#96683F',
-  target: '#C08A1E',
-  box: '#D9A05B',
-  boxLine: '#B37F42',
+  board: '#FFFFFF',
+  checker: '#F2F6F9',
+  wall: '#E9DBC4',
+  wallEdge: '#D9C5A0',
+  target: '#58A6DC',
+  box: '#F3CE79',
+  boxLine: '#C99A34',
   gold: '#F4B942',
   goldDeep: '#C08A1E',
-  red: '#E85D4A',
-  ink: '#4A3F35',
+  red: '#E8806F',
+  ink: '#2E4154',
 }
 
 /** 整数格布局：cell 取可用空间的适配值，小关卡不放大过 52、不小于 16。 */
@@ -152,10 +152,14 @@ export function drawSokobanFrame(ctx: CanvasRenderingContext2D, layout: SokobanL
     const u = cell / 32
     const cx = px + cell / 2
     const cy = py + cell / 2
-    ctx.fillStyle = '#FFFDF8'
+    ctx.fillStyle = '#FFFFFF'
     ctx.beginPath()
     ctx.arc(cx, cy, 13 * u, 0, Math.PI * 2)
     ctx.fill()
+    // 白板上的白小人：发丝线描边兜底辨识度（眼 + 叶帽负责主要识别）
+    ctx.strokeStyle = '#DDE6EC'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
     // 双眼（原型 @11,12 与 @18.5,12,即中心左侧 5/2.5、上方 4）——各自独立 path,避免 arc 连线
     ctx.fillStyle = C.ink
     for (const ex of [-5, 2.5]) {
@@ -198,7 +202,7 @@ export function drawSokobanFrame(ctx: CanvasRenderingContext2D, layout: SokobanL
   const marker = state.hint
     ? { cell: state.hint.box, dir: state.hint.dir, color: C.gold, fill: '#F4B94233' }
     : state.stuckBox !== null
-      ? { cell: state.stuckBox, dir: null, color: C.red, fill: '#E85D4A33' }
+      ? { cell: state.stuckBox, dir: null, color: C.red, fill: '#E8806F33' }
       : null
   if (marker) {
     const px = (marker.cell % level.w) * cell

@@ -1,28 +1,34 @@
 <template>
   <view class="tool-library">
-    <view class="tool-library__heading">
-      <text class="tool-library__eyebrow">个人配置</text>
+    <view class="tool-library__pagehead">
+      <text class="tool-library__kick">PERSONAL</text>
       <text class="tool-library__title">工具集</text>
-      <text class="tool-library__subtitle">{{ selectedKeys.length }} 个工具显示在首页</text>
+      <text class="tool-library__sub">{{ selectedKeys.length }} 个工具显示在首页</text>
     </view>
 
-    <view v-if="groups.length" class="tool-library__list">
-      <view v-for="group in groups" :key="group.category" class="tool-library__group">
-        <text class="tool-library__group-title">{{ group.title }}</text>
-        <view v-for="tool in group.tools" :key="tool.key" class="tool-library__item">
-          <ToolIcon class="tool-library__icon" :icon="tool.icon" />
-          <view class="tool-library__copy">
-            <text class="tool-library__name">{{ tool.name }}</text>
-            <text class="tool-library__desc">{{ tool.description }}</text>
-          </view>
-          <switch
-            :checked="selectedKeys.includes(tool.key)"
-            color="#c64f3d"
-            @change="toggleTool(tool.key, $event)"
-          />
-        </view>
-      </view>
-    </view>
+    <template v-if="groups.length">
+      <AppSection v-for="group in groups" :key="group.category" :title="group.title" card>
+        <ToolCard
+          v-for="(tool, index) in group.tools"
+          :key="tool.key"
+          :icon="tool.icon"
+          :pastel="tool.key"
+          :title="tool.name"
+          :description="tool.description"
+          size="sm"
+          :chevron="false"
+          :divided="index > 0"
+        >
+          <template #right>
+            <switch
+              :checked="selectedKeys.includes(tool.key)"
+              color="#58A6DC"
+              @change="toggleTool(tool.key, $event)"
+            />
+          </template>
+        </ToolCard>
+      </AppSection>
+    </template>
 
     <view v-else-if="!loading" class="tool-library__empty">
       <text class="tool-library__empty-icon">🍁</text>
@@ -35,7 +41,8 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import type { ToolCategory, ToolboxTool } from '@/types/toolbox'
-import ToolIcon from '@/components/ToolIcon.vue'
+import AppSection from '@/components/AppSection.vue'
+import ToolCard from '@/components/ToolCard.vue'
 import { fetchHomeTools, saveHomeTools } from '@/services/toolbox'
 
 type SwitchEvent = { detail: { value: boolean } }
@@ -97,85 +104,33 @@ async function toggleTool(toolKey: string, event: Event) {
 <style lang="scss" scoped>
 .tool-library {
   min-height: 100vh;
-  padding: 48rpx 32rpx 80rpx;
+  padding: 24rpx 32rpx 80rpx;
 
-  &__heading {
+  &__pagehead {
     display: flex;
     flex-direction: column;
-    gap: 10rpx;
-    padding: 32rpx 0 54rpx;
+    padding: 20rpx 4rpx 8rpx;
   }
 
-  &__eyebrow,
-  &__subtitle {
-    font-size: 24rpx;
-    color: $color-text-secondary;
+  &__kick {
+    font-size: 20rpx;
+    letter-spacing: 5rpx;
+    color: $blue-deep;
+    font-weight: 700;
+    margin-bottom: 8rpx;
   }
 
   &__title {
-    font-size: 44rpx;
+    font-size: 46rpx;
     font-weight: 700;
-    color: $color-text;
+    color: $ink;
+    line-height: 1.2;
   }
 
-  &__list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  &__group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 32rpx;
-  }
-
-  &__group-title {
+  &__sub {
     font-size: 24rpx;
-    font-weight: 600;
-    color: $color-text-secondary;
-    padding: 16rpx 0 8rpx;
-    border-bottom: 2rpx solid $color-border;
-  }
-
-  &__item {
-    min-height: 130rpx;
-    padding: 18rpx 0;
-    border-bottom: 2rpx solid $color-border;
-    display: flex;
-    align-items: center;
-    gap: 20rpx;
-  }
-
-  &__icon {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: $radius-sm;
-    background: $color-primary-light;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 38rpx;
-    flex-shrink: 0;
-  }
-
-  &__copy {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8rpx;
-  }
-
-  &__name {
-    color: $color-text;
-    font-size: 29rpx;
-    font-weight: 600;
-  }
-
-  &__desc {
-    color: $color-text-secondary;
-    font-size: 22rpx;
-    line-height: 1.45;
+    color: $ink2;
+    margin-top: 10rpx;
   }
 
   &__empty {
@@ -185,7 +140,7 @@ async function toggleTool(toolKey: string, event: Event) {
     align-items: center;
     justify-content: center;
     gap: 16rpx;
-    color: $color-text-secondary;
+    color: $ink2;
     font-size: 26rpx;
   }
 

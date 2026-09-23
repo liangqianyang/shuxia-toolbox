@@ -96,11 +96,24 @@ final class WechatUserService
      *
      * @return array{id: int, openid: string, nickname: string, avatarUrl: string}|null
      */
+    /** 进程内档案微缓存（3s TTL）：WS 广播按 座席×连接 逐个 serialize，10 人局一手牌
+     *  会触发 N×N 次主键查询；昵称/头像允许秒级陈旧，用微缓存消解放大。协程单线程读写安全。 */
+    private static array $profileCache = [];
+
     public function findUser(int $userId): ?array
     {
+        $cached = self::$profileCache[$userId] ?? null;
+        if ($cached !== null && $cached['at'] >= time() - 3) {
+            return $cached['user'];
+        }
         /** @var null|WechatUser $user */
         $user = WechatUser::query()->find($userId);
-        return $user === null ? null : $this->formatUser($user);
+        $formatted = $user === null ? null : $this->formatUser($user);
+        if (count(self::$profileCache) > 512) {
+            self::$profileCache = []; // 简单上限防涨
+        }
+        self::$profileCache[$userId] = ['at' => time(), 'user' => $formatted];
+        return $formatted;
     }
 
     /**
@@ -125,6 +138,7 @@ final class WechatUserService
             $user->avatar_url = $avatarUrl;
         }
         $user->save();
+        unset(self::$profileCache[$userId]); // 改完资料立刻失效微缓存，广播马上用新头像昵称
 
         return $this->formatUser($user);
     }
@@ -206,8 +220,12 @@ final class WechatUserService
             return null;
         }
 
-        $session->last_seen_at = date('Y-m-d H:i:s');
-        $session->save();
+        // 心跳节流：last_seen_at 一分钟内已刷过就不再写——游戏轮询 1-2 次/秒，
+        // 每请求都写会与房间自身的 touchSeenAt 叠加成双倍心跳写放大。
+        if ($session->last_seen_at === null || strtotime((string) $session->last_seen_at) < time() - 60) {
+            $session->last_seen_at = date('Y-m-d H:i:s');
+            $session->save();
+        }
 
         return $session;
     }

@@ -1306,21 +1306,26 @@ async function saveCardPreference(showToast = true) {
   const base = selectedEvent.value
   // 偏好是每人一份：viewer 只发 myPrefs（走新后端的偏好分支）；
   // 非 viewer 发全量 draft——旧后端（未部署新版时）也能正常保存，避免 422
-  const event = base.role === 'viewer'
-    ? await saveAnniversaryMyPrefs(base.id, {
-        cardTemplate: cardTemplate.value,
-        cardTone: cardTone.value,
-        coverImage: cardCoverImage.value,
-      })
-    : await saveAnniversary({
-        ...draftFromEvent(base),
-        cardTemplate: cardTemplate.value,
-        cardTone: cardTone.value,
-        coverImage: cardCoverImage.value,
-      })
-  upsertEvent(event)
-  selectedId.value = event.id
-  if (showToast) uni.showToast({ title: '卡片偏好已保存', icon: 'success' })
+  try {
+    const event = base.role === 'viewer'
+      ? await saveAnniversaryMyPrefs(base.id, {
+          cardTemplate: cardTemplate.value,
+          cardTone: cardTone.value,
+          coverImage: cardCoverImage.value,
+        })
+      : await saveAnniversary({
+          ...draftFromEvent(base),
+          cardTemplate: cardTemplate.value,
+          cardTone: cardTone.value,
+          coverImage: cardCoverImage.value,
+        })
+    upsertEvent(event)
+    selectedId.value = event.id
+    if (showToast) uni.showToast({ title: '卡片偏好已保存', icon: 'success' })
+  } catch (error) {
+    // 此函数有 void 火后不理调用点：不 catch 会静默失败且报未处理 rejection
+    uni.showToast({ title: '偏好保存失败，请重试', icon: 'none' })
+  }
 }
 
 function patchSelectedCardEvent() {
@@ -1554,15 +1559,21 @@ function removeCurrent() {
     title: '删除纪念日',
     content: `确定删除「${selectedEvent.value.title}」吗？共享成员将不再看到这个日子。`,
     confirmText: '删除',
-    confirmColor: '#e06a5a',
+    confirmColor: '#58A6DC',
     success: (result) => {
       if (!result.confirm || !selectedEvent.value) return
-      void deleteAnniversary(selectedEvent.value.id).then(() => {
-        events.value = events.value.filter((event) => event.id !== selectedEvent.value?.id)
-        selectedId.value = null
-        panel.value = 'home'
-        uni.showToast({ title: '已删除', icon: 'success' })
-      })
+      const eventId = selectedEvent.value.id
+      deleteAnniversary(eventId)
+        .then(() => {
+          events.value = events.value.filter((event) => event.id !== eventId)
+          selectedId.value = null
+          panel.value = 'home'
+          uni.showToast({ title: '已删除', icon: 'success' })
+        })
+        .catch(() => {
+          // 删除失败保留条目并明确告知，不能静默
+          uni.showToast({ title: '删除失败，请重试', icon: 'none' })
+        })
     },
   })
 }
@@ -1625,11 +1636,11 @@ function upsertEvent(event: AnniversaryEvent) {
 }
 
 function badgeMonth(event: AnniversaryEvent): string {
-  return `${Number(computeOccurrence(event).date.slice(5, 7))}月`
+  return `${Number(occOf(event).date.slice(5, 7))}月`
 }
 
 function badgeDay(event: AnniversaryEvent): string {
-  return String(Number(computeOccurrence(event).date.slice(-2)))
+  return String(Number(occOf(event).date.slice(-2)))
 }
 
 function templateName(template: AnniversaryCardTemplate): string {
@@ -1681,9 +1692,10 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__header-action {
     min-width: 104rpx;
     padding: 14rpx 20rpx;
-    border-radius: $radius-md;
-    background: $color-primary;
-    color: #fff;
+    border-radius: 999rpx;
+    background: $color-primary-light;
+    border: 2rpx solid $color-primary;
+    color: $color-primary-dark;
     font-size: 26rpx;
     font-weight: 600;
     text-align: center;
@@ -1715,8 +1727,6 @@ function toneHint(tone: AnniversaryCardTone): string {
     margin: 0 -32rpx 28rpx;
     padding: 36rpx 36rpx 30rpx;
     overflow: hidden;
-    color: #ffffff;
-    box-shadow: 0 16rpx 40rpx rgba(74, 63, 53, 0.18);
 
     &::after {
       content: '';
@@ -1726,7 +1736,7 @@ function toneHint(tone: AnniversaryCardTone): string {
       width: 340rpx;
       height: 340rpx;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.45);
       pointer-events: none;
     }
   }
@@ -1741,16 +1751,15 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__hero-scene {
     padding: 8rpx 20rpx;
     border-radius: 999rpx;
-    background: rgba(0, 0, 0, 0.16);
-    border: 2rpx solid rgba(255, 255, 255, 0.24);
-    color: #ffffff;
+    background: #ffffff;
+    color: inherit;
     font-size: 22rpx;
     font-weight: 600;
     flex-shrink: 0;
   }
 
   &__hero-kicker {
-    color: rgba(255, 255, 255, 0.92);
+    color: inherit;
     font-size: 22rpx;
     font-weight: 500;
     letter-spacing: 4rpx;
@@ -1759,7 +1768,7 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__hero-title {
     font-size: 38rpx;
     font-weight: 700;
-    color: #ffffff;
+    color: $color-text;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1775,17 +1784,17 @@ function toneHint(tone: AnniversaryCardTone): string {
     font-size: 140rpx;
     font-weight: 700;
     line-height: 0.95;
-    color: #ffffff;
+    color: inherit;
   }
 
   &__hero-unit {
     font-size: 36rpx;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
+    color: $color-text-secondary;
   }
 
   &__hero-detail {
-    color: rgba(255, 255, 255, 0.88);
+    color: $color-text-secondary;
     font-size: 26rpx;
   }
 
@@ -1799,26 +1808,25 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__hero-milestone-head {
     display: flex;
     justify-content: space-between;
-    color: rgba(255, 255, 255, 0.92);
+    color: $color-text-secondary;
     font-size: 22rpx;
   }
 
   &__hero-milestone-pct {
-    font-weight: 700;
-    color: #ffffff;
+    font-weight: 600;
+    color: $color-text-secondary;
   }
 
   &__hero-milestone-track {
     height: 8rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.75);
     overflow: hidden;
   }
 
   &__hero-milestone-bar {
     height: 8rpx;
     border-radius: 999rpx;
-    background: #ffffff;
   }
 
   &__hero-actions {
@@ -1834,9 +1842,9 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     justify-content: center;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.18);
-    border: 2rpx solid rgba(255, 255, 255, 0.32);
-    color: #ffffff;
+    background: #ffffff;
+    border: 2rpx solid transparent;
+    color: $color-text;
     font-size: 26rpx;
     font-weight: 600;
   }
@@ -1870,7 +1878,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     border: 2rpx solid $color-border;
     border-radius: $radius-md;
     padding: 0 22rpx;
-    background: #fffdfb;
+    background: #ffffff;
     color: $color-text;
     font-size: 26rpx;
   }
@@ -1936,12 +1944,15 @@ function toneHint(tone: AnniversaryCardTone): string {
     margin-bottom: 20rpx;
     padding: 16rpx 0 12rpx;
     background: $color-card;
-    box-shadow: 0 6rpx 16rpx rgba(74, 63, 53, 0.06);
+    box-shadow: 0 6rpx 16rpx rgba(46, 65, 84, 0.04);
   }
 
   &__tabs {
     display: flex;
-    gap: 12rpx;
+    gap: 6rpx;
+    padding: 6rpx;
+    border-radius: $radius-md;
+    background: $fill;
   }
 
   &__tab {
@@ -1950,15 +1961,13 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     justify-content: center;
     gap: 8rpx;
-    height: 68rpx;
-    border-radius: $radius-md;
-    background: $color-card;
-    border: 2rpx solid $color-border;
+    height: 64rpx;
+    border-radius: $radius-sm;
   }
 
   &__tab--active {
-    background: $color-primary;
-    border-color: $color-primary;
+    background: #ffffff;
+    box-shadow: 0 2rpx 6rpx rgba(30, 55, 80, 0.1);
   }
 
   &__tab-label {
@@ -1968,17 +1977,17 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__tab--active &__tab-label {
-    color: #fff;
+    color: $color-text;
     font-weight: 600;
   }
 
   &__tab-count {
-    color: $color-text-secondary;
+    color: $ink3;
     font-size: 20rpx;
   }
 
   &__tab--active &__tab-count {
-    color: rgba(255, 255, 255, 0.8);
+    color: $ink3;
   }
 
   &__resultbar {
@@ -2102,8 +2111,8 @@ function toneHint(tone: AnniversaryCardTone): string {
   &__event-shared-badge {
     padding: 2rpx 12rpx;
     border-radius: 999rpx;
-    background: #eef1f7;
-    color: #5e6f9a;
+    background: $fill;
+    color: $ink2;
     font-size: 20rpx;
     font-weight: 500;
     white-space: nowrap;
@@ -2160,7 +2169,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     width: 100%;
     padding: 20rpx 24rpx;
     border-radius: $radius-md;
-    background: #f6efe7;
+    background: $fill;
   }
 
   &__invite-role-title {
@@ -2234,7 +2243,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     border: 2rpx solid $color-border;
     border-radius: $radius-md;
     padding: 0 22rpx;
-    background: #fffdfb;
+    background: #ffffff;
     color: $color-text;
     font-size: 28rpx;
     display: flex;
@@ -2247,7 +2256,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 8rpx;
     padding: 8rpx;
     border-radius: $radius-md;
-    background: #f9eee3;
+    background: $fill;
   }
 
   &__segmented view {
@@ -2260,9 +2269,9 @@ function toneHint(tone: AnniversaryCardTone): string {
 
   &__segmented .active {
     background: #fff;
-    color: $color-primary-dark;
-    font-weight: 700;
-    box-shadow: 0 4rpx 12rpx rgba($color-primary, 0.12);
+    color: $color-text;
+    font-weight: 600;
+    box-shadow: 0 2rpx 6rpx rgba(30, 55, 80, 0.1);
   }
 
   &__lunar-grid {
@@ -2290,17 +2299,17 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     justify-content: center;
     border-radius: $radius-md;
-    background: #f6efe7;
+    background: $fill;
     color: $color-text-secondary;
     font-size: 26rpx;
     font-weight: 500;
   }
 
   &__time-chip--active {
-    background: #fbeae5;
-    border: 2rpx solid #e06a5a;
-    color: #b8402e;
-    font-weight: 700;
+    background: $color-primary-light;
+    border: 2rpx solid $color-primary;
+    color: $color-primary-dark;
+    font-weight: 600;
   }
 
   &__time-chip--custom {
@@ -2312,7 +2321,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     border: 2rpx dashed $color-border;
     border-radius: $radius-md;
     overflow: hidden;
-    background: #fffdfb;
+    background: #ffffff;
   }
 
   &__cover-image-wrap {
@@ -2593,16 +2602,16 @@ function toneHint(tone: AnniversaryCardTone): string {
     right: 70rpx;
     width: 108rpx;
     height: 108rpx;
-    border: 5rpx solid #c0392b;
+    border: 5rpx solid #c96b5a;
     border-radius: 50%;
-    color: #c0392b;
+    color: #c96b5a;
     font-size: 44rpx;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     transform: rotate(-16deg);
-    box-shadow: inset 0 0 0 12rpx #fff, inset 0 0 0 16rpx #c0392b;
+    box-shadow: inset 0 0 0 12rpx #fff, inset 0 0 0 16rpx #c96b5a;
     z-index: 2;
   }
 
@@ -2674,8 +2683,8 @@ function toneHint(tone: AnniversaryCardTone): string {
     padding: 18rpx 24rpx;
     color: $color-text;
     font-size: 26rpx;
-    background: #f0f7f0;
-    border-color: #c8dcc8;
+    background: #ebf5f0;
+    border-color: #cfe6db;
   }
 
   &__shared-bar {
@@ -2684,12 +2693,12 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 6rpx;
     margin-bottom: 8rpx;
     padding: 18rpx 24rpx;
-    background: #eef1f7;
-    border-color: #d5dcea;
+    background: $fill;
+    border-color: $line;
   }
 
   &__shared-bar-main {
-    color: #4a5878;
+    color: $ink2;
     font-size: 26rpx;
     font-weight: 600;
   }
@@ -2738,7 +2747,7 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__tpl-thumb--certificate &__tpl-thumb {
-    border: 4rpx double #b8925e;
+    border: 4rpx double #c99a34;
   }
 
   &__tpl-thumb--progress &__tpl-thumb-num {
@@ -2746,11 +2755,11 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__tpl-thumb--calendar &__tpl-thumb-num {
-    color: #8a6fa8;
+    color: #8e7cc3;
   }
 
   &__tpl-thumb--photo &__tpl-thumb {
-    background: repeating-linear-gradient(45deg, #f3ece2, #f3ece2 12rpx, #efe6d8 12rpx, #efe6d8 24rpx);
+    background: repeating-linear-gradient(45deg, #f2f6f9, #f2f6f9 12rpx, #e8eef3 12rpx, #e8eef3 24rpx);
   }
 
   &__tpl-thumb--boarding &__tpl-thumb {
@@ -2831,8 +2840,8 @@ function toneHint(tone: AnniversaryCardTone): string {
     gap: 16rpx;
     align-items: center;
     padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
-    background: #fffdf9;
-    border-top: 2rpx solid $color-border;
+    background: rgba(255, 255, 255, 0.94);
+    border-top: 2rpx solid $line;
   }
 
   &__bottom-btn {
@@ -2842,10 +2851,10 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     justify-content: center;
     border-radius: $radius-md;
-    background: #f0e7da;
+    background: $fill;
     color: $color-text-secondary;
     font-size: 32rpx;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   &__bottom-cta {
@@ -2855,11 +2864,11 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     justify-content: center;
     border-radius: $radius-md;
-    background: linear-gradient(180deg, #d95440, #b8402e);
+    background: $color-primary;
     color: #ffffff;
     font-size: 30rpx;
-    font-weight: 700;
-    box-shadow: 0 8rpx 24rpx rgba(184, 64, 46, 0.3);
+    font-weight: 600;
+    box-shadow: 0 6rpx 16rpx rgba($color-primary, 0.16);
 
     &.disabled {
       opacity: 0.6;
@@ -2870,7 +2879,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     position: fixed;
     inset: 0;
     z-index: 90;
-    background: rgba(74, 63, 53, 0.55);
+    background: $scrim;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -2889,7 +2898,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     width: 72rpx;
     height: 8rpx;
     border-radius: 999rpx;
-    background: #e0d5c5;
+    background: $line-strong;
     margin: 0 auto 12rpx;
   }
 
@@ -2905,7 +2914,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     align-items: center;
     gap: 20rpx;
     padding: 20rpx 8rpx;
-    border-top: 2rpx solid rgba(240, 228, 215, 0.6);
+    border-top: 2rpx solid $line;
   }
 
   &__sheet-item--danger &__sheet-item-title {
@@ -2916,7 +2925,7 @@ function toneHint(tone: AnniversaryCardTone): string {
     width: 72rpx;
     height: 72rpx;
     border-radius: $radius-md;
-    background: #f6efe7;
+    background: $fill;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2925,7 +2934,7 @@ function toneHint(tone: AnniversaryCardTone): string {
   }
 
   &__sheet-item--danger &__sheet-icon {
-    background: #fbeae5;
+    background: #fdefec;
   }
 
   &__sheet-texts {

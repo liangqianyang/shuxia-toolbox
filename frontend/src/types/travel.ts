@@ -234,13 +234,14 @@ export const DEFAULT_PARAMS: TravelParams = {
   theme: 'default',
 }
 
-/** 类型 → 主题色（hex 用于填色，rgb 用于 textColorOn 判黑白） */
+/** 类型 → 主题色（hex 用于填色，rgb 用于 textColorOn 判黑白）
+ *  v4 淡彩分类色：取设计系统 PASTEL 表的 fg 系（降饱和暖化），文字黑白由 textColorOn 自动判定 */
 export const POI_THEME: Record<PoiType, { hex: string; rgb: [number, number, number] }> = {
-  sight: { hex: '#E8945A', rgb: [232, 148, 90] }, // 暖橙，呼应主色 #C8956C
-  food: { hex: '#D9534F', rgb: [217, 83, 79] }, // 餐红
-  stay: { hex: '#5B8DEF', rgb: [91, 141, 239] }, // 住宿蓝
-  shop: { hex: '#9B59B6', rgb: [155, 89, 182] }, // 购物紫
-  transit: { hex: '#27AE60', rgb: [39, 174, 96] }, // 交通绿
+  sight: { hex: '#E08A4C', rgb: [224, 138, 76] }, // 景点·暖杏
+  food: { hex: '#E27966', rgb: [226, 121, 102] }, // 美食·柔红
+  stay: { hex: '#4E97CE', rgb: [78, 151, 206] }, // 住宿·清新蓝
+  shop: { hex: '#8E7CC3', rgb: [142, 124, 195] }, // 购物·藕紫
+  transit: { hex: '#67A75B', rgb: [103, 167, 91] }, // 交通·苔绿
 }
 
 /** 类型 → emoji icon（UI 与 canvas 均用；canvas 真机表现见 guide/theme 退路开关） */

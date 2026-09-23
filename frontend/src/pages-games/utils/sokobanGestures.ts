@@ -5,6 +5,8 @@
  * 坐标提取沿用仓库惯例（changedTouches[0] ?? touches[0]，clientX ?? pageX ?? x）。
  */
 
+import { pointOfEvent } from './touchGestures'
+
 export interface SwipeConfig {
   /** 一步 = 一个棋盘格的 css 像素（页面按当前布局喂进来）。 */
   stepPx: number
@@ -27,16 +29,6 @@ interface SwipeState {
   axis: 'x' | 'y' | null
 }
 
-function pointOfEvent(event: unknown): { x: number; y: number } | null {
-  const e = event as { changedTouches?: unknown[]; touches?: unknown[] }
-  const touch = (e.changedTouches && e.changedTouches[0]) ?? (e.touches && e.touches[0])
-  if (!touch) return null
-  const t = touch as { clientX?: number; pageX?: number; x?: number; clientY?: number; pageY?: number; y?: number }
-  const x = t.clientX ?? t.pageX ?? t.x
-  const y = t.clientY ?? t.pageY ?? t.y
-  if (typeof x !== 'number' || typeof y !== 'number') return null
-  return { x, y }
-}
 
 export function createSwipeController(config: SwipeConfig, cb: SwipeCallbacks): {
   onTouchStart: (event: unknown) => void

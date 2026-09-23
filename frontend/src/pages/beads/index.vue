@@ -107,7 +107,7 @@
             :max="400"
             :step="5"
             :value="Math.round(preview.zoom.value * 100)"
-            activeColor="#C8956C"
+            activeColor="#58A6DC"
             block-size="20"
             @changing="onZoomSliderChanging"
             @change="onZoomSliderChange"
@@ -332,6 +332,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref } from 'vue'
+import { requestUserApi } from '@/services/toolbox'
 import ParamPanel from '@/components/ParamPanel.vue'
 import ColorLegend from '@/components/ColorLegend.vue'
 import ShoppingList from '@/components/ShoppingList.vue'
@@ -347,9 +348,6 @@ import { PAGE_CELLS } from '@/utils/sheetPaginator'
 import { displayCode } from '@/utils/format'
 import { textColorOn } from '@/utils/color'
 
-const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:9501').replace(/\/$/, '')
-const API_KEY = import.meta.env.VITE_API_KEY || ''
-const AUTH_STORAGE_KEY = 'shuxia-food-auth-token-v1'
 
 const instance = getCurrentInstance()?.proxy
 
@@ -590,43 +588,13 @@ async function onGenerate() {
 
 async function ensureBeadContentSafe(): Promise<boolean> {
   try {
-    const token = await ensureAuthToken()
-    const payload = {
-      content: beadSecCheckText(),
-    }
-    const firstCheck = await postBeadSecCheck(payload, token)
-    if (!firstCheck.ok && firstCheck.shouldRefreshToken) {
-      const freshToken = await ensureAuthToken(true)
-      await apiPost('/api/beads/sec-check', payload, freshToken)
-    } else if (!firstCheck.ok) {
-      throw firstCheck.error
-    }
+    // 走共享会话层：token 缺失自动登录，401「请先微信登录」自动清会话重登并重试一次
+    await requestUserApi('/api/beads/sec-check', 'POST', { content: beadSecCheckText() }, 12000)
     return true
   } catch (e) {
     const message = e instanceof Error ? e.message : '内容安全检测失败'
     uni.showToast({ title: message === '内容含违规信息' ? '内容含违规信息' : message, icon: 'none' })
     return false
-  }
-}
-
-async function postBeadSecCheck(payload: { content: string }, token: string): Promise<{
-  ok: boolean
-  shouldRefreshToken: boolean
-  error: Error
-}> {
-  try {
-    await apiPost('/api/beads/sec-check', payload, token)
-    return {
-      ok: true,
-      shouldRefreshToken: false,
-      error: new Error(''),
-    }
-  } catch (e) {
-    return {
-      ok: false,
-      shouldRefreshToken: e instanceof ApiError && e.code === 401,
-      error: e instanceof Error ? e : new Error('内容安全检测失败'),
-    }
   }
 }
 
@@ -638,88 +606,6 @@ function beadSecCheckText(): string {
     `长边:${params.gridLongSide}`,
     `自动尺寸:${params.autoGridSize ? '是' : '否'}`,
   ].join(' ')
-}
-
-async function ensureAuthToken(forceRefresh = false): Promise<string> {
-  if (forceRefresh) {
-    safeStorageRemove(AUTH_STORAGE_KEY)
-  }
-  const saved = safeStorageGet(AUTH_STORAGE_KEY)
-  if (saved !== '') return saved
-
-  const code = await wxLoginCode()
-  const data = await apiPost<{ token: string }>('/api/auth/wechat-login', { code, profile: {} }, '')
-  const token = data.token || ''
-  if (token === '') {
-    throw new Error('微信登录失败')
-  }
-  uni.setStorageSync(AUTH_STORAGE_KEY, token)
-  return token
-}
-
-function wxLoginCode(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: (res) => {
-        if (res.code) {
-          resolve(res.code)
-          return
-        }
-        reject(new Error('微信登录失败'))
-      },
-      fail: (err) => reject(new Error(err.errMsg || '微信登录失败')),
-    })
-  })
-}
-
-class ApiError extends Error {
-  constructor(
-    public readonly code: number,
-    message: string,
-  ) {
-    super(message)
-  }
-}
-
-function apiPost<T>(path: string, data: Record<string, unknown>, token: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = { 'X-API-Key': API_KEY }
-    if (token !== '') headers['X-User-Token'] = token
-    uni.request({
-      url: `${API_BASE}${path}`,
-      method: 'POST',
-      data,
-      header: headers,
-      timeout: 12000,
-      success: (res) => {
-        const body = res.data as { code?: number; message?: string; data?: T }
-        if (!body || body.code !== 0) {
-          reject(new ApiError(Number(body?.code ?? -1), body?.message || '接口返回异常'))
-          return
-        }
-        resolve(body.data as T)
-      },
-      fail: (err) => reject(new Error(err.errMsg || '网络请求失败')),
-    })
-  })
-}
-
-function safeStorageGet(key: string): string {
-  try {
-    const value = uni.getStorageSync(key)
-    return typeof value === 'string' ? value : ''
-  } catch {
-    return ''
-  }
-}
-
-function safeStorageRemove(key: string): void {
-  try {
-    uni.removeStorageSync(key)
-  } catch {
-    // 清理失败不阻断重新登录。
-  }
 }
 
 async function onZoom(zoom: number) {
@@ -957,7 +843,7 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     align-items: center;
     gap: 16rpx;
     padding: 96rpx 32rpx;
-    border: 4rpx dashed $color-border;
+    border: 3rpx dashed $line-strong;
     box-shadow: none;
   }
 
@@ -968,7 +854,7 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
   &__picker-text {
     font-size: $font-title;
     font-weight: 600;
-    color: $color-primary-dark;
+    color: $ink;
   }
 
   &__privacy {
@@ -986,7 +872,7 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     width: 100%;
     height: 360rpx;
     border-radius: $radius-md;
-    background-color: $color-bg;
+    background-color: $fill;
   }
 
   &__preview-actions {
@@ -999,9 +885,9 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
   }
 
   &__dirty {
-    background-color: #fdf1e3;
-    border: 2rpx solid $color-primary-light;
-    color: $color-primary-dark;
+    background-color: $blue-tint;
+    border: 2rpx solid rgba($blue, 0.4);
+    color: $blue-deep;
     border-radius: $radius-md;
     text-align: center;
     padding: 20rpx 0;
@@ -1067,22 +953,22 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
   &__compare-img {
     width: 100%;
     border-radius: $radius-sm;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
+    background-color: $fill;
+    border: 2rpx solid $line;
   }
 
   &__build-track {
     width: 100%;
     height: 16rpx;
     border-radius: 999rpx;
-    background-color: $color-bg;
+    background-color: $fill;
     overflow: hidden;
   }
 
   &__build-fill {
     height: 100%;
     border-radius: 999rpx;
-    background-color: $color-primary;
+    background-color: $blue;
     transition: width 0.25s;
   }
 
@@ -1103,8 +989,8 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     gap: 2rpx;
 
     &--focus {
-      border-color: $color-primary-dark;
-      box-shadow: 0 0 0 4rpx rgba(200, 149, 108, 0.3);
+      border-color: $blue-deep;
+      box-shadow: 0 0 0 4rpx rgba(88, 166, 220, 0.35);
     }
 
     &--done {
@@ -1139,15 +1025,15 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     flex-shrink: 0;
     padding: 8rpx 20rpx;
     border-radius: $radius-sm;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
-    color: $color-text-secondary;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
+    color: $ink2;
     font-size: $font-caption;
 
     &--active {
-      background-color: $color-primary;
-      border-color: $color-primary;
-      color: #ffffff;
+      background-color: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
       font-weight: 600;
     }
   }
@@ -1155,22 +1041,23 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
   &__zoom-btn {
     padding: 8rpx 24rpx;
     border-radius: 999rpx;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
     font-size: $font-caption;
-    color: $color-text-secondary;
+    color: $ink2;
 
     &--active {
-      background-color: $color-primary;
-      border-color: $color-primary;
-      color: #ffffff;
+      background-color: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
+      font-weight: 600;
     }
   }
 
   &__scroll {
     width: 100%;
     height: 720rpx;
-    background-color: $color-bg;
+    background-color: $fill;
     border-radius: $radius-md;
 
     &--editing {
@@ -1208,12 +1095,12 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     touch-action: pan-x pan-y;
 
     &--active {
-      border: 4rpx solid rgba(200, 149, 108, 0.55);
+      border: 4rpx solid rgba(88, 166, 220, 0.55);
     }
 
     &--pinching {
       touch-action: none;
-      border: 4rpx solid rgba(168, 116, 75, 0.85);
+      border: 4rpx solid rgba(59, 134, 184, 0.85);
     }
   }
 
@@ -1227,10 +1114,10 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     flex-direction: column;
     gap: 16rpx;
     padding: 20rpx;
-    border: 2rpx solid rgba(200, 149, 108, 0.28);
+    border: 2rpx solid $line;
     border-radius: $radius-md;
     background-color: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 -10rpx 34rpx rgba(55, 39, 30, 0.16);
+    box-shadow: $shadow-float;
     backdrop-filter: blur(12px);
   }
 
@@ -1280,7 +1167,7 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     flex-shrink: 0;
     padding: 10rpx 22rpx;
     border-radius: $radius-sm;
-    background-color: $color-primary;
+    background-color: $blue;
     color: #ffffff;
     font-size: $font-caption;
     font-weight: 600;
@@ -1290,16 +1177,16 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     flex-shrink: 0;
     padding: 10rpx 22rpx;
     border-radius: $radius-sm;
-    background-color: $color-bg;
-    border: 2rpx solid $color-border;
-    color: $color-text-secondary;
+    background-color: $card;
+    border: 2rpx solid $line-strong;
+    color: $ink2;
     font-size: $font-caption;
     font-weight: 600;
 
     &--active {
-      background-color: $color-primary;
-      border-color: $color-primary;
-      color: #ffffff;
+      background-color: $blue-tint;
+      border-color: $blue;
+      color: $blue-deep;
     }
   }
 
@@ -1312,14 +1199,14 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     font-weight: 600;
 
     &--primary {
-      background-color: $color-primary;
+      background-color: $blue;
       color: #ffffff;
     }
 
     &--danger {
-      background-color: #fbecec;
-      border-color: #e6b3b3;
-      color: #b03a3a;
+      background-color: #fdefec;
+      border-color: rgba($red, 0.35);
+      color: $red;
     }
   }
 
@@ -1352,8 +1239,8 @@ async function paintCell(x: number, y: number, paletteIndex: number) {
     font-weight: 700;
 
     &--active {
-      border-color: $color-primary;
-      box-shadow: 0 0 0 4rpx rgba(200, 149, 108, 0.24);
+      border-color: $blue;
+      box-shadow: 0 0 0 4rpx rgba(88, 166, 220, 0.3);
     }
   }
 

@@ -10,7 +10,7 @@
         <input v-model="joinCode" class="lobby__input" type="number" maxlength="4" placeholder="输入 4 位房间码" />
         <button class="lobby__join-btn" :disabled="acting" @tap="onJoin">加入</button>
       </view>
-      <text class="lobby__rules" @tap="rulesOpen = true">❓ 玩法说明</text>
+      <text class="lobby__rules" @tap="rulesOpen = true">玩法说明</text>
     </view>
 
     <!-- 房间 -->
@@ -18,7 +18,7 @@
       <view class="room__header">
         <text class="room__code" @tap="copyCode">房号 {{ state.code }} ⧉</text>
         <view class="room__header-actions">
-          <text class="room__sound" @tap="rulesOpen = true">❓</text>
+          <text class="room__sound" @tap="rulesOpen = true">?</text>
           <text class="room__sound" @tap="toggleSound">{{ soundOn ? '🔊' : '🔇' }}</text>
           <button open-type="share" class="room__share">邀请</button>
           <text class="room__leave" @tap="onLeave">离开</text>
@@ -216,7 +216,7 @@
         </template>
       </template>
 
-      <!-- 底部聊天条：固定在屏幕底部，最近 3 条消息以列表形式常驻（新的从下方进入，超过 3 条顶部消失），
+      <!-- 底部聊天坞（v4 白底圆顶）：固定屏幕底部，最近 6 条消息常驻（新的从下方进入，顶部消失），
            点任意处展开完整面板。仅对局进行中显示（用户拍板：只有真正玩游戏的界面需要）。 -->
       <view v-if="state.status === 'playing'" class="chat-bar" hover-class="press" @tap="openChatPanel()">
         <view v-if="chatFeed.length" class="chat-bar__feed">
@@ -238,7 +238,7 @@
       <view class="chat-panel" @tap.stop>
         <view class="chat-panel__header">
           <text class="chat-panel__title">牌桌嘴炮</text>
-          <text class="chat-panel__close" @tap="closeChatPanel">✕</text>
+          <text class="chat-panel__close" hover-class="press" @tap="closeChatPanel">✕</text>
         </view>
 
         <!-- 最近消息 -->
@@ -257,7 +257,7 @@
             :key="t.key"
             class="chat-panel__tab"
             :class="{ 'chat-panel__tab--on': chatTab === t.key, 'chat-panel__tab--off': t.key === 'text' && !unoChatTextEnabled }"
-            @tap="switchChatTab(t.key)"
+            hover-class="press" @tap="switchChatTab(t.key)"
           >{{ t.label }}</text>
         </view>
 
@@ -271,7 +271,7 @@
                 :key="p.id"
                 class="chat-panel__phrase"
                 :class="{ 'chat-panel__phrase--off': chatCooldown > 0 }"
-                @tap="sendPhraseMsg(p.id)"
+                hover-class="press" @tap="sendPhraseMsg(p.id)"
               >{{ p.text }}</text>
             </view>
           </view>
@@ -285,7 +285,7 @@
               :key="e"
               class="chat-panel__emoji"
               :class="{ 'chat-panel__emoji--off': chatCooldown > 0 }"
-              @tap="sendEmojiMsg(e)"
+              hover-class="press" @tap="sendEmojiMsg(e)"
             >{{ e }}</text>
           </view>
         </view>
@@ -759,7 +759,7 @@ watch(
     if (state.value?.dealerDraws) keys.push(...Object.values(state.value.dealerDraws))
     ensure(keys)
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 
 // 状态变化时收回已不在手上的选中
@@ -1064,18 +1064,17 @@ onShareAppMessage(() => ({
 </script>
 
 <style lang="scss" scoped>
-// 「枫趣牌局」品牌色板：奶油白底 + 墨绿桌布 + 枫叶红主色 + 金黄强调（60/25/10/5）
-$felt: #21483D;
-$cream: #FFF8ED;
-$ink: #493E37;
-$red: #E85D4A;
-$gold: #F4B942;
-$maple-light: #FBE4D5;
+// v4 小清新：chrome 全蓝白（墨绿牌桌→白卡发丝线、枫红按钮→清新蓝），
+// 四季牌面/表情 = 内容个性保留；字重降档，阴影冷调极淡。
+$cream: $card; // 兼容旧引用
+$ink: $ink;
+$red: $red;
+$gold: #f4b942; // 仅 庄/房主/新牌 角标等小面积内容点缀
 
 .uno {
   min-height: 100vh;
   box-sizing: border-box;
-  background: linear-gradient(180deg, $cream 0%, #FDF1E0 100%);
+  background: $bg;
   color: $ink;
 
   // 去掉小程序 button 默认的 ::after 描边；disabled 时微信会套默认灰色，需显式覆盖
@@ -1090,28 +1089,28 @@ $maple-light: #FBE4D5;
   align-items: center;
   padding: 140rpx 48rpx 0;
 
-  &__logo { width: 220rpx; height: 220rpx; border-radius: 48rpx; box-shadow: 0 12rpx 32rpx rgba(73, 62, 55, 0.18); }
-  &__title { font-size: 56rpx; font-weight: 700; margin-top: 28rpx; color: $felt; }
-  &__subtitle { font-size: 26rpx; color: rgba(73, 62, 55, 0.6); margin-top: 12rpx; }
+  &__logo { width: 220rpx; height: 220rpx; border-radius: 48rpx; box-shadow: 0 12rpx 32rpx rgba(46, 65, 84, 0.12); }
+  &__title { font-size: 56rpx; font-weight: 600; margin-top: 28rpx; color: $ink; }
+  &__subtitle { font-size: 26rpx; color: $ink2; margin-top: 12rpx; }
   &__create {
     margin-top: 80rpx;
     width: 480rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 48rpx;
 
-    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
   &__join { display: flex; align-items: center; gap: 16rpx; margin-top: 40rpx; }
-  &__rules { margin-top: 28rpx; font-size: 26rpx; color: $ink; text-decoration: underline; }
-  // 加入区样式与五子棋大厅同款：白底卡片 + 暖棕描边按钮
+  &__rules { margin-top: 28rpx; font-size: 26rpx; color: $blue-deep; text-decoration: underline; }
+  // 加入区样式与五子棋大厅同款：白底 + 发丝线描边
   &__input {
     width: 320rpx;
     height: 88rpx;
     padding: 0 24rpx;
-    background: #ffffff;
-    border: 2rpx solid #f0e4d7;
+    background: $card;
+    border: 2rpx solid $line-strong;
     border-radius: 20rpx;
     color: $ink;
     font-size: 28rpx;
@@ -1124,9 +1123,9 @@ $maple-light: #FBE4D5;
     height: 88rpx;
     line-height: 88rpx;
     border-radius: 20rpx;
-    background: #ffffff;
-    color: #a8744b;
-    border: 2rpx solid #c8956c;
+    background: $card;
+    color: $blue-deep;
+    border: 2rpx solid $line-strong;
     font-size: 28rpx;
     box-sizing: border-box;
 
@@ -1151,8 +1150,8 @@ $maple-light: #FBE4D5;
 .room__sound { font-size: 34rpx; padding: 8rpx; }
 .room__share {
   font-size: 24rpx;
-  background: $maple-light;
-  color: $ink;
+  background: $blue-tint;
+  color: $blue-deep;
   border-radius: 28rpx;
   padding: 0 28rpx;
   height: 56rpx;
@@ -1162,7 +1161,7 @@ $maple-light: #FBE4D5;
   font-size: 24rpx;
   font-weight: 600;
   color: $red;
-  background: rgba(232, 93, 74, 0.12);
+  background: rgba(232, 128, 111, 0.12);
   border-radius: 28rpx;
   padding: 0 28rpx;
   height: 56rpx;
@@ -1177,12 +1176,12 @@ $maple-light: #FBE4D5;
   margin: 0 8rpx 20rpx;
   padding: 18rpx 24rpx;
   border-radius: 20rpx;
-  background: #FDF3D8;
-  border: 2rpx dashed $gold;
+  background: $blue-tint;
+  border: 2rpx dashed $blue;
   font-size: 26rpx;
   color: $ink;
 
-  &__go { color: $red; font-weight: 600; }
+  &__go { color: $blue-deep; font-weight: 600; }
 }
 
 .profile {
@@ -1197,18 +1196,18 @@ $maple-light: #FBE4D5;
     height: 140rpx;
     border-radius: 50%;
     padding: 0;
-    background: $maple-light;
+    background: $fill;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
   }
   &__avatar { width: 140rpx; height: 140rpx; border-radius: 50%; }
-  &__avatar-hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.55); text-align: center; line-height: 1.4; }
+  &__avatar-hint { font-size: 24rpx; color: $ink3; text-align: center; line-height: 1.4; }
   &__nickname {
     width: 100%;
     height: 88rpx;
-    background: $maple-light;
+    background: $fill;
     border-radius: 16rpx;
     padding: 0 24rpx;
     box-sizing: border-box;
@@ -1217,9 +1216,9 @@ $maple-light: #FBE4D5;
   }
   &__save {
     width: 100%;
-    background: $red;
+    background: $blue;
     color: #fff;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 40rpx;
   }
 }
@@ -1242,24 +1241,24 @@ $maple-light: #FBE4D5;
   &__player--win { animation: dealer-win-pulse 1s ease-in-out infinite; }
   &__player--dim { opacity: 0.55; }
   &__crown {
-    position: absolute; top: -10rpx; right: 6rpx; font-size: 22rpx; font-weight: 800;
+    position: absolute; top: -10rpx; right: 6rpx; font-size: 22rpx; font-weight: 600;
     background: $gold; color: $ink; border-radius: 999rpx; padding: 4rpx 12rpx;
-    box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.25); z-index: 2;
+    box-shadow: 0 4rpx 10rpx rgba(46, 65, 84, 0.2); z-index: 2;
   }
-  &__sub--reveal { color: #ffe9b8; font-weight: 700; }
-  &__winner-name { color: $gold; font-weight: 800; }
+  &__sub--reveal { color: $blue-deep; font-weight: 600; }
+  &__winner-name { color: $blue-deep; font-weight: 600; }
   &__avatar {
     width: 96rpx;
     height: 96rpx;
     border-radius: 50%;
-    background: $maple-light;
+    background: $fill;
     &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 48rpx; }
   }
   &__name { font-size: 26rpx; margin-top: 10rpx; max-width: 240rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   &__owner {
     margin-top: 4rpx;
     font-size: 18rpx;
-    font-weight: 700;
+    font-weight: 600;
     color: $ink;
     background: $gold;
     padding: 2rpx 14rpx;
@@ -1272,36 +1271,37 @@ $maple-light: #FBE4D5;
     width: 18rpx;
     height: 18rpx;
     border-radius: 50%;
-    background: #83cc90;
-    border: 3rpx solid $cream;
-    &--off { background: #b8b0a8; }
+    background: $green;
+    border: 3rpx solid $card;
+    &--off { background: $line-strong; }
   }
   &__start {
     margin-top: 70rpx;
     width: 480rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 48rpx;
 
-    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
-  &__hint { margin-top: 70rpx; font-size: 28rpx; color: rgba(73, 62, 55, 0.6); }
+  &__hint { margin-top: 70rpx; font-size: 28rpx; color: $ink2; }
 }
 
-// ---------- 抽牌定庄家 ----------
+// ---------- 抽牌定庄家（白卡 + 发丝线） ----------
 .dealer {
   margin: 24rpx 12rpx;
   padding: 40rpx 28rpx;
-  background: $felt;
-  border-radius: 36rpx;
-  box-shadow: 0 12rpx 32rpx rgba(33, 72, 61, 0.3);
+  background: $card;
+  border: 2rpx solid $line;
+  border-radius: 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(46, 65, 84, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
 
-  &__title { font-size: 38rpx; font-weight: 700; color: $cream; }
-  &__sub { font-size: 24rpx; color: rgba(255, 248, 237, 0.75); margin-top: 12rpx; text-align: center; }
+  &__title { font-size: 38rpx; font-weight: 600; color: $ink; }
+  &__sub { font-size: 24rpx; color: $ink2; margin-top: 12rpx; text-align: center; }
   &__players {
     display: flex;
     flex-wrap: wrap;
@@ -1314,10 +1314,10 @@ $maple-light: #FBE4D5;
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
-    background: rgba(255, 248, 237, 0.2);
+    background: $fill;
     &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
   }
-  &__name { font-size: 22rpx; color: $cream; margin-top: 8rpx; max-width: 160rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  &__name { font-size: 22rpx; color: $ink; margin-top: 8rpx; max-width: 160rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   &__card {
     width: 96rpx;
     height: 144rpx;
@@ -1325,24 +1325,24 @@ $maple-light: #FBE4D5;
     margin-top: 12rpx;
 
     &--pending {
-      background: rgba(255, 248, 237, 0.15);
-      border: 2rpx dashed rgba(255, 248, 237, 0.4);
+      background: $fill;
+      border: 2rpx dashed $line-strong;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: rgba(255, 248, 237, 0.5);
+      color: $ink3;
       font-size: 40rpx;
     }
   }
   &__draw {
     margin-top: 40rpx;
     width: 360rpx;
-    background: $gold;
-    color: $ink;
-    font-weight: 700;
+    background: $blue;
+    color: #fff;
+    font-weight: 600;
     border-radius: 44rpx;
   }
-  &__waiting { margin-top: 40rpx; font-size: 26rpx; color: rgba(255, 248, 237, 0.75); }
+  &__waiting { margin-top: 40rpx; font-size: 26rpx; color: $ink2; }
 }
 
 // ---------- 对手 ----------
@@ -1361,11 +1361,11 @@ $maple-light: #FBE4D5;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #ffffff;
-  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.08);
+  background: $card;
+  border: 2rpx solid $line;
   position: relative;
 
-  &--current { background: #FDF3D8; box-shadow: 0 0 0 3rpx $gold; }
+  &--current { background: $blue-tint; border-color: $blue; }
   &--left { opacity: 0.45; }
 
   &__avatar-wrap { position: relative; }
@@ -1373,7 +1373,7 @@ $maple-light: #FBE4D5;
     width: 72rpx;
     height: 72rpx;
     border-radius: 50%;
-    background: $maple-light;
+    background: $fill;
     &--placeholder { display: flex; align-items: center; justify-content: center; font-size: 36rpx; }
   }
   &__dot {
@@ -1383,9 +1383,9 @@ $maple-light: #FBE4D5;
     width: 16rpx;
     height: 16rpx;
     border-radius: 50%;
-    background: #83cc90;
+    background: $green;
     border: 3rpx solid #ffffff;
-    &--off { background: #b8b0a8; }
+    &--off { background: $line-strong; }
   }
   &__timer {
     position: absolute;
@@ -1400,7 +1400,7 @@ $maple-light: #FBE4D5;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
+    font-weight: 600;
   }
   &__name { font-size: 24rpx; margin-top: 8rpx; max-width: 220rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   &__cards { display: flex; align-items: center; margin-top: 6rpx; }
@@ -1411,14 +1411,14 @@ $maple-light: #FBE4D5;
     font-size: 20rpx;
     padding: 2rpx 14rpx;
     border-radius: 20rpx;
-    background: $maple-light;
-    color: $ink;
+    background: $fill;
+    color: $ink2;
 
-    &--uno { background: $red; color: #fff; font-weight: 700; }
+    &--uno { background: $blue; color: #fff; font-weight: 600; }
   }
 }
 
-// ---------- 桌面中央（墨绿桌布） ----------
+// ---------- 桌面中央（白卡牌桌） ----------
 .table-zone {
   position: relative;
 }
@@ -1431,10 +1431,10 @@ $maple-light: #FBE4D5;
   max-width: 84%;
   padding: 16rpx 36rpx;
   border-radius: 44rpx;
-  background: rgba(33, 72, 61, 0.94);
-  color: #FFF8ED;
+  background: rgba(46, 65, 84, 0.92);
+  color: #ffffff;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 500;
   text-align: center;
   opacity: 0;
   pointer-events: none;
@@ -1455,23 +1455,24 @@ $maple-light: #FBE4D5;
   margin: 28rpx 12rpx 8rpx;
   padding: 36rpx 24rpx;
   min-height: 260rpx;
-  background: $felt;
-  border-radius: 36rpx;
-  box-shadow: 0 12rpx 32rpx rgba(33, 72, 61, 0.3);
+  background: $card;
+  border: 2rpx solid $line;
+  border-radius: 32rpx;
+  box-shadow: 0 8rpx 32rpx rgba(46, 65, 84, 0.05);
 
-  &__card { width: 150rpx; height: 225rpx; border-radius: 18rpx; box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.35); }
+  &__card { width: 150rpx; height: 225rpx; border-radius: 18rpx; box-shadow: 0 6rpx 16rpx rgba(46, 65, 84, 0.18); }
   &__pile { position: relative; display: flex; flex-direction: column; align-items: center; }
   &__pile-count {
     position: absolute;
     bottom: 52rpx;
     right: -12rpx;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(46, 65, 84, 0.55);
     color: #fff;
     font-size: 20rpx;
     padding: 2rpx 14rpx;
     border-radius: 20rpx;
   }
-  &__pile-hint { margin-top: 10rpx; font-size: 22rpx; color: $gold; }
+  &__pile-hint { margin-top: 10rpx; font-size: 22rpx; color: $blue-deep; }
   &__info { display: flex; flex-direction: column; align-items: center; gap: 16rpx; }
   &__color {
     width: 88rpx;
@@ -1481,12 +1482,12 @@ $maple-light: #FBE4D5;
     align-items: center;
     justify-content: center;
     font-size: 36rpx;
-    font-weight: 700;
+    font-weight: 600;
     color: #fff;
-    text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.35);
-    box-shadow: 0 0 0 6rpx rgba(255, 255, 255, 0.25);
+    text-shadow: 0 2rpx 6rpx rgba(46, 65, 84, 0.35);
+    box-shadow: 0 0 0 6rpx rgba(255, 255, 255, 0.6);
   }
-  &__direction { font-size: 22rpx; color: rgba(255, 248, 237, 0.8); }
+  &__direction { font-size: 22rpx; color: $ink2; }
 }
 
 // ---------- 质疑 / UNO 条 / 叠加条 ----------
@@ -1500,19 +1501,19 @@ $maple-light: #FBE4D5;
   margin: 12rpx 24rpx;
   padding: 16rpx 24rpx;
   border-radius: 20rpx;
-  background: $maple-light;
+  background: $blue-tint;
 
-  &__text { font-size: 26rpx; }
+  &__text { font-size: 26rpx; color: $ink; }
   &__btn {
     font-size: 26rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
     border-radius: 32rpx;
     padding: 0 36rpx;
     height: 64rpx;
     line-height: 64rpx;
 
-    &--plain { background: rgba(73, 62, 55, 0.12); color: $ink; }
+    &--plain { background: $card; color: $ink; border: 2rpx solid $line-strong; }
   }
 }
 
@@ -1522,25 +1523,25 @@ $maple-light: #FBE4D5;
   margin: 12rpx 24rpx;
   padding: 16rpx 24rpx;
   border-radius: 20rpx;
-  background: rgba(232, 93, 74, 0.14);
+  background: rgba(232, 128, 111, 0.12);
   border: 2rpx dashed $red;
 
   &__text { font-size: 26rpx; font-weight: 600; color: $red; }
 }
 
 .uno-bar {
-  background: #FDF3D8;
+  background: $blue-tint;
 
   &__say,
   &__catch {
     font-size: 28rpx;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 36rpx;
     padding: 0 40rpx;
     height: 72rpx;
     line-height: 72rpx;
   }
-  &__say { background: $gold; color: $ink; }
+  &__say { background: $blue; color: #fff; }
   &__catch { background: $red; color: #fff; }
 }
 
@@ -1548,8 +1549,8 @@ $maple-light: #FBE4D5;
 .hand {
   margin-top: 12rpx;
 
-  &__status { text-align: center; font-size: 26rpx; color: rgba(73, 62, 55, 0.7); min-height: 40rpx;
-    &--mine { color: $red; font-weight: 600; }
+  &__status { text-align: center; font-size: 26rpx; color: $ink2; min-height: 40rpx;
+    &--mine { color: $blue-deep; font-weight: 600; }
   }
   &__scroll { margin-top: 8rpx; white-space: nowrap; }
   &__cards { display: inline-flex; align-items: flex-end; padding: 20rpx 48rpx 8rpx 24rpx; min-height: 240rpx; box-sizing: content-box; }
@@ -1567,36 +1568,39 @@ $maple-light: #FBE4D5;
     position: absolute;
     top: -10rpx;
     right: -6rpx;
-    background: $gold;
-    color: $ink;
+    background: $blue;
+    color: #fff;
     font-size: 18rpx;
-    font-weight: 700;
+    font-weight: 600;
     padding: 2rpx 10rpx;
     border-radius: 16rpx;
-    box-shadow: 0 2rpx 6rpx rgba(73, 62, 55, 0.25);
+    box-shadow: 0 2rpx 6rpx rgba(46, 65, 84, 0.2);
   }
-  &__img { width: 140rpx; height: 210rpx; border-radius: 16rpx; box-shadow: 0 4rpx 10rpx rgba(73, 62, 55, 0.15); }
+  &__img { width: 140rpx; height: 210rpx; border-radius: 16rpx; box-shadow: 0 4rpx 10rpx rgba(46, 65, 84, 0.12); }
   &__actions { display: flex; justify-content: center; gap: 20rpx; margin-top: 16rpx; min-height: 80rpx; }
   &__btn {
     font-size: 28rpx;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 40rpx;
     padding: 0 48rpx;
     height: 80rpx;
     line-height: 80rpx;
-    background: $felt;
-    color: $cream;
+    background: $blue;
+    color: #fff;
 
-    &--uno { background: $red; color: #fff; }
-    &--plain { background: $maple-light; color: $ink; }
+    &--uno { background: $blue-deep; color: #fff; }
+    &--plain { background: $fill; color: $ink; }
   }
 }
 
 // ---------- 结算 ----------
 .result-mask {
   position: fixed;
-  inset: 0;
-  background: rgba(73, 62, 55, 0.5);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(46, 65, 84, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1605,7 +1609,7 @@ $maple-light: #FBE4D5;
 
 .result {
   width: 600rpx;
-  background: $cream;
+  background: $card;
   color: $ink;
   border-radius: 28rpx;
   padding: 48rpx 40rpx;
@@ -1613,27 +1617,30 @@ $maple-light: #FBE4D5;
   flex-direction: column;
   align-items: center;
 
-  &__title { font-size: 40rpx; font-weight: 700; }
-  &__reason { font-size: 26rpx; color: rgba(73, 62, 55, 0.6); margin-top: 10rpx; }
+  &__title { font-size: 40rpx; font-weight: 600; }
+  &__reason { font-size: 26rpx; color: $ink2; margin-top: 10rpx; }
   &__scores { width: 100%; margin-top: 32rpx; }
-  &__row { display: flex; justify-content: space-between; padding: 12rpx 0; font-size: 28rpx; border-bottom: 1rpx solid rgba(73, 62, 55, 0.1); }
+  &__row { display: flex; justify-content: space-between; padding: 12rpx 0; font-size: 28rpx; border-bottom: 1rpx solid $line; }
   &__btn {
     margin-top: 28rpx;
     width: 100%;
-    background: $red;
+    background: $blue;
     color: #fff;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 44rpx;
 
-    &--plain { background: rgba(73, 62, 55, 0.1); color: $ink; margin-top: 16rpx; }
+    &--plain { background: $fill; color: $ink; margin-top: 16rpx; }
   }
 }
 
 // ---------- 选色 ----------
 .color-mask {
   position: fixed;
-  inset: 0;
-  background: rgba(73, 62, 55, 0.18);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(46, 65, 84, 0.25);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1644,13 +1651,13 @@ $maple-light: #FBE4D5;
 
 .color-panel {
   width: 600rpx;
-  background: $cream;
+  background: $card;
   border-radius: 28rpx;
   padding: 40rpx;
 
-  &__title { text-align: center; font-size: 34rpx; font-weight: 700; color: $ink; }
+  &__title { text-align: center; font-size: 34rpx; font-weight: 600; color: $ink; }
   &__preview { display: flex; justify-content: center; margin-top: 20rpx; }
-  &__card { width: 120rpx; height: 180rpx; border-radius: 14rpx; box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.2); }
+  &__card { width: 120rpx; height: 180rpx; border-radius: 14rpx; box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.15); }
   &__row { display: flex; justify-content: space-between; margin-top: 28rpx; }
   &__item {
     width: 120rpx;
@@ -1661,14 +1668,14 @@ $maple-light: #FBE4D5;
     align-items: center;
     justify-content: center;
     color: #fff;
-    box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.2);
+    box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.15);
   }
-  &__season { font-size: 40rpx; font-weight: 700; text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3); }
+  &__season { font-size: 40rpx; font-weight: 600; text-shadow: 0 2rpx 6rpx rgba(46, 65, 84, 0.3); }
   &__cname { font-size: 20rpx; opacity: 0.9; }
   &__cancel {
     margin-top: 16rpx;
     width: 100%;
-    background: rgba(73, 62, 55, 0.08);
+    background: $fill;
     color: $ink;
     font-size: 28rpx;
     border-radius: 40rpx;
@@ -1684,9 +1691,9 @@ $maple-light: #FBE4D5;
   max-width: 320rpx;
   padding: 10rpx 20rpx;
   background: #fff;
-  border: 2rpx solid rgba(73, 62, 55, 0.12);
+  border: 2rpx solid $line;
   border-radius: 18rpx;
-  box-shadow: 0 4rpx 12rpx rgba(73, 62, 55, 0.15);
+  box-shadow: 0 4rpx 12rpx rgba(46, 65, 84, 0.12);
   font-size: 24rpx;
   color: $ink;
   white-space: nowrap;
@@ -1697,7 +1704,7 @@ $maple-light: #FBE4D5;
 
   &--emoji { font-size: 40rpx; padding: 6rpx 18rpx; }
   &--opp { bottom: calc(100% + 8rpx); }
-  &--mine { top: -64rpx; left: 24rpx; transform: none; background: $maple-light; }
+  &--mine { top: -64rpx; left: 24rpx; transform: none; background: $blue-tint; }
 }
 
 @keyframes bubble-pop {
@@ -1705,7 +1712,7 @@ $maple-light: #FBE4D5;
   to { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
-// 底部聊天条：固定在屏幕底部，消息流（最近 3 条，新的从下方滑入，顶部超出消失）+ 快捷入口
+// 底部聊天坞（v4 规范）：白色圆顶 + 发丝线 + 蓝名灰气泡 + 蓝 tint 触发钮
 .chat-bar {
   position: fixed;
   left: 0;
@@ -1716,21 +1723,30 @@ $maple-light: #FBE4D5;
   flex-direction: column;
   gap: 12rpx;
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 248, 237, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 2rpx solid $line;
   border-radius: 24rpx 24rpx 0 0;
-  box-shadow: 0 -4rpx 20rpx rgba(73, 62, 55, 0.1);
+  box-shadow: 0 -4rpx 20rpx rgba(46, 65, 84, 0.08);
 
-  &__feed { display: flex; flex-direction: column; gap: 4rpx; }
+  &__feed { display: flex; flex-direction: column; gap: 6rpx; }
   &__feed-item {
     display: flex;
     align-items: baseline;
+    gap: 6rpx;
     overflow: hidden;
     white-space: nowrap;
     font-size: 24rpx;
     animation: feed-in 0.2s ease-out;
   }
-  &__feed-name { color: rgba(73, 62, 55, 0.5); flex-shrink: 0; }
-  &__feed-text { color: rgba(73, 62, 55, 0.85); overflow: hidden; text-overflow: ellipsis; }
+  &__feed-name { color: $blue-deep; font-weight: 600; flex-shrink: 0; }
+  &__feed-text {
+    color: $ink2;
+    background: $fill;
+    border-radius: 12rpx;
+    padding: 2rpx 14rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   &__feed-text--emoji { font-size: 30rpx; }
 
   &__trigger {
@@ -1741,12 +1757,11 @@ $maple-light: #FBE4D5;
     gap: 10rpx;
     height: 60rpx;
     padding: 0 26rpx;
-    background: #fff;
-    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    background: $blue-tint;
     border-radius: 30rpx;
   }
   &__icon { font-size: 26rpx; }
-  &__hint { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); }
+  &__hint { font-size: 24rpx; color: $blue-deep; }
   &__badge {
     position: absolute;
     top: -10rpx;
@@ -1771,8 +1786,11 @@ $maple-light: #FBE4D5;
 
 .chat-mask {
   position: fixed;
-  inset: 0;
-  background: rgba(73, 62, 55, 0.28);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(46, 65, 84, 0.35);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1784,26 +1802,26 @@ $maple-light: #FBE4D5;
   max-height: 72vh;
   display: flex;
   flex-direction: column;
-  background: $cream;
+  background: $card;
   border-radius: 32rpx 32rpx 0 0;
   padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 
   &__header { display: flex; justify-content: space-between; align-items: center; }
-  &__title { font-size: 32rpx; font-weight: 700; color: $ink; }
-  &__close { font-size: 32rpx; color: rgba(73, 62, 55, 0.5); padding: 8rpx; }
+  &__title { font-size: 32rpx; font-weight: 600; color: $ink; }
+  &__close { font-size: 32rpx; color: $ink3; padding: 8rpx; }
 
   &__log {
     height: 200rpx;
     margin-top: 16rpx;
     padding: 12rpx 20rpx;
-    background: rgba(73, 62, 55, 0.05);
+    background: $fill;
     border-radius: 16rpx;
     box-sizing: border-box;
   }
-  &__empty { font-size: 24rpx; color: rgba(73, 62, 55, 0.45); text-align: center; margin-top: 60rpx; }
+  &__empty { font-size: 24rpx; color: $ink3; text-align: center; margin-top: 60rpx; }
   &__log-item { display: flex; align-items: baseline; gap: 12rpx; margin-top: 8rpx; }
-  &__log-name { font-size: 22rpx; color: rgba(73, 62, 55, 0.55); flex-shrink: 0; }
+  &__log-name { font-size: 22rpx; color: $blue-deep; font-weight: 600; flex-shrink: 0; }
   &__log-text { font-size: 26rpx; color: $ink; word-break: break-all; }
   &__log-text--emoji { font-size: 34rpx; }
 
@@ -1811,23 +1829,23 @@ $maple-light: #FBE4D5;
   &__tab {
     padding: 8rpx 32rpx;
     border-radius: 28rpx;
-    background: rgba(73, 62, 55, 0.08);
+    background: $fill;
     font-size: 26rpx;
-    color: $ink;
+    color: $ink2;
 
-    &--on { background: $felt; color: $cream; font-weight: 600; }
+    &--on { background: $blue-tint; color: $blue-deep; font-weight: 600; }
     &--off { opacity: 0.45; }
   }
 
   &__body { flex: 1; min-height: 320rpx; max-height: 40vh; margin-top: 16rpx; }
 
   &__group { margin-top: 12rpx; }
-  &__group-title { font-size: 22rpx; color: rgba(73, 62, 55, 0.5); }
+  &__group-title { font-size: 22rpx; color: $ink3; }
   &__phrases { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 10rpx; }
   &__phrase {
     padding: 12rpx 24rpx;
-    background: #fff;
-    border: 2rpx solid rgba(73, 62, 55, 0.1);
+    background: $card;
+    border: 2rpx solid $line-strong;
     border-radius: 28rpx;
     font-size: 26rpx;
     color: $ink;
@@ -1844,18 +1862,19 @@ $maple-light: #FBE4D5;
     justify-content: center;
     font-size: 52rpx;
     border-radius: 16rpx;
-    background: #fff;
+    background: $fill;
 
     &--off { opacity: 0.45; }
   }
 
   &__body--text { display: flex; flex-direction: column; justify-content: center; }
-  &__text-off { font-size: 26rpx; color: rgba(73, 62, 55, 0.55); text-align: center; }
+  &__text-off { font-size: 26rpx; color: $ink2; text-align: center; }
   &__input-row { display: flex; gap: 16rpx; align-items: center; }
   &__input {
     flex: 1;
     height: 80rpx;
-    background: #fff;
+    background: $card;
+    border: 2rpx solid $line-strong;
     border-radius: 16rpx;
     padding: 0 24rpx;
     font-size: 28rpx;
@@ -1865,14 +1884,14 @@ $maple-light: #FBE4D5;
     width: 160rpx;
     height: 80rpx;
     line-height: 80rpx;
-    background: $red;
+    background: $blue;
     color: #fff;
-    font-weight: 700;
+    font-weight: 600;
     font-size: 28rpx;
     border-radius: 16rpx;
     padding: 0;
 
-    &[disabled] { background: rgba($red, 0.45); color: rgba(255, 255, 255, 0.9); }
+    &[disabled] { background: rgba($blue, 0.45); color: rgba(255, 255, 255, 0.9); }
   }
 }
 

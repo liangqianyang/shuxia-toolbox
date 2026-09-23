@@ -94,7 +94,7 @@ function summaryOf(item: FortuneHistoryItem): string {
 }
 
 function deckColor(deck: string): string {
-  return DECK_THEMES[deck as keyof typeof DECK_THEMES]?.primary ?? '#4a3f35'
+  return DECK_THEMES[deck as keyof typeof DECK_THEMES]?.primary ?? '#2e4154'
 }
 
 function sealColor(level: string): string {
@@ -188,7 +188,7 @@ function goDraw(): void {
 
   &__reading-label { display: block; font-size: 24rpx; color: $color-primary-dark; font-weight: 600; margin: 8rpx 0 4rpx; }
 
-  &__reading-lucky { display: block; font-size: 26rpx; color: #A67C00; margin-top: 12rpx; }
+  &__reading-lucky { display: block; font-size: 26rpx; color: $color-primary-dark; margin-top: 12rpx; }
 
   &__more { text-align: center; padding: 24rpx 0; }
   &__more-text { font-size: 26rpx; color: $color-primary-dark; }

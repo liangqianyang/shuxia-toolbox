@@ -12,24 +12,22 @@
       </view>
     </view>
 
-    <scroll-view class="lottery__step-scroll" scroll-x :show-scrollbar="false">
-      <view class="lottery__steps">
-        <view
-          v-for="step in stepItems"
-          :key="step.index"
-          class="lottery__step"
-          :class="{
-            'lottery__step--active': activeStep === step.index,
-            'lottery__step--ready': step.index <= maxStep,
-          }"
-          hover-class="press"
-          @tap="goStep(step.index)"
-        >
-          <view class="lottery__step-icon">{{ step.icon }}</view>
-          <text class="lottery__step-label">{{ step.label }}</text>
-        </view>
+    <view class="lottery__steps">
+      <view
+        v-for="step in stepItems"
+        :key="step.index"
+        class="lottery__step"
+        :class="{
+          'lottery__step--active': activeStep === step.index,
+          'lottery__step--ready': step.index <= maxStep,
+        }"
+        hover-class="press"
+        @tap="goStep(step.index)"
+      >
+        <view class="lottery__step-icon">{{ step.icon }}</view>
+        <text class="lottery__step-label">{{ step.label }}</text>
       </view>
-    </scroll-view>
+    </view>
 
     <view v-if="showHistory" class="lottery__screen">
       <view class="lottery__heading lottery__heading--row">
@@ -143,7 +141,7 @@
         <switch
           :checked="allowSpecialGifts"
           :disabled="nature === 'public'"
-          color="#c64f3d"
+          color="#58A6DC"
           @change="onSpecialToggle"
         />
       </view>
@@ -400,7 +398,7 @@
             <text class="lottery__switch-title">不重复中奖</text>
             <text class="lottery__switch-hint">特别赠礼对象也会计入已中奖名单</text>
           </view>
-          <switch :checked="prizeNoRepeat" color="#c64f3d" @change="onPrizeNoRepeatChange" />
+          <switch :checked="prizeNoRepeat" color="#58A6DC" @change="onPrizeNoRepeatChange" />
         </view>
       </template>
 
@@ -421,14 +419,14 @@
             <text class="lottery__switch-title">抽中后不放回</text>
             <text class="lottery__switch-hint">后续轮次不会再次抽中相同选项</text>
           </view>
-          <switch :checked="randomNoReplacement" color="#c64f3d" @change="onRandomReplacementChange" />
+          <switch :checked="randomNoReplacement" color="#58A6DC" @change="onRandomReplacementChange" />
         </view>
         <view class="lottery__switch-row">
           <view class="lottery__switch-copy">
             <text class="lottery__switch-title">设置选项权重</text>
             <text class="lottery__switch-hint">权重越高，被抽中的机会越大</text>
           </view>
-          <switch :checked="randomUseWeights" color="#c64f3d" @change="onRandomWeightToggle" />
+          <switch :checked="randomUseWeights" color="#58A6DC" @change="onRandomWeightToggle" />
         </view>
         <view v-if="randomUseWeights" class="lottery__weight-list">
           <view v-for="option in randomOptions" :key="option.id" class="lottery__weight-row">
@@ -512,12 +510,10 @@
         <text class="lottery__falling-leaf lottery__falling-leaf--one">🍁</text>
         <text class="lottery__falling-leaf lottery__falling-leaf--two">🍁</text>
         <text class="lottery__falling-leaf lottery__falling-leaf--three">🍁</text>
-        <view class="lottery__sticks">
-          <text>枫</text><text>叶</text><text>抽</text><text>奖</text><text>🎉</text>
-        </view>
-        <view class="lottery__tube">
-          <text class="lottery__tube-leaf">🍁</text>
-          <text class="lottery__tube-name">枫叶抽奖</text>
+        <view class="lottery__giftbox">
+          <view class="lottery__giftbox-bow"><text /><text /></view>
+          <view class="lottery__giftbox-lid" />
+          <view class="lottery__giftbox-body"><text>?</text></view>
         </view>
         <text class="lottery__rolling">{{ rollingText }}</text>
         <text class="lottery__draw-hint">{{ drawHint }}</text>
@@ -586,6 +582,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onHide, onUnload } from '@dcloudio/uni-app'
 import type {
   LotteryAward,
   LotteryHistoryItem,
@@ -949,11 +946,24 @@ watch(currentRoundRandomCapacity, (capacity) => {
   prizeRoundDrawCount.value = Math.max(1, Math.min(prizeRoundDrawCount.value, Math.max(1, capacity)))
 }, { immediate: true })
 
+// 草稿落盘防抖：23 个源 deep watch 在名单/签池 textarea 每敲一键都会触发，
+// 全量 JSON.stringify + 同步 setStorageSync 会卡输入；500ms 静默后落一次盘，
+// 卸载（onHide/onUnload）时再冲一次保证不丢。
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleSaveDraft(): void {
+  if (!draftReady) return
+  if (draftSaveTimer) clearTimeout(draftSaveTimer)
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null
+    saveDraft()
+  }, 500)
+}
+
 watch(
   [activityName, mode, nature, prizeDrawStrategy, allowSpecialGifts, prizes, specialGifts, prizeParticipantText, prizeNoRepeat, prizeRoundDrawCount,
     randomOptionText, randomDrawCount, randomNoReplacement, randomUseWeights, randomWeightMap,
     teamParticipantText, teamGroupCount, teamGroupNamesText, awards, optionResults, teamResults, activeStep, maxStep],
-  () => { if (draftReady) saveDraft() },
+  () => scheduleSaveDraft(),
   { deep: true },
 )
 
@@ -962,6 +972,22 @@ onMounted(() => {
   loadDraft()
   if (prizeDrawStrategy.value === 'weighted') showPrizeAdvanced.value = true
   draftReady = true
+})
+
+onHide(() => {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+    draftSaveTimer = null
+  }
+  saveDraft()
+})
+
+onUnload(() => {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+    draftSaveTimer = null
+  }
+  saveDraft()
 })
 
 onUnmounted(() => {
@@ -1732,29 +1758,24 @@ function resetActivity() {
 </script>
 
 <style lang="scss" scoped>
-$maple: #c64f3d;
-$maple-dark: #983a2f;
-$maple-soft: #f9e5e1;
-$forest: #4f7658;
-$forest-soft: #e9f1eb;
-$ink: #34332f;
-
+/* v4 小清新：全部取 styles/variables.scss 令牌，私有 $maple/$forest/$ink 已删。
+   选中态一律蓝 tint（原型 .chip.on/.tile.on/.modecard.on），无实底黄。 */
 .lottery {
-  padding: 28rpx 28rpx 80rpx;
-  color: $color-text;
+  padding: $space-4 $space-4 $space-6;
+  color: $ink;
 
   &__brand {
     display: flex;
     align-items: center;
     gap: 20rpx;
-    margin-bottom: 24rpx;
+    margin-bottom: $space-3;
   }
 
   &__brand-mark {
     width: 72rpx;
     height: 72rpx;
     border-radius: $radius-md;
-    background: $maple-soft;
+    background: pastel-tint('lottery');
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1779,72 +1800,72 @@ $ink: #34332f;
 
   &__brand-kicker,
   &__eyebrow {
-    font-size: 22rpx;
-    color: $color-text-secondary;
+    font-size: 20rpx;
+    font-weight: 600;
+    color: $blue-deep;
+    letter-spacing: 4rpx;
   }
 
   &__brand-title {
-    font-size: 34rpx;
+    font-size: 32rpx;
     font-weight: 700;
     color: $ink;
   }
 
   &__new,
   &__compact-btn {
-    color: $maple-dark;
-    font-size: 24rpx;
+    color: $blue-deep;
+    font-size: $font-caption;
     font-weight: 600;
     padding: 12rpx 18rpx;
-    border: 2rpx solid rgba($maple, 0.28);
+    border: 2rpx solid rgba($blue, 0.35);
     border-radius: $radius-sm;
     flex-shrink: 0;
   }
 
   &__text-btn {
-    color: $forest;
-    font-size: 24rpx;
+    color: $blue-deep;
+    font-size: $font-caption;
     font-weight: 600;
     padding: 12rpx 8rpx;
     flex-shrink: 0;
   }
 
   &__text-btn--danger {
-    color: $color-danger;
+    color: $red;
   }
 
-  &__step-scroll {
-    width: 100%;
-    margin-bottom: 28rpx;
-  }
-
+  /* 步条：白卡 + 发丝线，选中蓝 tint / 走过蓝字（原型 .step/.step.on/.step.done） */
   &__steps {
-    min-width: 660rpx;
     display: flex;
-    gap: 8rpx;
-    padding: 4rpx 0 14rpx;
-    border-bottom: 2rpx solid $color-border;
+    gap: 12rpx;
+    margin-bottom: $space-3;
   }
 
   &__step {
-    width: 124rpx;
-    min-height: 90rpx;
+    flex: 1;
+    min-width: 0;
+    min-height: 104rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 6rpx;
-    color: $color-text-secondary;
-    border-radius: $radius-sm;
-    opacity: 0.48;
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-md;
+    color: $ink3;
   }
 
   &__step--ready {
-    opacity: 1;
+    color: $blue;
   }
 
   &__step--active {
-    background: $maple;
-    color: #fff;
+    background: $blue-tint;
+    border-color: $blue;
+    color: $blue-deep;
+    font-weight: 600;
   }
 
   &__step-icon {
@@ -1855,7 +1876,8 @@ $ink: #34332f;
   }
 
   &__step-label {
-    font-size: 22rpx;
+    font-size: 20rpx;
+    white-space: nowrap;
   }
 
   &__screen {
@@ -1881,7 +1903,7 @@ $ink: #34332f;
 
   &__title {
     display: block;
-    font-size: 40rpx;
+    font-size: $font-title;
     font-weight: 700;
     color: $ink;
   }
@@ -1898,7 +1920,7 @@ $ink: #34332f;
 
   &__label,
   &__section-title {
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 600;
     color: $ink;
   }
@@ -1907,11 +1929,11 @@ $ink: #34332f;
   &__textarea,
   &__picker {
     width: 100%;
-    border: 2rpx solid $color-border;
-    background: #fff;
+    border: 2rpx solid $line-strong;
+    background: $card;
     border-radius: $radius-sm;
-    color: $color-text;
-    font-size: 28rpx;
+    color: $ink;
+    font-size: $font-body;
     box-sizing: border-box;
   }
 
@@ -1941,7 +1963,7 @@ $ink: #34332f;
 
   &__picker--strong {
     font-weight: 600;
-    border-color: rgba($maple, 0.35);
+    border-color: $blue;
   }
 
   &__mode-grid {
@@ -1956,12 +1978,13 @@ $ink: #34332f;
     gap: 12rpx;
   }
 
+  /* 模板 tile：白底发丝线，选中蓝 tint（原型 .tile.on） */
   &__template {
     min-height: 92rpx;
     padding: 12rpx 8rpx;
-    border: 2rpx solid $color-border;
-    border-radius: $radius-sm;
-    background: #fff;
+    border: 2rpx solid $line-strong;
+    border-radius: $radius-md;
+    background: $card;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1971,9 +1994,13 @@ $ink: #34332f;
   }
 
   &__template--active {
-    border-color: $maple;
-    background: $maple-soft;
-    color: $maple-dark;
+    border-color: $blue;
+    background: $blue-tint;
+
+    .lottery__template-label {
+      color: $blue-deep;
+      font-weight: 600;
+    }
   }
 
   &__template-icon {
@@ -1983,17 +2010,19 @@ $ink: #34332f;
   }
 
   &__template-label {
-    font-size: 22rpx;
+    font-size: $font-micro;
+    color: $ink2;
     text-align: center;
     word-break: break-all;
   }
 
+  /* 玩法卡（原型 .modecard） */
   &__mode {
     min-height: 146rpx;
     padding: 18rpx 8rpx;
-    border: 2rpx solid $color-border;
-    border-radius: $radius-sm;
-    background: #fff;
+    border: 2rpx solid $line-strong;
+    border-radius: $radius-md;
+    background: $card;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2003,9 +2032,12 @@ $ink: #34332f;
   }
 
   &__mode--active {
-    border-color: $maple;
-    background: $maple-soft;
-    color: $maple-dark;
+    border-color: $blue;
+    background: $blue-tint;
+
+    .lottery__mode-name {
+      color: $blue-deep;
+    }
   }
 
   &__mode-icon {
@@ -2014,41 +2046,47 @@ $ink: #34332f;
   }
 
   &__mode-name {
-    font-size: 26rpx;
+    font-size: $font-caption;
     font-weight: 600;
+    color: $ink;
   }
 
   &__mode-hint {
-    font-size: 20rpx;
-    color: $color-text-secondary;
+    font-size: $font-micro;
+    color: $ink2;
   }
 
+  /* 活动性质分段：$fill 轨道 + 白块选中（原型 .seg） */
   &__segment {
     display: flex;
-    gap: 10rpx;
+    gap: 6rpx;
+    padding: 6rpx;
+    background: $fill;
+    border-radius: $radius-md;
   }
 
   &__segment-item {
     flex: 1;
-    height: 70rpx;
-    border: 2rpx solid $color-border;
+    height: 64rpx;
     border-radius: $radius-sm;
-    background: #fff;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 26rpx;
+    font-size: $font-caption;
+    color: $ink2;
   }
 
   &__segment-item--active {
-    background: $forest;
-    border-color: $forest;
-    color: #fff;
+    background: $card;
+    color: $ink;
+    font-weight: 600;
+    box-shadow: 0 2rpx 6rpx rgba(46, 65, 84, 0.1);
   }
 
   &__advanced {
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    border-top: 2rpx solid $line;
+    border-bottom: 2rpx solid $line;
   }
 
   &__advanced-head {
@@ -2069,8 +2107,8 @@ $ink: #34332f;
 
   &__advanced-arrow {
     width: 44rpx;
-    color: $forest;
-    font-size: 30rpx;
+    color: $ink3;
+    font-size: 28rpx;
     text-align: center;
     flex-shrink: 0;
   }
@@ -2087,8 +2125,8 @@ $ink: #34332f;
   &__summary-band {
     min-height: 96rpx;
     padding: 20rpx 0;
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    border-top: 2rpx solid $line;
+    border-bottom: 2rpx solid $line;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2104,7 +2142,7 @@ $ink: #34332f;
   }
 
   &__switch-title {
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 600;
     color: $ink;
   }
@@ -2113,21 +2151,21 @@ $ink: #34332f;
   &__section-note,
   &__control-label,
   &__result-sub {
-    font-size: 22rpx;
-    color: $color-text-secondary;
+    font-size: $font-micro;
+    color: $ink2;
   }
 
   &__notice {
     padding: 18rpx 20rpx;
-    background: $forest-soft;
-    color: $forest;
-    font-size: 24rpx;
+    background: $blue-tint;
+    color: $blue-deep;
+    font-size: $font-caption;
     border-radius: $radius-sm;
   }
 
   &__duplicate-note {
-    color: $maple-dark;
-    font-size: 22rpx;
+    color: $blue-deep;
+    font-size: $font-micro;
     line-height: 1.5;
     word-break: break-all;
   }
@@ -2137,7 +2175,7 @@ $ink: #34332f;
     grid-template-columns: minmax(150rpx, 0.65fr) minmax(260rpx, 1.35fr);
     gap: 18rpx;
     padding-top: 22rpx;
-    border-top: 2rpx solid $color-border;
+    border-top: 2rpx solid $line;
   }
 
   &__primary-btn,
@@ -2145,8 +2183,8 @@ $ink: #34332f;
   &__copy-btn {
     min-height: 82rpx;
     padding: 0 24rpx;
-    border-radius: $radius-sm;
-    font-size: 28rpx;
+    border-radius: $radius-md;
+    font-size: $font-body;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -2156,7 +2194,7 @@ $ink: #34332f;
   }
 
   &__primary-btn {
-    background: $maple;
+    background: $blue;
     color: #fff;
   }
 
@@ -2171,8 +2209,8 @@ $ink: #34332f;
 
   &__secondary-btn,
   &__copy-btn {
-    border: 2rpx solid $color-border;
-    background: #fff;
+    border: 2rpx solid $line-strong;
+    background: $card;
     color: $ink;
   }
 
@@ -2202,7 +2240,7 @@ $ink: #34332f;
 
   &__prize-row {
     padding: 24rpx 0;
-    border-bottom: 2rpx solid $color-border;
+    border-bottom: 2rpx solid $line;
     display: flex;
     flex-direction: column;
     gap: 18rpx;
@@ -2218,9 +2256,9 @@ $ink: #34332f;
     width: 46rpx;
     height: 46rpx;
     border-radius: $radius-sm;
-    background: $maple-soft;
-    color: $maple-dark;
-    font-size: 22rpx;
+    background: $blue-tint;
+    color: $blue-deep;
+    font-size: $font-micro;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2231,7 +2269,7 @@ $ink: #34332f;
     flex: 1;
     min-width: 0;
     height: 60rpx;
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 600;
     color: $ink;
   }
@@ -2242,7 +2280,7 @@ $ink: #34332f;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: $color-danger;
+    color: $red;
     font-size: 36rpx;
     flex-shrink: 0;
   }
@@ -2271,9 +2309,9 @@ $ink: #34332f;
   }
 
   &__probability-value {
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 700;
-    color: $forest;
+    color: $blue-deep;
   }
 
   &__stepper {
@@ -2281,9 +2319,9 @@ $ink: #34332f;
     display: grid;
     grid-template-columns: 54rpx 52rpx 54rpx;
     align-items: center;
-    border: 2rpx solid $color-border;
+    border: 2rpx solid $line-strong;
     border-radius: $radius-sm;
-    background: #fff;
+    background: $card;
     overflow: hidden;
   }
 
@@ -2297,12 +2335,12 @@ $ink: #34332f;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 25rpx;
+    font-size: $font-caption;
   }
 
   &__stepper-btn {
-    color: $maple-dark;
-    background: $maple-soft;
+    color: $ink;
+    background: $fill;
   }
 
   &__stepper-value {
@@ -2311,8 +2349,8 @@ $ink: #34332f;
   }
 
   &__reserved-note {
-    font-size: 22rpx;
-    color: $maple-dark;
+    font-size: $font-micro;
+    color: $blue-deep;
   }
 
   &__gift-section {
@@ -2322,16 +2360,16 @@ $ink: #34332f;
 
   &__gift-rule {
     padding: 22rpx 0;
-    border-top: 2rpx solid $color-border;
+    border-top: 2rpx solid $line;
     display: flex;
     flex-direction: column;
     gap: 18rpx;
   }
 
   &__gift-title {
-    font-size: 26rpx;
+    font-size: $font-caption;
     font-weight: 600;
-    color: $maple-dark;
+    color: $ink;
   }
 
   &__gift-grid {
@@ -2344,7 +2382,7 @@ $ink: #34332f;
   &__gift-target-preview {
     min-height: 66rpx;
     padding: 14rpx 18rpx;
-    background: $forest-soft;
+    background: $blue-tint;
     border-radius: $radius-sm;
     display: flex;
     align-items: center;
@@ -2354,8 +2392,8 @@ $ink: #34332f;
 
   &__gift-target-text {
     min-width: 0;
-    color: $forest;
-    font-size: 23rpx;
+    color: $blue-deep;
+    font-size: $font-micro;
     text-align: right;
     word-break: break-all;
   }
@@ -2370,7 +2408,7 @@ $ink: #34332f;
   &__assignment-row {
     min-height: 102rpx;
     padding: 16rpx 0;
-    border-bottom: 2rpx solid $color-border;
+    border-bottom: 2rpx solid $line;
     display: grid;
     grid-template-columns: minmax(180rpx, 0.72fr) minmax(260rpx, 1.28fr);
     gap: 18rpx;
@@ -2395,21 +2433,21 @@ $ink: #34332f;
   }
 
   &__picker--invalid {
-    border-color: $color-danger;
-    color: $color-danger;
+    border-color: $red;
+    color: $red;
   }
 
   &__empty {
     min-height: 150rpx;
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    border-top: 2rpx solid $line;
+    border-bottom: 2rpx solid $line;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8rpx;
-    color: $color-text-secondary;
-    font-size: 24rpx;
+    color: $ink2;
+    font-size: $font-caption;
   }
 
   &__empty-icon {
@@ -2423,15 +2461,15 @@ $ink: #34332f;
   }
 
   &__error {
-    color: $color-danger;
-    font-size: 22rpx;
+    color: $red;
+    font-size: $font-micro;
   }
 
   &__weight-row,
   &__result-row {
     min-height: 88rpx;
     padding: 14rpx 0;
-    border-bottom: 2rpx solid $color-border;
+    border-bottom: 2rpx solid $line;
     display: flex;
     align-items: center;
     gap: 16rpx;
@@ -2440,13 +2478,13 @@ $ink: #34332f;
   &__weight-name {
     flex: 1;
     min-width: 0;
-    font-size: 26rpx;
+    font-size: $font-caption;
     word-break: break-all;
   }
 
   &__summary-band {
-    color: $forest;
-    font-size: 26rpx;
+    color: $blue-deep;
+    font-size: $font-caption;
   }
 
   &__screen--draw,
@@ -2462,6 +2500,7 @@ $ink: #34332f;
     text-align: center;
   }
 
+  /* 中性 pill 标签（原型 .tag.amber → 无黄实底，转灰） */
   &__draw-badge,
   &__source {
     display: inline-flex;
@@ -2469,95 +2508,133 @@ $ink: #34332f;
     justify-content: center;
     min-height: 42rpx;
     padding: 0 16rpx;
-    border-radius: 24rpx;
-    background: $forest-soft;
-    color: $forest;
-    font-size: 21rpx;
+    border-radius: 999rpx;
+    background: $fill;
+    color: $ink2;
+    font-size: $font-micro;
   }
 
   &__round-summary {
     padding: 18rpx 20rpx;
-    border-left: 6rpx solid $forest;
-    background: $forest-soft;
-    color: $forest;
-    font-size: 23rpx;
+    border-left: 6rpx solid $blue;
+    background: $blue-tint;
+    color: $blue-deep;
+    font-size: $font-micro;
     line-height: 1.55;
   }
 
+  /* 开奖舞台：白卡 + 礼盒（原型 .tube-stage/.giftbox；签筒隐喻按拍板退役） */
   &__draw-stage {
     position: relative;
-    min-height: 560rpx;
-    padding: 36rpx 20rpx 30rpx;
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    min-height: 520rpx;
+    padding: 44rpx 32rpx 40rpx;
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-lg;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    gap: 14rpx;
+    gap: 24rpx;
   }
 
-  &__sticks {
-    height: 174rpx;
+  &__giftbox {
+    position: relative;
+    width: 236rpx;
+    height: 212rpx;
+    margin: 4rpx 0;
+  }
+
+  &__giftbox-body {
+    position: absolute;
+    bottom: 0;
+    left: 24rpx;
+    right: 24rpx;
+    height: 116rpx;
+    border-radius: 20rpx;
+    background: $blue;
     display: flex;
-    align-items: flex-end;
-    gap: 8rpx;
-    transform-origin: center bottom;
-  }
-
-  &__sticks text {
-    width: 44rpx;
-    height: 164rpx;
-    padding-top: 16rpx;
-    border: 2rpx solid #d9c5ac;
-    border-radius: 10rpx 10rpx 0 0;
-    background: #fffdf9;
-    color: $maple-dark;
-    font-size: 24rpx;
-    text-align: center;
-    box-sizing: border-box;
-  }
-
-  &__sticks text:nth-child(2),
-  &__sticks text:nth-child(4) {
-    height: 148rpx;
-  }
-
-  &__sticks text:nth-child(3) {
-    height: 174rpx;
-  }
-
-  &__tube {
-    width: 270rpx;
-    min-height: 198rpx;
-    margin-top: -24rpx;
-    margin-bottom: 12rpx;
-    padding: 50rpx 20rpx 22rpx;
-    border: 3rpx solid #d8bba5;
-    border-radius: 18rpx 18rpx 28rpx 28rpx;
-    background: linear-gradient(145deg, #f4d7cb, #e8b9a7);
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 10rpx;
-    box-sizing: border-box;
+    justify-content: center;
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 28rpx;
+      transform: translateX(-50%);
+      background: #fff;
+      opacity: 0.55;
+    }
+
+    text {
+      position: relative;
+      width: 68rpx;
+      height: 68rpx;
+      border-radius: 50%;
+      background: #fff;
+      color: $ink;
+      font-weight: 600;
+      font-size: 32rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 
-  &__tube-leaf {
-    font-size: 50rpx;
+  &__giftbox-lid {
+    position: absolute;
+    top: 68rpx;
+    left: 6rpx;
+    right: 6rpx;
+    height: 44rpx;
+    border-radius: 16rpx;
+    background: $blue-deep;
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 28rpx;
+      transform: translateX(-50%);
+      background: #fff;
+      opacity: 0.55;
+    }
   }
 
-  &__tube-name {
-    font-size: 26rpx;
-    font-weight: 700;
-    color: $maple-dark;
+  &__giftbox-bow {
+    position: absolute;
+    top: 30rpx;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    z-index: 2;
+
+    text {
+      width: 50rpx;
+      height: 38rpx;
+      border-radius: 26rpx 26rpx 10rpx 10rpx;
+      background: $blue-deep;
+    }
+
+    text:first-child {
+      transform: rotate(-26deg) translateX(10rpx);
+    }
+
+    text:last-child {
+      transform: rotate(26deg) translateX(-10rpx);
+    }
   }
 
   &__rolling {
     min-height: 58rpx;
     max-width: 100%;
-    font-size: 38rpx;
+    font-size: $font-title;
     font-weight: 700;
     color: $ink;
     text-align: center;
@@ -2566,8 +2643,8 @@ $ink: #34332f;
 
   &__draw-hint {
     min-height: 36rpx;
-    font-size: 23rpx;
-    color: $color-text-secondary;
+    font-size: $font-micro;
+    color: $ink2;
     text-align: center;
   }
 
@@ -2581,13 +2658,12 @@ $ink: #34332f;
   &__falling-leaf--two { right: 13%; top: 25%; }
   &__falling-leaf--three { right: 24%; top: 40%; }
 
-  &__draw-stage--running &__sticks,
-  &__draw-stage--running &__tube {
-    animation: maple-shake 170ms ease-in-out 8 alternate;
+  &__draw-stage--running &__giftbox {
+    animation: gift-shake 170ms ease-in-out 8 alternate;
   }
 
   &__draw-stage--running &__falling-leaf {
-    animation: maple-fall 800ms ease-out 2;
+    animation: leaf-fall 800ms ease-out 2;
   }
 
   &__draw-stage--running &__falling-leaf--two { animation-delay: 120ms; }
@@ -2604,10 +2680,12 @@ $ink: #34332f;
     transform: translateY(-12rpx);
   }
 
+  /* 结果 hero：白卡居中（原型 lottery-result 首卡） */
   &__result-hero {
     padding: 36rpx 16rpx;
-    border-top: 2rpx solid $color-border;
-    border-bottom: 2rpx solid $color-border;
+    background: $card;
+    border: 2rpx solid $line;
+    border-radius: $radius-lg;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2616,27 +2694,27 @@ $ink: #34332f;
   }
 
   &__result-kicker {
-    font-size: 24rpx;
-    color: $color-text-secondary;
+    font-size: $font-caption;
+    color: $ink2;
   }
 
   &__result-main {
     max-width: 100%;
-    font-size: 48rpx;
-    font-weight: 700;
+    font-size: $font-display;
+    font-weight: 300;
     color: $ink;
     word-break: break-all;
   }
 
   &__result-detail {
-    font-size: 24rpx;
-    color: $forest;
+    font-size: $font-caption;
+    color: $blue-deep;
   }
 
   &__result-index {
     width: 50rpx;
-    color: $color-text-secondary;
-    font-size: 23rpx;
+    color: $ink2;
+    font-size: $font-micro;
     flex-shrink: 0;
   }
 
@@ -2649,7 +2727,7 @@ $ink: #34332f;
   }
 
   &__result-name {
-    font-size: 27rpx;
+    font-size: $font-body;
     font-weight: 600;
     color: $ink;
   }
@@ -2661,19 +2739,18 @@ $ink: #34332f;
   }
 
   &__source {
-    background: $forest-soft;
     flex-shrink: 0;
   }
 
   &__source--special {
-    background: $maple-soft;
-    color: $maple-dark;
+    background: $blue-tint;
+    color: $blue-deep;
   }
 
   &__history-row {
     min-height: 122rpx;
     padding: 20rpx 0;
-    border-bottom: 2rpx solid $color-border;
+    border-bottom: 2rpx solid $line;
     display: flex;
     align-items: center;
     gap: 18rpx;
@@ -2700,35 +2777,31 @@ $ink: #34332f;
     white-space: nowrap;
     flex: 1;
     color: $ink;
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 600;
   }
 
   &__history-mode {
     padding: 5rpx 10rpx;
     border-radius: $radius-sm;
-    background: $forest-soft;
-    color: $forest;
+    background: $fill;
+    color: $ink2;
     font-size: 20rpx;
     flex-shrink: 0;
   }
 
   &__history-meta,
   &__history-rule {
-    font-size: 22rpx;
-    color: $color-text-secondary;
+    font-size: $font-micro;
+    color: $ink2;
     word-break: break-all;
-  }
-
-  &__history-rule {
-    color: $forest;
   }
 
   &__history-copy-btn {
     min-width: 68rpx;
     padding: 12rpx 0;
-    color: $maple-dark;
-    font-size: 24rpx;
+    color: $blue-deep;
+    font-size: $font-caption;
     font-weight: 600;
     text-align: right;
     flex-shrink: 0;
@@ -2736,16 +2809,16 @@ $ink: #34332f;
 
   &__group {
     padding: 22rpx 0;
-    border-bottom: 2rpx solid $color-border;
+    border-bottom: 2rpx solid $line;
     display: flex;
     flex-direction: column;
     gap: 16rpx;
   }
 
   &__group-name {
-    font-size: 28rpx;
+    font-size: $font-body;
     font-weight: 700;
-    color: $forest;
+    color: $ink;
   }
 
   &__group-members {
@@ -2757,9 +2830,9 @@ $ink: #34332f;
   &__group-members text {
     padding: 10rpx 16rpx;
     border-radius: $radius-sm;
-    background: $forest-soft;
-    color: $forest;
-    font-size: 24rpx;
+    background: $fill;
+    color: $ink2;
+    font-size: $font-caption;
   }
 
   &__footer--result {
@@ -2775,12 +2848,12 @@ $ink: #34332f;
   }
 }
 
-@keyframes maple-shake {
+@keyframes gift-shake {
   from { transform: translateX(-8rpx) rotate(-2deg); }
   to { transform: translateX(8rpx) rotate(2deg); }
 }
 
-@keyframes maple-fall {
+@keyframes leaf-fall {
   0% { opacity: 0; transform: translateY(-16rpx) rotate(0deg); }
   30% { opacity: 1; }
   100% { opacity: 0; transform: translateY(150rpx) rotate(170deg); }

@@ -10,6 +10,7 @@
     >
       <text class="bottom-nav__icon">{{ item.icon }}</text>
       <text class="bottom-nav__label">{{ item.label }}</text>
+      <text class="bottom-nav__dot" />
     </view>
   </view>
 </template>
@@ -34,48 +35,54 @@ function go(id: NavItemId) {
 </script>
 
 <style lang="scss" scoped>
+/* v4 扁平白条：发丝顶线、蓝色选中、文字下小圆点指示；无投影无底色块 */
 .bottom-nav {
   position: fixed;
   z-index: 100;
   right: 0;
   bottom: 0;
   left: 0;
-  min-height: 126rpx;
-  padding: 12rpx 28rpx calc(12rpx + env(safe-area-inset-bottom));
-  border-top: 2rpx solid $color-border;
-  background: #fffdf9;
+  border-top: 2rpx solid $line;
+  background: #fff;
+  padding: 14rpx 16rpx calc(14rpx + env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  box-shadow: 0 -8rpx 24rpx rgba(168, 116, 75, 0.08);
   box-sizing: border-box;
 
   &__item {
-    min-height: 90rpx;
-    padding: 10rpx 8rpx;
-    border-radius: $radius-md;
-    color: $color-text-secondary;
+    padding: 8rpx 0 2rpx;
+    color: $ink3;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 6rpx;
+    gap: 4rpx;
     box-sizing: border-box;
   }
 
   &__item--active {
-    background: $color-primary-light;
-    color: $color-primary-dark;
+    color: $blue-deep;
   }
 
   &__icon {
-    height: 38rpx;
-    font-size: 38rpx;
+    height: 42rpx;
+    font-size: 42rpx;
     line-height: 1;
   }
 
   &__label {
-    font-size: 24rpx;
-    font-weight: 600;
+    font-size: 20rpx;
+    font-weight: 500;
+  }
+
+  &__dot {
+    width: 8rpx;
+    height: 8rpx;
+    border-radius: 4rpx;
+    background: transparent;
+  }
+
+  &__item--active &__dot {
+    background: $blue;
   }
 }
 </style>

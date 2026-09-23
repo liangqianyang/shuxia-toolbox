@@ -57,6 +57,8 @@ export function useJungleRoom() {
   }
 
   async function enterRoom(next: JungleRoomState) {
+    // 新房间重置传输层：上次房间降级轮询后 transport 不会再回 WS，这里恢复优先 WS
+    transport.value = 'ws'
     state.value = next
     myCode.value = next.code
     startSync()
@@ -177,6 +179,10 @@ export function useJungleRoom() {
     if (attempt !== wsAttempt || !running || manuallyClosed || transport.value !== 'ws') return
     clearHeartbeat()
     clearConnectWatchdog()
+    // 看门狗超时路径的在途 socket 不会自己 close：覆写引用前先关，
+    // 否则孤儿连接稍后连上会在服务端登记 fd 持续吃推送、占小程序并发 socket 上限
+    socket?.close({})
+    socket = null
     wsFailures++
     if (wsFailures >= WS_MAX_FAILURES) {
       degradeToPolling()

@@ -13,9 +13,9 @@ const CW = 210
 const CH = 315
 const SCALE = 2
 
-const PAPER = '#fdf6e8'
-const INK = '#4a3b32'
-const BACK_RED = '#E85D4A' // 品牌枫叶红
+const PAPER = '#ffffff' // v4：纸底转纯白（四季色/表情 = 内容个性保留）
+const INK = '#2e4154' // v4：暖棕墨线转蓝灰墨
+const BACK_DEEP = '#3b86b8' // v4 牌背深蓝（门/窗点缀）;底 = 浅蓝 #A9CFEA（原型 .ucard.back）
 
 const SEASON_COLORS = ['#83cc90', '#f4735f', '#ffc95e', '#7ab5e3']
 
@@ -82,7 +82,7 @@ async function renderCardToFile(key: string): Promise<string> {
 
 // ---------- 基础图元 ----------
 
-function rr(ctx: any, x: number, y: number, w: number, h: number, r: number): void {
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath()
   ctx.moveTo(x + r, y)
   ctx.arcTo(x + w, y, x + w, y + h, r)
@@ -99,7 +99,7 @@ const LEAF: Array<[number, number]> = [
   [-50, -4], [-76, -44], [-34, -32], [-40, -72], [-12, -56],
 ]
 
-function blobPath(ctx: any): void {
+function blobPath(ctx: CanvasRenderingContext2D): void {
   const n = LEAF.length
   const mid = (a: [number, number], b: [number, number]): [number, number] => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
   const m0 = mid(LEAF[n - 1], LEAF[0])
@@ -112,7 +112,7 @@ function blobPath(ctx: any): void {
 }
 
 /** 圆滚滚的 Q 版枫叶：size 为半高（叶子总高约 2×size）。 */
-function drawLeafQ(ctx: any, cx: number, cy: number, size: number, rot: number, color: string): void {
+function drawLeafQ(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, rot: number, color: string): void {
   ctx.save()
   ctx.translate(cx, cy)
   ctx.rotate(rot)
@@ -128,7 +128,7 @@ function drawLeafQ(ctx: any, cx: number, cy: number, size: number, rot: number, 
   ctx.restore()
 }
 
-function swirl(ctx: any, cx: number, cy: number, r: number): void {
+function swirl(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
   ctx.beginPath()
   for (let a = 0; a < Math.PI * 3; a += 0.3) {
     const rr2 = (r * a) / (Math.PI * 3)
@@ -154,7 +154,7 @@ interface FaceOptions {
 }
 
 /** 小精灵表情：豆豆眼 + 高光 + 微笑/开口 + 腮红；s 与 drawLeafQ 的 size 对应。 */
-function drawFace(ctx: any, cx: number, cy: number, s: number, o: FaceOptions): void {
+function drawFace(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, o: FaceOptions): void {
   const dx = s * 0.26
   const ey = cy - s * 0.14
   ctx.strokeStyle = INK
@@ -207,7 +207,7 @@ function drawFace(ctx: any, cx: number, cy: number, s: number, o: FaceOptions): 
 }
 
 /** 米白牌底 + 彩点 confetti + 粗描边。 */
-function drawBase(ctx: any): void {
+function drawBase(ctx: CanvasRenderingContext2D): void {
   rr(ctx, 0, 0, CW, CH, 22)
   ctx.fillStyle = PAPER
   ctx.fill()
@@ -227,7 +227,7 @@ function drawBase(ctx: any): void {
 }
 
 /** 贴纸风文字：白色外晕 + 深色描边。 */
-function stickerText(ctx: any, text: string, cx: number, cy: number, px: number, fill: string): void {
+function stickerText(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, px: number, fill: string): void {
   ctx.font = `900 ${px}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -243,7 +243,7 @@ function stickerText(ctx: any, text: string, cx: number, cy: number, px: number,
 }
 
 /** 角落标记：季节圆形徽章（色盲友好文字色标）+ 数字/符号，对角各一。 */
-function cornerQ(ctx: any, cx: number, cy: number, rot: number, color: UnoColor | null, label: string): void {
+function cornerQ(ctx: CanvasRenderingContext2D, cx: number, cy: number, rot: number, color: UnoColor | null, label: string): void {
   ctx.save()
   ctx.translate(cx, cy)
   ctx.rotate(rot)
@@ -278,7 +278,7 @@ function cornerQ(ctx: any, cx: number, cy: number, rot: number, color: UnoColor 
   ctx.restore()
 }
 
-function cornersQ(ctx: any, color: UnoColor | null, label: string): void {
+function cornersQ(ctx: CanvasRenderingContext2D, color: UnoColor | null, label: string): void {
   cornerQ(ctx, 20, 22, 0, color, label)
   cornerQ(ctx, CW - 20, CH - 22, Math.PI, color, label)
 }
@@ -286,7 +286,7 @@ function cornersQ(ctx: any, color: UnoColor | null, label: string): void {
 // ---------- 牌面 ----------
 
 /** 数字牌：泡泡数字漂浮在上，枫叶小精灵在下。 */
-function drawNumber(ctx: any, color: UnoColor, num: string): void {
+function drawNumber(ctx: CanvasRenderingContext2D, color: UnoColor, num: string): void {
   drawBase(ctx)
   const meta = COLOR_META[color]
   const cx = CW / 2
@@ -298,7 +298,7 @@ function drawNumber(ctx: any, color: UnoColor, num: string): void {
 }
 
 /** 跳过：眨眼的小叶子举着迷你「止」牌。 */
-function drawSkip(ctx: any, color: UnoColor): void {
+function drawSkip(ctx: CanvasRenderingContext2D, color: UnoColor): void {
   drawBase(ctx)
   const cx = CW / 2
   const cy = CH / 2 - 12
@@ -341,7 +341,7 @@ function drawSkip(ctx: any, color: UnoColor): void {
 }
 
 /** 反转：两只晕头转向的小叶子沿虚线环互相追逐。 */
-function drawReverse(ctx: any, color: UnoColor): void {
+function drawReverse(ctx: CanvasRenderingContext2D, color: UnoColor): void {
   drawBase(ctx)
   const meta = COLOR_META[color]
   const cx = CW / 2
@@ -367,7 +367,7 @@ function drawReverse(ctx: any, color: UnoColor): void {
 }
 
 /** +2：大叶子背着小叶子。 */
-function drawPlus2(ctx: any, color: UnoColor): void {
+function drawPlus2(ctx: CanvasRenderingContext2D, color: UnoColor): void {
   drawBase(ctx)
   const meta = COLOR_META[color]
   const cx = CW / 2
@@ -381,7 +381,7 @@ function drawPlus2(ctx: any, color: UnoColor): void {
 }
 
 /** 变色：四季糖球，中间一张小脸。 */
-function drawWildCandy(ctx: any): void {
+function drawWildCandy(ctx: CanvasRenderingContext2D): void {
   drawBase(ctx)
   const cx = CW / 2
   const cy = CH / 2
@@ -409,23 +409,39 @@ function drawWildCandy(ctx: any): void {
 }
 
 /** +4：四只小叶精围着 +4 蹦跳。 */
-function drawWildFour(ctx: any): void {
-  drawBase(ctx)
+function drawWildFour(ctx: CanvasRenderingContext2D): void {
+  // v4.1：万能 +4 转中性灰（与四色「变」拉开语义；灰叶交替两档防糊）
+  rr(ctx, 0, 0, CW, CH, 22)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.save()
+  ctx.globalAlpha = 0.4
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#c7d2dc' : '#dde5ec'
+    ctx.beginPath()
+    ctx.arc(14 + Math.random() * (CW - 28), 14 + Math.random() * (CH - 28), 2.6, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+  rr(ctx, 7, 7, CW - 14, CH - 14, 16)
+  ctx.strokeStyle = INK
+  ctx.lineWidth = 4
+  ctx.stroke()
   const cx = CW / 2
   const cy = CH / 2
   const offs: Array<[number, number, number]> = [[-46, -44, -0.3], [46, -44, 0.3], [46, 44, 0.25], [-46, 44, -0.25]]
   offs.forEach(([ox, oy, rot], i) => {
-    drawLeafQ(ctx, cx + ox, cy + oy, 40, rot, SEASON_COLORS[i])
+    drawLeafQ(ctx, cx + ox, cy + oy, 40, rot, i % 2 === 0 ? '#9aafc4' : '#b7c4d2')
     drawFace(ctx, cx + ox, cy + oy, 40, { open: i % 2 === 0 })
   })
-  stickerText(ctx, '+4', cx, cy, 56, '#ffffff')
+  stickerText(ctx, '+4', cx, cy, 56, '#6e8093')
   cornersQ(ctx, null, '+4')
 }
 
-/** 牌背：珊瑚红底白波点 + 眨眼大叶脸 + 小屋。 */
-function drawBack(ctx: any): void {
+/** 牌背：浅蓝底白波点 + 眨眼大叶脸 + 小屋（v4：浅蓝底蓝枫叶）。 */
+function drawBack(ctx: CanvasRenderingContext2D): void {
   rr(ctx, 0, 0, CW, CH, 22)
-  ctx.fillStyle = BACK_RED
+  ctx.fillStyle = '#a9cfea'
   ctx.fill()
   ctx.save()
   ctx.globalAlpha = 0.35
@@ -456,11 +472,11 @@ function drawBack(ctx: any): void {
   ctx.closePath()
   ctx.fill()
   ctx.fillRect(cx + s * 0.28, hy - s * 0.52, s * 0.13, s * 0.26)
-  ctx.fillStyle = BACK_RED
+  ctx.fillStyle = BACK_DEEP
   rr(ctx, cx - s * 0.11, hy + s * 0.12, s * 0.22, s * 0.4, s * 0.08)
   ctx.fill()
   ctx.beginPath()
   ctx.arc(cx - s * 0.3, hy + s * 0.12, s * 0.08, 0, Math.PI * 2)
   ctx.fill()
-  stickerText(ctx, '枫叶小屋', cx, CH - 40, 26, '#ffffff')
+  stickerText(ctx, '枫叶小屋', cx, CH - 40, 26, '#3b86b8')
 }

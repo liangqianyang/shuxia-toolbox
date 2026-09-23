@@ -21,8 +21,8 @@
 
 <script setup lang="ts">
 /**
- * 通用游戏规则弹层：底部抽屉 + 分节滚动列表，四个联机游戏共用。
- * 内容由各页面以 sections 传入（heading 可省略），品牌色（奶油白/墨绿）通吃各游戏主题。
+ * 通用游戏规则弹层：底部抽屉 + 分节滚动列表，各游戏共用。
+ * 内容由各页面以 sections 传入（heading 可省略），v4 小清新 chrome（白卡/蓝白）通吃各游戏主题。
  */
 defineProps<{
   visible: boolean
@@ -34,15 +34,17 @@ defineEmits<{ close: [] }>()
 </script>
 
 <style lang="scss" scoped>
-$ink: #21483d;
-$cream: #fff8ed;
-$muted: #9aa79e;
-$maple: #e85d4a;
+// v4 小清新：白底圆顶抽屉 + 蓝 tint 小节标 + 发丝线
+$ink: #2e4154;
+$muted: #a4b3c0;
 
 .rules-mask {
   position: fixed;
-  inset: 0;
-  background: rgba(33, 42, 38, 0.5);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(46, 65, 84, 0.45);
   z-index: 120;
   display: flex;
   align-items: flex-end;
@@ -50,7 +52,7 @@ $maple: #e85d4a;
 .rules-panel {
   width: 100%;
   max-height: 78vh;
-  background: $cream;
+  background: #ffffff;
   border-radius: 32rpx 32rpx 0 0;
   padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
   display: flex;
@@ -64,7 +66,7 @@ $maple: #e85d4a;
 }
 .rules-title {
   font-size: 34rpx;
-  font-weight: 800;
+  font-weight: 600;
   color: $ink;
 }
 .rules-close {
@@ -81,10 +83,10 @@ $maple: #e85d4a;
 }
 .rules-heading {
   display: inline-block;
-  font-size: 27rpx;
-  font-weight: 700;
-  color: #fff;
-  background: $ink;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #3b86b8;
+  background: #e9f4fb;
   border-radius: 10rpx;
   padding: 4rpx 18rpx;
   margin-bottom: 10rpx;
@@ -95,15 +97,15 @@ $maple: #e85d4a;
   margin-bottom: 8rpx;
 }
 .rules-bullet {
-  color: $maple;
-  font-weight: 800;
+  color: #58a6dc;
+  font-weight: 600;
   font-size: 26rpx;
   line-height: 40rpx;
 }
 .rules-text {
   flex: 1;
   font-size: 25rpx;
-  color: #3c4a44;
+  color: $ink;
   line-height: 40rpx;
 }
 .rules-footer {

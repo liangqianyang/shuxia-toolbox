@@ -418,22 +418,30 @@ final class TravelService
         }
 
         $candidates = [];
-        $walking = $this->tryDirectionCandidate($from, $to, 'walking', 'walking', '步行直达');
-        if ($walking !== null && ($roughM <= 2600 || $walking['durationMin'] <= 35)) {
-            $candidates[] = $walking;
+        // 距离剪枝前置：方向 API 是阻塞外呼（worker_num=1 串行），
+        // 只在结果可能入选的距离窗口内发起调用，5 天行程可省掉一半以上的无效请求。
+        // 步行 >3km 必然超 35 分钟（入选条件永不满足），骑行/打车同理按入选窗口收紧。
+        if ($roughM <= 3000) {
+            $walking = $this->tryDirectionCandidate($from, $to, 'walking', 'walking', '步行直达');
+            if ($walking !== null && ($roughM <= 2600 || $walking['durationMin'] <= 35)) {
+                $candidates[] = $walking;
+            }
         }
 
-        $cycling = $this->tryDirectionCandidate($from, $to, 'cycling', 'cycling', '共享单车');
-        if ($cycling === null && $roughM >= 700 && $roughM <= 9000) {
-            $cycling = $this->estimatedCyclingCandidate($roughM);
-        }
-        if ($cycling !== null && $roughM >= 700 && $roughM <= 9000) {
+        if ($roughM >= 700 && $roughM <= 9000) {
+            $cycling = $this->tryDirectionCandidate($from, $to, 'cycling', 'cycling', '共享单车');
+            if ($cycling === null) {
+                // 骑行 API 偶尔不可用时的兜底估计
+                $cycling = $this->estimatedCyclingCandidate($roughM);
+            }
             $candidates[] = $cycling;
         }
 
-        $taxi = $this->tryDirectionCandidate($from, $to, 'driving', 'taxi', '打车');
-        if ($taxi !== null && $roughM >= 1000) {
-            $candidates[] = $taxi;
+        if ($roughM >= 800) {
+            $taxi = $this->tryDirectionCandidate($from, $to, 'driving', 'taxi', '打车');
+            if ($taxi !== null && $roughM >= 1000) {
+                $candidates[] = $taxi;
+            }
         }
 
         $transit = $this->tryTransitRoute($a, $b, $roughM, $cityHint);

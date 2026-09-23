@@ -77,7 +77,8 @@ final class FortuneService
             throw new BizException(422, '月老灵签专问姻缘');
         }
 
-        $question = $question !== null ? trim($question) : null;
+        // 截断在前：question 列 varchar(200)，超长会在过审后的入库处报错；也避免全量原文进 AI prompt
+        $question = $question !== null ? mb_substr(trim($question), 0, 200) : null;
         if ($question === '') {
             $question = null;
         }

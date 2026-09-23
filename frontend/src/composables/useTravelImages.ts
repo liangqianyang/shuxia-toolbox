@@ -47,9 +47,17 @@ export function useTravelImages() {
     cssHeight.value = Math.round((availW * CARD_H) / CARD_W)
   }
 
-  // 最近一次渲染的 trip / 自定义底图，供 saveOne/saveAll 以 2x 重画导出时复用
+  // 最近一次渲染的 trip / 自定义底图；saveOne/saveAll 直接导出预览画布当前像素（1x），
+  // lastTrip 仅作「已渲染过」哨兵，lastCardBgs 供渲染循环取每张卡的自定义底图。
   let lastTrip: Trip | null = null
   let lastCardBgs: Record<number, string> = {}
+
+  // 渲染串行链 + 代际令牌：天/站结构变化会经 400ms 防抖触发 renderAll，AI 规划成功后又
+  // 显式 renderAll 一次——两个渲染循环若并发交错写同一批 canvas，会画错卡/花屏。
+  // 链式排队保证任一时刻只有一轮在画（后到的全量覆盖，最终态恒为最新请求）；
+  // 代际令牌让被更新的请求整轮跳过，避免无意义的重复绘制。
+  let renderChain: Promise<void> = Promise.resolve()
+  let renderToken = 0
 
   /**
    * 在指定节点上以 scale 倍率绘制一张卡。
@@ -109,27 +117,36 @@ export function useTravelImages() {
    * renderCard 会 reject「找不到 canvas 节点」，点击「生成攻略图」就毫无反应。
    * cardBgs：按卡片下标传「自定义底图临时路径」，未传则用内置主题。
    */
-  async function renderAll(trip: Trip, component: unknown, cardBgs?: Record<number, string>): Promise<void> {
-    computeCss()
-    syncCardsForTrip(cards, trip)
-    if (!rendered.value) {
-      rendered.value = true
-    }
-    await nextTick()
-    renderErrors.value = []
-    lastTrip = trip
-    lastCardBgs = cardBgs ?? {}
-    for (let i = 0; i < cards.length; i++) {
-      loadingIndex.value = i
-      try {
-        await renderCard(i, cards[i], trip, component, lastCardBgs[i] ?? null)
-      } catch (err) {
-        // 单张失败不阻断后续，记录供 UI 提示
-        renderErrors.value.push(cards[i].key)
-        console.warn(`[useTravelImages] 卡片 ${cards[i].key} 渲染失败:`, err)
+  function renderAll(trip: Trip, component: unknown, cardBgs?: Record<number, string>): Promise<void> {
+    const token = ++renderToken
+    const run = async (): Promise<void> => {
+      if (token !== renderToken) return // 已有更新一代的渲染请求排队，本轮整轮跳过
+      computeCss()
+      syncCardsForTrip(cards, trip)
+      if (!rendered.value) {
+        rendered.value = true
       }
+      await nextTick()
+      // 卡片列表刚被重建（插 handbook/daily-poster 会让下标整体位移），旧的下标→canvas 缓存作废
+      nodes.value = new Map()
+      renderErrors.value = []
+      lastTrip = trip
+      lastCardBgs = cardBgs ?? {}
+      for (let i = 0; i < cards.length; i++) {
+        loadingIndex.value = i
+        try {
+          await renderCard(i, cards[i], trip, component, lastCardBgs[i] ?? null)
+        } catch (err) {
+          // 单张失败不阻断后续，记录供 UI 提示
+          renderErrors.value.push(cards[i].key)
+          console.warn(`[useTravelImages] 卡片 ${cards[i].key} 渲染失败:`, err)
+        }
+      }
+      loadingIndex.value = cards.length
     }
-    loadingIndex.value = cards.length
+    const result = renderChain.then(run, run)
+    renderChain = result
+    return result
   }
 
   /** 保存单张到相册（直接导出预览画布当前像素，稳定可用）；授权被拒引导去设置页 */
