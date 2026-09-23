@@ -298,9 +298,6 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
     for (const row of state.clearingRows) {
       drawClearBand(ctx, layout, boardY + row * cell + cell / 2, true, p)
     }
-    for (const col of state.clearingCols) {
-      drawClearBand(ctx, layout, boardX + col * cell + cell / 2, false, p)
-    }
   }
 
   // 幽灵块（描边样式——半透明填充在深底上发 muddy,描边更干净）+ 活动块

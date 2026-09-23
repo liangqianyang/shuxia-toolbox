@@ -1712,41 +1712,26 @@ function testTetris() {
     assert(xCount < mCount, '斜块 X 出现频率低于 M（加权四选一）')
   }
 
-  // 单格闪块：消列算 1 行 + 整列清空；满行优先于消列
+  // 单格闪块（经典 Monomino）：无消列特技——不成行就普通锁定；补满行走正常消行
   {
     const base = createGame(1, rngHigh)
-    const board = base.board.slice()
-    for (let y = 6; y < 10; y++) {
-      for (let x = 0; x < 10; x++) {
-        if (x !== 4) board[y * 10 + x] = 'T'
-      }
-    }
-    const withM: import('@/pages-games/utils/tetris').TetrisState = {
-      ...base,
-      board,
-      active: { id: 'M', x: 4, y: 3, rot: 0 },
-      phase: 'playing',
-    }
-    const dropped = applyAction(withM, { t: 'hardDrop' })
-    assert(dropped.phase === 'clearing' && dropped.clearingCols.includes(4), '单格闪块进入消列相位')
-    assert(dropped.events.some((e) => e.t === 'cleared'), '消列产生 cleared 事件')
-    const ticked = applyAction(dropped, { t: 'tick', dtMs: CLEAR_FLASH_MS })
-    assert(ticked.lines === base.lines + 1, '消列计 1 行')
-    assert(ticked.board.slice(4 * 10, 5 * 10).every((c) => c === null), '第 4 列整列清空')
+    // 不成行：落底后原格留存（价值 = 钻进常规块进不去的单格缺口）
+    const plain = applyAction({ ...base, active: { id: 'M', x: 0, y: 3, rot: 0 } }, { t: 'hardDrop' })
+    assert(plain.phase === 'playing' && plain.board[19 * 10 + 0] === 'M', '闪块不成行时普通锁定留存')
+    assert(!plain.events.some((e) => e.t === 'cleared'), '普通锁定不产生 cleared 事件')
+    assert(plain.lines === base.lines, '普通锁定不计行')
 
-    // 满行优先：补完整行时走行消除而非消列
+    // 精准补行：整行只差一格时补上即正常消行
     const rowFull = base.board.slice()
     for (let x = 0; x < 10; x++) {
       if (x !== 4) rowFull[19 * 10 + x] = 'T'
     }
-    const withM2: import('@/pages-games/utils/tetris').TetrisState = {
-      ...base,
-      board: rowFull,
-      active: { id: 'M', x: 4, y: 3, rot: 0 },
-      phase: 'playing',
-    }
-    const dropped2 = applyAction(withM2, { t: 'hardDrop' })
-    assert(dropped2.phase === 'clearing' && dropped2.clearingRows.includes(19) && dropped2.clearingCols.length === 0, '满行优先于消列')
+    const dropped = applyAction({ ...base, board: rowFull, active: { id: 'M', x: 4, y: 3, rot: 0 } }, { t: 'hardDrop' })
+    assert(dropped.phase === 'clearing' && dropped.clearingRows.includes(19), '补满行走行消除相位')
+    assert(dropped.events.some((e) => e.t === 'cleared'), '补行产生 cleared 事件')
+    const ticked = applyAction(dropped, { t: 'tick', dtMs: CLEAR_FLASH_MS })
+    assert(ticked.lines === base.lines + 1, '补行计 1 行')
+    assert(ticked.board.slice(19 * 10, 20 * 10).every((c) => c === null), '第 19 行已塌落清空')
   }
 
   // 二格多米诺：贴墙旋转的踢墙

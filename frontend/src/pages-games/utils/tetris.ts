@@ -68,8 +68,6 @@ export interface TetrisState {
   phase: TetrisPhase
   /** clearing 相位的满行行号。 */
   clearingRows: number[]
-  /** clearing 相位的待消列号（仅单格闪块使用，与满行互斥）。 */
-  clearingCols: number[]
   clearTimerMs: number
   /** 距下一次重力下落的累计毫秒。 */
   gravityMs: number
@@ -320,7 +318,6 @@ export function createGame(startLevel: number, rng: () => number = Math.random, 
     speedMode,
     phase: 'playing',
     clearingRows: [],
-    clearingCols: [],
     clearTimerMs: 0,
     gravityMs: 0,
     lockMs: 0,
@@ -403,28 +400,7 @@ function lockPiece(state: TetrisState, events: TetrisEvent[]): TetrisState {
   }
 
   if (clearingRows.length === 0) {
-    // 单格闪块：没有满行时消除所在列（满行优先——补完整行的直觉优先于消列特效）。
-    if (active.id === 'M') {
-      const col = active.x
-      const points = LINE_SCORES[1] * state.level
-      const lines = state.lines + 1
-      const level = levelFrom(state.startLevel, lines)
-      const colEvents: TetrisEvent[] = [...lockedEvents, { t: 'cleared', rows: 1, points }]
-      const colFinalEvents: TetrisEvent[] = level > state.level ? [...colEvents, { t: 'levelUp', level }] : colEvents
-      return {
-        ...state,
-        board,
-        active: null,
-        score: state.score + points,
-        lines,
-        level,
-        phase: 'clearing',
-        clearingRows: [],
-        clearingCols: [col],
-        clearTimerMs: CLEAR_FLASH_MS,
-        events: colFinalEvents,
-      }
-    }
+    // 单格闪块（M）= 经典 Monomino：没有消列特技，价值只在钻进单格缺口（补满行走下方正常消行）。
     return spawnNext({ ...state, board, active: null }, lockedEvents)
   }
 
@@ -459,17 +435,6 @@ function collapseRows(state: TetrisState, events: TetrisEvent[]): TetrisState {
     targetY--
   }
   return spawnNext({ ...state, board, clearingRows: [], clearTimerMs: 0 }, events)
-}
-
-/** 单格闪块的消列收尾：整列清空（含闪块本体），其余列原样。 */
-function collapseCols(state: TetrisState, events: TetrisEvent[]): TetrisState {
-  const board = state.board.slice()
-  for (let y = 0; y < BOARD_H; y++) {
-    for (const col of state.clearingCols) {
-      board[y * BOARD_W + col] = null
-    }
-  }
-  return spawnNext({ ...state, board, clearingCols: [], clearTimerMs: 0 }, events)
 }
 
 export function applyAction(state: TetrisState, action: GameAction): TetrisState {
@@ -569,7 +534,6 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
       if (state.phase === 'clearing') {
         const clearTimerMs = state.clearTimerMs - dtMs
         if (clearTimerMs > 0) return { ...state, clearTimerMs, events: [] }
-        if (state.clearingCols.length > 0) return collapseCols(state, [])
         return collapseRows(state, [])
       }
       if (!state.active) return state

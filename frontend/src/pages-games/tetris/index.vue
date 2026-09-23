@@ -83,15 +83,15 @@
 
       <view class="tetris__card tetris__best">
         <view class="tetris__best-item">
-          <text class="tetris__best-num">{{ best ? formatScore(best.score) : '0' }}</text>
+          <text class="tetris__best-num">{{ bestView ? formatScore(bestView.score) : '0' }}</text>
           <text class="tetris__best-label">最高分</text>
         </view>
         <view class="tetris__best-item">
-          <text class="tetris__best-num">{{ best ? best.lines : 0 }}</text>
+          <text class="tetris__best-num">{{ bestView ? bestView.lines : 0 }}</text>
           <text class="tetris__best-label">消行</text>
         </view>
         <view class="tetris__best-item">
-          <text class="tetris__best-num">{{ best ? best.level : 1 }}</text>
+          <text class="tetris__best-num">{{ bestView ? bestView.level : 1 }}</text>
           <text class="tetris__best-label">最高等级</text>
         </view>
         <view v-if="gameRankEnabled" class="tetris__rank-badge">
@@ -367,6 +367,15 @@ const myAvatar = computed(() => {
 const mineRankText = computed(() => {
   const mine = leaderboard.value?.mine
   return mine ? `第 ${mine.rank} 名` : '未上榜'
+})
+
+/** 统计行数据源：云端 mine 优先（换设备/清缓存后本地 best 会丢），本地 best 兜底；取分高者，消行/等级与最高分同属一局 */
+const bestView = computed<BestRecord | null>(() => {
+  const mine = leaderboard.value?.mine
+  const remote: BestRecord | null = mine ? { score: mine.score, lines: mine.lines, level: mine.level } : null
+  if (!best.value) return remote
+  if (!remote) return best.value
+  return remote.score > best.value.score ? remote : best.value
 })
 
 async function loadLeaderboard(): Promise<void> {
