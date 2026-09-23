@@ -72,7 +72,7 @@ final class XiangqiRoomService
     {
         XiangqiRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?XiangqiRoom {
             $room = new XiangqiRoom();
             $room->code = $this->newCode();
             $room->red_user_id = $userId;
@@ -104,7 +104,7 @@ final class XiangqiRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             if ($room->red_user_id === $userId || $room->blue_user_id === $userId) {
                 $this->touchSeenAt($room, $userId);
@@ -160,7 +160,7 @@ final class XiangqiRoomService
         if (! isset($map[$pick])) {
             throw new BizException(422, '出拳不正确');
         }
-        $room = Db::transaction(function () use ($code, $userId, $map, $pick) {
+        $room = Db::transaction(function () use ($code, $userId, $map, $pick): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $role = $this->seatedRole($room, $userId);
@@ -199,7 +199,7 @@ final class XiangqiRoomService
      */
     public function move(string $code, int $userId, int $fr, int $fc, int $tr, int $tc): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $fr, $fc, $tr, $tc) {
+        $room = Db::transaction(function () use ($code, $userId, $fr, $fc, $tr, $tc): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $role = $this->seatedRole($room, $userId);
@@ -279,7 +279,7 @@ final class XiangqiRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?XiangqiRoom {
                     $room = $this->lockByCode((string) $code);
                     if (! in_array($room->status, ['rps', 'playing'], true)
                         || $room->turn_deadline_at === null
@@ -356,7 +356,7 @@ final class XiangqiRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -394,7 +394,7 @@ final class XiangqiRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             if ($this->seatedRole($room, $userId) === null) {
                 throw new BizException(403, '你不是本局玩家');
@@ -432,7 +432,7 @@ final class XiangqiRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?XiangqiRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null || $room->status === 'finished' || $room->status === 'closed') {
@@ -527,7 +527,7 @@ final class XiangqiRoomService
             }
         }
         foreach ($trays as $side => $types) {
-            usort($types, static fn (string $a, string $b): int => ($order[$a] ?? 99) <=> ($order[$b] ?? 99));
+            usort($types, static fn(string $a, string $b): int => ($order[$a] ?? 99) <=> ($order[$b] ?? 99));
             $trays[$side] = $types;
         }
         return $trays;
@@ -543,7 +543,7 @@ final class XiangqiRoomService
     /** 写操作提交后向房间内 WS 连接广播最新状态（每个连接按自己视角序列化）。 */
     private function broadcast(XiangqiRoom $room): void
     {
-        $this->pusher->pushRoom((string) $room->code, fn (int $userId): array => $this->serialize($room, $userId));
+        $this->pusher->pushRoom((string) $room->code, fn(int $userId): array => $this->serialize($room, $userId));
     }
 
     /** 记录最近事件（播报条 + 音效用），seq 自增。 */

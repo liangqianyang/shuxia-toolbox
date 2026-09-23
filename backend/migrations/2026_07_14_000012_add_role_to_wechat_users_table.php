@@ -9,7 +9,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('wechat_users', function (Blueprint $table) {
+        Schema::table('wechat_users', function (Blueprint $table): void {
             $table->string('role', 20)->default('user')->after('avatar_url')->comment('用户角色：user/admin');
             $table->index('role', 'idx_wechat_users_role');
         });
@@ -17,7 +17,7 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::table('wechat_users', function (Blueprint $table) {
+        Schema::table('wechat_users', function (Blueprint $table): void {
             $table->dropIndex('idx_wechat_users_role');
             $table->dropColumn('role');
         });

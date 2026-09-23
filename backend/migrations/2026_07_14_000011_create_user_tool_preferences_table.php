@@ -10,7 +10,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('user_tool_preferences', function (Blueprint $table) {
+        Schema::create('user_tool_preferences', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->unsignedBigInteger('user_id')->comment('用户 id');
             $table->string('tool_key', 64)->comment('工具标识');

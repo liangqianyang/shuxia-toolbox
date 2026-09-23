@@ -50,6 +50,7 @@ No test framework is configured.
 
 ### Backend — PHP 8.4 + Hyperf 3.2 (beta) on Swoole
 
+- **PHP 类型声明强制（`app/`、`migrations/`、`config/` 全部后端代码）**：类常量（PHP 8.3+ typed constants，如 `private const string AI_ENABLED_KEY = 'feature.ai_enabled'`）、类属性、函数/方法/闭包/箭头函数的**参数与返回值**一律写明类型；新建代码直接带全类型，触碰存量代码时顺手补齐。两个注意：①闭包返回类型写在 `use (...)` **之后**——`function () use ($x): ?XxxRoom {` 合法，`function (): ?XxxRoom use ($x)` 语法错误；②**例外**——Hyperf WS 契约回调 `onOpen/onMessage/onClose` 的 `$server/$request/$frame` 保持无类型（实现里加 Swoole 类型声明会 fatal）。局部变量 PHP 没有类型语法，不适用。
 - Entry point `bin/hyperf.php`; Swoole HTTP server on port 9501 (env `SERVER_PORT`).
 - Routes defined in `config/routes.php`: `GET /health`, `GET /api/health`, `GET /api/beads/palettes`, `POST /api/beads/estimate`, `GET /api/travel/geocode` (Tencent suggestion proxy), `POST /api/travel/plan` (the main 旅游攻略 route). `plan` input: `origin`(可选)/`destination`/`travel_mode`(walking|cycling|driving|transit)/`days`/`daily_hours`/`preferences`. `plan` output: `{title, days[stops{...,lng,lat,travelToNext}], food[{name,shop,dishes,note}], tips[], xhs{title,body,tags}, routeMapImage, poiMapImage}`.
 - Response envelope: `{code, message, data}` with code 0 = success, 422 = validation error.

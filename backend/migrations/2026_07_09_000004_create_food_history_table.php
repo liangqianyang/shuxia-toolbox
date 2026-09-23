@@ -10,7 +10,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('food_history', function (Blueprint $table) {
+        Schema::create('food_history', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->unsignedBigInteger('user_id')->default(0)->comment('所属用户 id');
             $table->string('client_id', 120)->default('')->comment('前端生成的条目 id');

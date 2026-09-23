@@ -114,7 +114,7 @@ final class LudoRule
         foreach ($opening['rolls'] as $value) {
             $best = max($best, (int) $value);
         }
-        $winners = array_keys(array_filter($opening['rolls'], static fn($v) => (int) $v === $best));
+        $winners = array_keys(array_filter($opening['rolls'], static fn(mixed $v): bool => (int) $v === $best));
 
         if (count($winners) === 1) {
             $winner = (int) $winners[0];
@@ -410,7 +410,7 @@ final class LudoRule
                 $activeTail[] = $entry;
             }
         }
-        $cmp = static fn($a, $b) => [$b['done'], $b['progress'], $a['seat']] <=> [$a['done'], $a['progress'], $b['seat']];
+        $cmp = static fn(array $a, array $b): int => [$b['done'], $b['progress'], $a['seat']] <=> [$a['done'], $a['progress'], $b['seat']];
         usort($activeTail, $cmp);
         usort($leftTail, $cmp);
         foreach ([...$activeTail, ...$leftTail] as $item) {

@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('ludo_rooms', function (Blueprint $table) {
+        Schema::create('ludo_rooms', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->char('code', 4)->default('')->comment('4 位房间码');
             $table->string('status', 16)->default('waiting')->comment('waiting/playing/finished/closed');

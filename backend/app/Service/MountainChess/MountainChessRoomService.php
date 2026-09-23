@@ -12,6 +12,7 @@ use App\Service\WechatContentSecurityService;
 use App\Service\WechatUserService;
 use RuntimeException;
 use Hyperf\DbConnection\Db;
+use Hyperf\Database\Model\Builder;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\StdoutLoggerInterface;
 
@@ -93,7 +94,7 @@ final class MountainChessRoomService
     {
         JunqiRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?JunqiRoom {
             $room = new JunqiRoom();
             $room->code = $this->newCode();
             $room->red_user_id = $userId;
@@ -127,7 +128,7 @@ final class MountainChessRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?JunqiRoom {
             $room = $this->lockByCode($code);
             if ($room->red_user_id === $userId || $room->blue_user_id === $userId) {
                 $this->touchSeenAt($room, $userId);
@@ -177,7 +178,7 @@ final class MountainChessRoomService
      */
     public function layout(string $code, int $userId, array $layout): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $layout) {
+        $room = Db::transaction(function () use ($code, $userId, $layout): ?JunqiRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $role = $this->seatedRole($room, $userId);
@@ -234,7 +235,7 @@ final class MountainChessRoomService
         if (! isset($map[$pick])) {
             throw new BizException(422, '出拳不正确');
         }
-        $room = Db::transaction(function () use ($code, $userId, $map, $pick) {
+        $room = Db::transaction(function () use ($code, $userId, $map, $pick): ?JunqiRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $role = $this->seatedRole($room, $userId);
@@ -273,7 +274,7 @@ final class MountainChessRoomService
      */
     public function move(string $code, int $userId, int $fr, int $fc, int $tr, int $tc): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $fr, $fc, $tr, $tc) {
+        $room = Db::transaction(function () use ($code, $userId, $fr, $fc, $tr, $tc): ?JunqiRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $role = $this->seatedRole($room, $userId);
@@ -352,7 +353,7 @@ final class MountainChessRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?JunqiRoom {
                     $room = $this->lockByCode((string) $code);
                     if (! in_array($room->status, ['layout', 'rps', 'playing'], true)
                         || $room->turn_deadline_at === null
@@ -430,7 +431,7 @@ final class MountainChessRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?JunqiRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -469,7 +470,7 @@ final class MountainChessRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?JunqiRoom {
             $room = $this->lockByCode($code);
             if ($this->seatedRole($room, $userId) === null) {
                 throw new BizException(403, '你不是本局玩家');
@@ -508,7 +509,7 @@ final class MountainChessRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?JunqiRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null || $room->status === 'finished' || $room->status === 'closed') {
@@ -536,14 +537,14 @@ final class MountainChessRoomService
     public function myRooms(int $userId): array
     {
         $rooms = JunqiRoom::query()
-            ->where(function ($q) use ($userId): void {
+            ->where(function (Builder $q) use ($userId): void {
                 $q->where('red_user_id', $userId)->orWhere('blue_user_id', $userId);
             })
             ->whereIn('status', ['waiting', 'layout', 'rps', 'playing'])
             ->orderByDesc('updated_at')
             ->limit(20)
             ->get(['code', 'status', 'updated_at']);
-        return $rooms->map(static fn($r): array => [
+        return $rooms->map(static fn(JunqiRoom $r): array => [
             'code' => (string) $r->code,
             'status' => (string) $r->status,
             'updatedAt' => (string) $r->updated_at,

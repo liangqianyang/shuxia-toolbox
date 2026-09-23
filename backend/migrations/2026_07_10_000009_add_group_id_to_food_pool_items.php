@@ -9,14 +9,14 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('food_pool_items', function (Blueprint $table) {
+        Schema::table('food_pool_items', function (Blueprint $table): void {
             $table->string('group_id', 80)->default('default')->after('client_id')->comment('所属饭池分组 client_id');
         });
     }
 
     public function down(): void
     {
-        Schema::table('food_pool_items', function (Blueprint $table) {
+        Schema::table('food_pool_items', function (Blueprint $table): void {
             $table->dropColumn('group_id');
         });
     }

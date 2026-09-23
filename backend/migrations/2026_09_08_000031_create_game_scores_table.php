@@ -12,7 +12,7 @@ return new class extends Migration {
     public function up(): void
     {
         // 通用单机游戏成绩表（game_key 维度，每用户保最好）——俄罗斯方块是首个使用者，后续单机游戏复用。
-        Schema::create('game_scores', function (Blueprint $table) {
+        Schema::create('game_scores', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->string('game_key', 32)->comment('游戏标识（tetris…）');
             $table->unsignedBigInteger('user_id')->comment('用户 id');

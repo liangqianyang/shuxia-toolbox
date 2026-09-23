@@ -10,7 +10,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('travel_shares', function (Blueprint $table) {
+        Schema::create('travel_shares', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->char('code', 8)->default('')->comment('8 位分享码');
             $table->string('title', 160)->default('')->comment('行程标题');

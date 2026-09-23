@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('fortune_draws', function (Blueprint $table) {
+        Schema::create('fortune_draws', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->unsignedBigInteger('user_id')->comment('微信用户 id');
             $table->string('deck', 16)->comment('签种：guanyin/guandi/yuelao/book');
@@ -25,7 +25,7 @@ return new class extends Migration {
             $table->comment('每日灵签抽签记录（兼作每日三签配额计数）');
         });
 
-        Schema::create('fortune_share_bonus', function (Blueprint $table) {
+        Schema::create('fortune_share_bonus', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->unsignedBigInteger('user_id')->comment('微信用户 id');
             $table->date('bonus_date')->comment('加次生效日期');

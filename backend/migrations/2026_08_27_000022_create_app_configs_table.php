@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('app_configs', function (Blueprint $table) {
+        Schema::create('app_configs', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->string('config_key', 64)->unique()->comment('配置键，如 feature.ai_enabled');
             $table->string('config_value', 255)->default('')->comment('配置值（布尔存 "1"/"0"）');

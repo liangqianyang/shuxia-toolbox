@@ -307,7 +307,7 @@ final class TravelService
     private function mergeLockedStops(array $day, array $lockedStops): array
     {
         $stops = is_array($day['stops'] ?? null) ? array_values($day['stops']) : [];
-        usort($lockedStops, fn($a, $b) => (int) ($a['slot'] ?? 0) <=> (int) ($b['slot'] ?? 0));
+        usort($lockedStops, fn(array $a, array $b): int => (int) ($a['slot'] ?? 0) <=> (int) ($b['slot'] ?? 0));
         foreach ($lockedStops as $item) {
             if (! is_array($item)) {
                 continue;

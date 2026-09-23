@@ -17,14 +17,14 @@ use Hyperf\DbConnection\Db;
  */
 final class FeatureFlagService
 {
-    private const AI_ENABLED_KEY = 'feature.ai_enabled';
+    private const string AI_ENABLED_KEY = 'feature.ai_enabled';
 
-    private const UNO_CHAT_TEXT_KEY = 'feature.uno_chat_text';
+    private const string UNO_CHAT_TEXT_KEY = 'feature.uno_chat_text';
 
-    private const ADVENTURE_CHAT_TEXT_KEY = 'feature.adventure_chat_text';
+    private const string ADVENTURE_CHAT_TEXT_KEY = 'feature.adventure_chat_text';
 
     /** 游戏榜单总开关（俄罗斯方块/推箱子等所有 game_scores 榜单）：默认关，运营台打开才可见。 */
-    private const GAME_RANK_ENABLED_KEY = 'feature.game_rank_enabled';
+    private const string GAME_RANK_ENABLED_KEY = 'feature.game_rank_enabled';
 
     public function aiEnabled(): bool
     {

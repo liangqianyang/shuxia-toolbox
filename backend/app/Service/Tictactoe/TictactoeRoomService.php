@@ -56,7 +56,7 @@ final class TictactoeRoomService
     {
         TictactoeRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?TictactoeRoom {
             $room = new TictactoeRoom();
             $room->code = $this->newCode();
             $room->x_user_id = $userId;
@@ -88,7 +88,7 @@ final class TictactoeRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             if ($room->x_user_id === $userId || $room->o_user_id === $userId) {
                 $this->touchSeenAt($room, $userId);
@@ -142,7 +142,7 @@ final class TictactoeRoomService
         if (! isset($map[$pick])) {
             throw new BizException(422, '出拳不正确');
         }
-        $room = Db::transaction(function () use ($code, $userId, $map, $pick) {
+        $room = Db::transaction(function () use ($code, $userId, $map, $pick): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $mark = $this->seatedMark($room, $userId);
@@ -180,7 +180,7 @@ final class TictactoeRoomService
      */
     public function move(string $code, int $userId, int $index): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $index) {
+        $room = Db::transaction(function () use ($code, $userId, $index): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             $this->applyDueIfNeeded($room, $userId);
             $mark = $this->seatedMark($room, $userId);
@@ -253,7 +253,7 @@ final class TictactoeRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?TictactoeRoom {
                     $room = $this->lockByCode((string) $code);
                     if (! in_array($room->status, ['rps', 'playing'], true)
                         || $room->turn_deadline_at === null
@@ -330,7 +330,7 @@ final class TictactoeRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             $mark = $this->seatedMark($room, $userId);
             if ($mark === null) {
@@ -368,7 +368,7 @@ final class TictactoeRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             if ($this->seatedMark($room, $userId) === null) {
                 throw new BizException(403, '你不是本局玩家');
@@ -408,7 +408,7 @@ final class TictactoeRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?TictactoeRoom {
             $room = $this->lockByCode($code);
             $mark = $this->seatedMark($room, $userId);
             if ($mark === null || $room->status === 'finished' || $room->status === 'closed') {
@@ -501,7 +501,7 @@ final class TictactoeRoomService
     /** 写操作提交后向房间内 WS 连接广播最新状态。 */
     private function broadcast(TictactoeRoom $room): void
     {
-        $this->pusher->pushRoom((string) $room->code, fn (int $userId): array => $this->serialize($room, $userId));
+        $this->pusher->pushRoom((string) $room->code, fn(int $userId): array => $this->serialize($room, $userId));
     }
 
     /** 记录最近事件，seq 自增。 */

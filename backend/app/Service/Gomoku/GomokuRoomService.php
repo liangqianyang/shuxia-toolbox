@@ -69,7 +69,7 @@ final class GomokuRoomService
     {
         GomokuRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?GomokuRoom {
             $room = new GomokuRoom();
             $room->code = $this->newCode();
             $room->black_user_id = $userId;
@@ -95,7 +95,7 @@ final class GomokuRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?GomokuRoom {
             $room = $this->lockByCode($code);
             if ($room->black_user_id === $userId || $room->white_user_id === $userId) {
                 $this->touchSeenAt($room, $userId);
@@ -151,7 +151,7 @@ final class GomokuRoomService
         if (! isset($map[$pick])) {
             throw new BizException(422, '出拳不正确');
         }
-        $room = Db::transaction(function () use ($code, $userId, $map, $pick) {
+        $room = Db::transaction(function () use ($code, $userId, $map, $pick): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $this->applyDueRpsIfNeeded($room, $userId);
             $role = $this->requireRpsRole($room, $userId);
@@ -186,7 +186,7 @@ final class GomokuRoomService
         if (! in_array($color, ['black', 'white'], true)) {
             throw new BizException(422, '颜色不正确');
         }
-        $room = Db::transaction(function () use ($code, $userId, $color) {
+        $room = Db::transaction(function () use ($code, $userId, $color): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $this->applyDueRpsIfNeeded($room, $userId);
             $role = $this->requireRpsRole($room, $userId);
@@ -224,7 +224,7 @@ final class GomokuRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?GomokuRoom {
                     $room = $this->lockByCode((string) $code);
                     if ($room->status !== 'rps' || $room->turn_deadline_at === null
                         || strtotime((string) $room->turn_deadline_at) > time()) {
@@ -301,7 +301,7 @@ final class GomokuRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -339,7 +339,7 @@ final class GomokuRoomService
      */
     public function move(string $code, int $userId, int $x, int $y): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $x, $y) {
+        $room = Db::transaction(function () use ($code, $userId, $x, $y): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -400,7 +400,7 @@ final class GomokuRoomService
      */
     public function requestUndo(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -438,7 +438,7 @@ final class GomokuRoomService
      */
     public function respondUndo(string $code, int $userId, bool $accept): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $accept) {
+        $room = Db::transaction(function () use ($code, $userId, $accept): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null) {
@@ -492,7 +492,7 @@ final class GomokuRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?GomokuRoom {
             $room = $this->lockByCode($code);
             if ($this->seatedRole($room, $userId) === null) {
                 throw new BizException(403, '你不是本局玩家');
@@ -531,7 +531,7 @@ final class GomokuRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?GomokuRoom {
             $room = $this->lockByCode($code);
             $role = $this->seatedRole($room, $userId);
             if ($role === null || $room->status === 'finished' || $room->status === 'closed') {

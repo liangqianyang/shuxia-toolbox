@@ -79,7 +79,7 @@ class TravelController extends AbstractController
         // 每日游玩时长：支持按天数组（[8,6,7]）或单值；非法/空回退 [8]
         $dhRaw = $request->input('daily_hours', 8);
         $dailyHours = is_array($dhRaw)
-            ? array_values(array_filter(array_map(fn($v) => (float) $v, $dhRaw), fn($v) => $v > 0))
+            ? array_values(array_filter(array_map(fn(mixed $v): float => (float) $v, $dhRaw), fn(mixed $v): bool => $v > 0))
             : [(float) $dhRaw];
         if ($dailyHours === []) {
             $dailyHours = [8.0];

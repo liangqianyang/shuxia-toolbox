@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('jungle_rooms', function (Blueprint $table) {
+        Schema::create('jungle_rooms', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->char('code', 4)->default('')->comment('4 位房间码');
             $table->unsignedBigInteger('red_user_id')->default(0)->comment('红方用户 id（创建者临时标签），0=空位');

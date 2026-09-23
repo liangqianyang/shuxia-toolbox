@@ -12,15 +12,15 @@ use Hyperf\Database\Exception\QueryException;
 /** 单机游戏成绩：提交（保最好）与排行榜。防刷是宽松合理性校验而非安全边界——成绩由客户端上报，只挡明显编造值。 */
 final class GameScoreService
 {
-    public const GAME_TETRIS = 'tetris';
-    public const GAME_SOKOBAN = 'sokoban';
+    public const string GAME_TETRIS = 'tetris';
+    public const string GAME_SOKOBAN = 'sokoban';
 
-    private const MAX_SCORE = 10000000;
-    private const MAX_LINES = 10000;
-    private const MAX_LEVEL = 30;
-    private const MAX_START_LEVEL = 15;
-    private const SOKOBAN_MAX_LEVELS = 100;
-    private const SOKOBAN_MAX_STARS = 300;
+    private const int MAX_SCORE = 10000000;
+    private const int MAX_LINES = 10000;
+    private const int MAX_LEVEL = 30;
+    private const int MAX_START_LEVEL = 15;
+    private const int SOKOBAN_MAX_LEVELS = 100;
+    private const int SOKOBAN_MAX_STARS = 300;
 
     /**
      * 提交俄罗斯方块成绩：校验合理性 → 保最好（新分更高才更新）→ 返回最好成绩与名次。

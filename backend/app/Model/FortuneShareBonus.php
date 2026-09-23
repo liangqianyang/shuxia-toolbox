@@ -14,7 +14,7 @@ namespace App\Model;
  */
 final class FortuneShareBonus extends Model
 {
-    public const UPDATED_AT = null;
+    public const ?string UPDATED_AT = null;
 
     protected ?string $table = 'fortune_share_bonus';
 

@@ -10,7 +10,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('wechat_users', function (Blueprint $table) {
+        Schema::create('wechat_users', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->string('openid', 80)->default('')->comment('微信 openid');
             $table->string('unionid', 80)->default('')->comment('微信 unionid，无则空串');

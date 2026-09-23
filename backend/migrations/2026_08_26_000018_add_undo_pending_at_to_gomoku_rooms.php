@@ -9,14 +9,14 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('gomoku_rooms', function (Blueprint $table) {
+        Schema::table('gomoku_rooms', function (Blueprint $table): void {
             $table->datetime('undo_pending_at')->nullable()->comment('悔棋请求发起时间，超过 5 秒未处理视为拒绝')->after('undo_pending');
         });
     }
 
     public function down(): void
     {
-        Schema::table('gomoku_rooms', function (Blueprint $table) {
+        Schema::table('gomoku_rooms', function (Blueprint $table): void {
             $table->dropColumn('undo_pending_at');
         });
     }

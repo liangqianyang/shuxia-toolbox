@@ -328,7 +328,7 @@ final class AmapMapProvider implements MapProvider
                     'distanceM' => (int) ($line['distance'] ?? 0),
                     'durationMin' => (int) ceil(((int) ($line['duration'] ?? 0)) / 60),
                     'price' => isset($line['price']) ? (float) $line['price'] : null,
-                ], static fn($value) => $value !== null && $value !== '');
+                ], static fn(mixed $value): bool => $value !== null && $value !== '');
             }
         }
 
@@ -341,7 +341,7 @@ final class AmapMapProvider implements MapProvider
             'durationMin' => (int) ceil(((int) ($route['duration'] ?? 0)) / 60),
             'walkingM' => $walkingM,
             'transferCount' => max(0, count($lines) - 1),
-            'summary' => implode(' → ', array_map(static fn($line) => $line['title'], $lines)),
+            'summary' => implode(' → ', array_map(static fn(array $line): string => $line['title'], $lines)),
             'lines' => $lines,
         ];
     }

@@ -178,7 +178,7 @@ final class AdventureRule
             $sums[(int) $seatKey] = $sum;
             $best = max($best, $sum);
         }
-        $winners = array_keys(array_filter($sums, static fn($s) => $s === $best));
+        $winners = array_keys(array_filter($sums, static fn(int $s): bool => $s === $best));
 
         if (count($winners) === 1) {
             $winner = (int) $winners[0];
@@ -925,7 +925,7 @@ final class AdventureRule
                 break;
             case 'landslide':
                 if ($active !== []) {
-                    usort($active, static fn($x, $y) => [(int) $state['positions'][$y], $x] <=> [(int) $state['positions'][$x], $y]);
+                    usort($active, static fn(int $x, int $y): int => [(int) $state['positions'][$y], $x] <=> [(int) $state['positions'][$x], $y]);
                     $first = $active[0];
                     $last = $active[count($active) - 1];
                     $events = array_merge($events, self::applyDisplacement($state, $seats, $first, -5, 'weather'));
@@ -1044,7 +1044,7 @@ final class AdventureRule
                 $activeTail[] = $entry;
             }
         }
-        $cmp = static fn($a, $b) => [$b['pos'], $a['seat']] <=> [$a['pos'], $b['seat']];
+        $cmp = static fn(array $a, array $b): int => [$b['pos'], $a['seat']] <=> [$a['pos'], $b['seat']];
         usort($activeTail, $cmp);
         usort($leftTail, $cmp);
         foreach ([...$activeTail, ...$leftTail] as $item) {

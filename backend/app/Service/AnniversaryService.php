@@ -15,15 +15,15 @@ use Hyperf\DbConnection\Db;
 /** 纪念日工具：用户事件的云同步、校验、格式化，以及多人共享（成员/邀请/每人一份偏好）。 */
 final class AnniversaryService
 {
-    private const SCENE_TYPES = ['birthday', 'relationship', 'wedding', 'travel', 'deadline', 'baby', 'habit', 'custom'];
-    private const CALENDAR_TYPES = ['solar', 'lunar'];
-    private const REPEAT_TYPES = ['none', 'yearly'];
-    private const COUNT_MODES = ['countdown', 'countup'];
-    private const REMIND_DAYS = [0, 1, 3, 7, 14, 30];
-    private const CARD_TEMPLATES = ['minimal', 'calendar', 'photo', 'boarding', 'certificate', 'progress', 'festival'];
-    private const CARD_TONES = ['warm', 'fresh', 'classic', 'rose', 'ink'];
-    private const INVITE_ROLES = ['editor', 'viewer'];
-    private const INVITE_TTL_SECONDS = 86400;
+    private const array SCENE_TYPES = ['birthday', 'relationship', 'wedding', 'travel', 'deadline', 'baby', 'habit', 'custom'];
+    private const array CALENDAR_TYPES = ['solar', 'lunar'];
+    private const array REPEAT_TYPES = ['none', 'yearly'];
+    private const array COUNT_MODES = ['countdown', 'countup'];
+    private const array REMIND_DAYS = [0, 1, 3, 7, 14, 30];
+    private const array CARD_TEMPLATES = ['minimal', 'calendar', 'photo', 'boarding', 'certificate', 'progress', 'festival'];
+    private const array CARD_TONES = ['warm', 'fresh', 'classic', 'rose', 'ink'];
+    private const array INVITE_ROLES = ['editor', 'viewer'];
+    private const int INVITE_TTL_SECONDS = 86400;
 
     public function __construct(
         private readonly WechatSubscribeMessageService $subscribeMessages,

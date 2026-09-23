@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('anniversary_events', function (Blueprint $table) {
+        Schema::create('anniversary_events', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->unsignedBigInteger('user_id')->comment('用户 ID');
             $table->string('title', 80)->comment('纪念日标题');

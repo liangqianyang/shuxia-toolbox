@@ -20,7 +20,7 @@ namespace App\Model;
  */
 final class FortuneDraw extends Model
 {
-    public const UPDATED_AT = null;
+    public const ?string UPDATED_AT = null;
 
     protected ?string $table = 'fortune_draws';
 

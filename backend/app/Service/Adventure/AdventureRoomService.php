@@ -101,7 +101,7 @@ final class AdventureRoomService
         AdventureRoom::query()->where('status', '!=', 'saved')
             ->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?AdventureRoom {
             $room = new AdventureRoom();
             $room->code = $this->newCode();
             $room->status = 'waiting';
@@ -123,7 +123,7 @@ final class AdventureRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             if ($this->seatOf($room->seats, $userId) !== null) {
                 $this->touchSeenAt($room, $userId);
@@ -155,7 +155,7 @@ final class AdventureRoomService
      */
     public function config(string $code, int $userId, int $goal): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $goal) {
+        $room = Db::transaction(function () use ($code, $userId, $goal): ?AdventureRoom {
             $room = $this->lockByCode($code);
             if ($this->seatOf($room->seats, $userId) !== 0) {
                 throw new BizException(403, '只有房主能设定路线');
@@ -187,7 +187,7 @@ final class AdventureRoomService
      */
     public function start(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             if ($this->seatOf($room->seats, $userId) !== 0) {
                 throw new BizException(403, '只有房主能开局');
@@ -270,7 +270,7 @@ final class AdventureRoomService
      */
     public function roll(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
 
@@ -328,7 +328,7 @@ final class AdventureRoomService
      */
     public function playItem(string $code, int $userId, string $itemId, ?int $targetSeat): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $itemId, $targetSeat) {
+        $room = Db::transaction(function () use ($code, $userId, $itemId, $targetSeat): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireMyTurn($room, $userId);
@@ -398,7 +398,7 @@ final class AdventureRoomService
      */
     public function move(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             [$seat, $state] = $this->requireMyPhase($room, $userId, 'resolve');
@@ -431,7 +431,7 @@ final class AdventureRoomService
      */
     public function choose(string $code, int $userId, string $value): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $value) {
+        $room = Db::transaction(function () use ($code, $userId, $value): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             [$seat, $state, $choice] = $this->requireMyChoice($room, $userId);
@@ -500,7 +500,7 @@ final class AdventureRoomService
      */
     public function duel(string $code, int $userId, mixed $value): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $value) {
+        $room = Db::transaction(function () use ($code, $userId, $value): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -568,7 +568,7 @@ final class AdventureRoomService
      */
     public function bet(string $code, int $userId, int $onSeat): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $onSeat) {
+        $room = Db::transaction(function () use ($code, $userId, $onSeat): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -624,7 +624,7 @@ final class AdventureRoomService
      */
     public function toggleAuto(string $code, int $userId, bool $on): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $on) {
+        $room = Db::transaction(function () use ($code, $userId, $on): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status === 'playing' && in_array($seat, $room->state['leftSeats'] ?? [], true)) {
@@ -663,7 +663,7 @@ final class AdventureRoomService
      */
     public function save(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'playing') {
@@ -695,7 +695,7 @@ final class AdventureRoomService
      */
     public function resume(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'saved') {
@@ -773,7 +773,7 @@ final class AdventureRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             $state = $room->state;
@@ -811,7 +811,7 @@ final class AdventureRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $this->requireSeated($room, $userId);
             if ($room->status !== 'finished') {
@@ -856,7 +856,7 @@ final class AdventureRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?AdventureRoom {
             $room = $this->lockByCode($code);
             $seat = $this->seatOf($room->seats, $userId);
             if ($seat === null || $room->status === 'finished' || $room->status === 'closed') {
@@ -963,7 +963,7 @@ final class AdventureRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?AdventureRoom {
                     $room = $this->lockByCode((string) $code);
                     if ($room->status !== 'playing' || $room->turn_deadline_at === null
                         || strtotime((string) $room->turn_deadline_at) > time()) {
@@ -1011,7 +1011,7 @@ final class AdventureRoomService
         $ended = 0;
         foreach ($rooms as $room) {
             try {
-                $changed = Db::transaction(function () use ($room) {
+                $changed = Db::transaction(function () use ($room): ?AdventureRoom {
                     $room = $this->lockByCode((string) $room->code);
                     if ($room->status !== 'playing') {
                         return null;

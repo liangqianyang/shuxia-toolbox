@@ -73,7 +73,7 @@ final class UnoRoomService
     {
         UnoRoom::query()->where('updated_at', '<', date('Y-m-d H:i:s', time() - self::STALE_SECONDS))->delete();
 
-        $room = Db::transaction(function () use ($userId) {
+        $room = Db::transaction(function () use ($userId): ?UnoRoom {
             $room = new UnoRoom();
             $room->code = $this->newCode();
             $room->status = 'waiting';
@@ -95,7 +95,7 @@ final class UnoRoomService
      */
     public function join(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             if ($this->seatOf($room->seats, $userId) !== null) {
                 $this->touchSeenAt($room, $userId);
@@ -128,7 +128,7 @@ final class UnoRoomService
      */
     public function start(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             if ($this->seatOf($room->seats, $userId) !== 0) {
                 throw new BizException(403, '只有房主能开局');
@@ -171,7 +171,7 @@ final class UnoRoomService
      */
     public function dealerDraw(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -242,7 +242,7 @@ final class UnoRoomService
             throw new BizException(422, '出百搭牌必须选择颜色');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $card, $chosenColor, $declaredUno) {
+        $room = Db::transaction(function () use ($code, $userId, $card, $chosenColor, $declaredUno): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -342,7 +342,7 @@ final class UnoRoomService
      */
     public function draw(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             [$seat, $state] = $this->requireMyTurn($room, $userId);
@@ -399,7 +399,7 @@ final class UnoRoomService
      */
     public function pass(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             [, $state] = $this->requireMyTurn($room, $userId);
@@ -436,7 +436,7 @@ final class UnoRoomService
             throw new BizException(422, '颜色不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $color) {
+        $room = Db::transaction(function () use ($code, $userId, $color): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -474,7 +474,7 @@ final class UnoRoomService
      */
     public function challenge(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -514,7 +514,7 @@ final class UnoRoomService
      */
     public function declineChallenge(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->applyDueTimeoutIfNeeded($room, $userId);
             $seat = $this->requireSeated($room, $userId);
@@ -594,7 +594,7 @@ final class UnoRoomService
             throw new BizException(422, '消息类型不正确');
         }
 
-        $room = Db::transaction(function () use ($code, $userId, $kind, $content) {
+        $room = Db::transaction(function () use ($code, $userId, $kind, $content): ?UnoRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             $state = $room->state;
@@ -631,7 +631,7 @@ final class UnoRoomService
     public function declareUno(string $code, int $userId): array
     {
         $changed = false;
-        $room = Db::transaction(function () use ($code, $userId, &$changed) {
+        $room = Db::transaction(function () use ($code, $userId, &$changed): ?UnoRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'playing') {
@@ -675,7 +675,7 @@ final class UnoRoomService
      */
     public function catchUno(string $code, int $userId, int $targetSeat): array
     {
-        $room = Db::transaction(function () use ($code, $userId, $targetSeat) {
+        $room = Db::transaction(function () use ($code, $userId, $targetSeat): ?UnoRoom {
             $room = $this->lockByCode($code);
             $seat = $this->requireSeated($room, $userId);
             if ($room->status !== 'playing') {
@@ -716,7 +716,7 @@ final class UnoRoomService
      */
     public function rematch(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $this->requireSeated($room, $userId);
             if ($room->status !== 'finished') {
@@ -766,7 +766,7 @@ final class UnoRoomService
      */
     public function leave(string $code, int $userId): array
     {
-        $room = Db::transaction(function () use ($code, $userId) {
+        $room = Db::transaction(function () use ($code, $userId): ?UnoRoom {
             $room = $this->lockByCode($code);
             $seat = $this->seatOf($room->seats, $userId);
             if ($seat === null || $room->status === 'finished' || $room->status === 'closed') {
@@ -860,7 +860,7 @@ final class UnoRoomService
         $swept = 0;
         foreach ($codes as $code) {
             try {
-                $room = Db::transaction(function () use ($code) {
+                $room = Db::transaction(function () use ($code): ?UnoRoom {
                     $room = $this->lockByCode((string) $code);
                     if (! $this->applyDueTimeoutIfNeeded($room)) {
                         return null;
@@ -899,7 +899,7 @@ final class UnoRoomService
         $ended = 0;
         foreach ($rooms as $room) {
             try {
-                $changed = Db::transaction(function () use ($room) {
+                $changed = Db::transaction(function () use ($room): ?UnoRoom {
                     $room = $this->lockByCode((string) $room->code);
                     if ($room->status !== 'playing') {
                         return null;

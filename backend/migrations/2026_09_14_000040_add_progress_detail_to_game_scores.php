@@ -14,14 +14,14 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::table('game_scores', function (Blueprint $table) {
+        Schema::table('game_scores', function (Blueprint $table): void {
             $table->text('progress_detail')->nullable()->comment('关卡制游戏每关进度明细 JSON（本人恢复用）');
         });
     }
 
     public function down(): void
     {
-        Schema::table('game_scores', function (Blueprint $table) {
+        Schema::table('game_scores', function (Blueprint $table): void {
             $table->dropColumn('progress_detail');
         });
     }

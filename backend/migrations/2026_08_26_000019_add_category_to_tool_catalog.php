@@ -10,7 +10,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('tool_catalog', function (Blueprint $table) {
+        Schema::table('tool_catalog', function (Blueprint $table): void {
             $table->string('category', 16)->default('tool')->comment('分类：tool 工具 / game 游戏')->after('tool_key');
             $table->index(['category', 'is_published', 'sort_order'], 'idx_tool_catalog_category_sort');
         });
@@ -20,7 +20,7 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::table('tool_catalog', function (Blueprint $table) {
+        Schema::table('tool_catalog', function (Blueprint $table): void {
             $table->dropIndex('idx_tool_catalog_category_sort');
             $table->dropColumn('category');
         });

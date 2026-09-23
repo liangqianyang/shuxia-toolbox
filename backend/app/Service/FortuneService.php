@@ -96,7 +96,7 @@ final class FortuneService
         }
 
         try {
-            return Db::transaction(function () use ($userId, $deck, $category, $question) {
+            return Db::transaction(function () use ($userId, $deck, $category, $question): array {
                 // 锁用户行，序列化同一用户的并发抽签（双击/重试不会突破配额）。
                 Db::table('wechat_users')->where('id', $userId)->lockForUpdate()->first();
 
@@ -184,7 +184,7 @@ final class FortuneService
     public function shareBonus(int $userId): array
     {
         try {
-            return Db::transaction(function () use ($userId) {
+            return Db::transaction(function () use ($userId): array {
                 Db::table('wechat_users')->where('id', $userId)->lockForUpdate()->first();
 
                 if ($this->bonusToday($userId) >= self::SHARE_BONUS_MAX) {

@@ -10,7 +10,7 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('user_sessions', function (Blueprint $table) {
+        Schema::create('user_sessions', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->char('token_hash', 64)->default('')->comment('后端 token 的 sha256');
             $table->unsignedBigInteger('user_id')->default(0)->comment('所属用户 id');

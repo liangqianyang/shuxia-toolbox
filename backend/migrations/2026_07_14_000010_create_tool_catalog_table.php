@@ -11,7 +11,7 @@ use Hyperf\DbConnection\Db;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('tool_catalog', function (Blueprint $table) {
+        Schema::create('tool_catalog', function (Blueprint $table): void {
             $table->bigIncrements('id')->comment('主键');
             $table->string('tool_key', 64)->comment('前端固定工具标识');
             $table->string('name', 80)->comment('工具名称');
