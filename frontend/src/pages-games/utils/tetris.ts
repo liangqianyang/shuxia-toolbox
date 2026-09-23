@@ -46,6 +46,7 @@ export type TetrisEvent =
   | { t: 'locked'; piece: PieceId }
   | { t: 'cleared'; rows: number; points: number }
   | { t: 'hardDropped'; cells: number }
+  | { t: 'drilled' }
   | { t: 'levelUp'; level: number }
   | { t: 'gameOver' }
 
@@ -83,6 +84,7 @@ export type GameAction =
   | { t: 'rotate'; dir: 1 | -1 }
   | { t: 'softDrop' }
   | { t: 'hardDrop' }
+  | { t: 'drill' }
   | { t: 'hold' }
   | { t: 'setSpeedMode'; mode: SpeedMode }
   | { t: 'tick'; dtMs: number }
@@ -291,6 +293,21 @@ export function ghostY(state: TetrisState): number {
   return y
 }
 
+/**
+ * M 块钻击落点：「穿过实心、遇空即停」——先按正常重力落到自然落点（堆顶），
+ * 再继续穿透实心，停在下方第一个被盖住的空格；没有这种洞返回 null = 钻击无效。
+ * 渲染层画金色落点预览、引擎用它结算，一份实现两处调用（照 resolveMove/ghostY 家法）。
+ */
+export function drillTargetY(state: TetrisState): number | null {
+  const active = state.active
+  if (!active || active.id !== 'M' || state.phase !== 'playing') return null
+  const gy = ghostY(state)
+  for (let y = gy + 1; y < BOARD_H; y++) {
+    if (state.board[y * BOARD_W + active.x] === null) return y
+  }
+  return null
+}
+
 function refillQueue(queue: PieceId[], bag: PieceId[], rng: () => number): { queue: PieceId[]; bag: PieceId[] } {
   const nextQueue = queue.slice()
   let nextBag = bag.slice()
@@ -400,7 +417,7 @@ function lockPiece(state: TetrisState, events: TetrisEvent[]): TetrisState {
   }
 
   if (clearingRows.length === 0) {
-    // 单格闪块（M）= 经典 Monomino：没有消列特技，价值只在钻进单格缺口（补满行走下方正常消行）。
+    // 单格闪块（M）：钻击（穿过实心遇空即停）后照常在此盖章，价值在补死洞/补满行走正常消行。
     return spawnNext({ ...state, board, active: null }, lockedEvents)
   }
 
@@ -491,6 +508,21 @@ export function applyAction(state: TetrisState, action: GameAction): TetrisState
         events: [{ t: 'hardDropped', cells }],
       }
       return lockPiece(dropped, dropped.events)
+    }
+    case 'drill': {
+      // M 块专属钻击：穿过实心、遇空即停（重物沉底）。非 M/非对局中/下方无洞一律无效返回原引用。
+      // 不加分（价值在补死洞走正常消行），落点处立即锁定（跳过锁定延迟）。
+      const targetY = drillTargetY(state)
+      if (targetY === null || !state.active) return state
+      const drilled: TetrisState = {
+        ...state,
+        active: { ...state.active, y: targetY },
+        gravityMs: 0,
+        lockMs: 0,
+        lockResets: 0,
+        events: [{ t: 'drilled' }],
+      }
+      return lockPiece(drilled, drilled.events)
     }
     case 'hold': {
       if (state.phase !== 'playing' || !state.active) return state

@@ -243,7 +243,7 @@
         </view>
       </view>
       <view class="tetris__hint">
-        <text>点按旋转 · 下滑软降 · 直落 = 快滑 或 蓝色实底键</text>
+        <text>{{ isDrillPiece ? '金块点按 = 钻击入洞（穿过实心，遇空即停）· 下滑软降 · 快滑硬降' : '点按旋转 · 下滑软降 · 直落 = 快滑 或 蓝色实底键' }}</text>
       </view>
 
       <!-- 遮罩挂在整个游戏面板上（挂 canvas 容器里会被画布高度裁住,结算卡比画布高） -->
@@ -315,7 +315,7 @@ import { getCanvasNode, getElementRect, getWindowInfo, type CanvasNode } from '@
 import { computeTetrisLayout, drawTetrisFrame, MONO_BLINK_MS, type TetrisLayout } from '@/pages-games/utils/tetrisRender'
 import { createDragController, defaultDragConfig } from '@/pages-games/utils/touchGestures'
 import { playTetrisSound, setTetrisSoundEnabled, tetrisSoundEnabled } from '@/pages-games/utils/tetrisSound'
-import type { SpeedMode, TetrisState } from '@/pages-games/utils/tetris'
+import type { GameAction, SpeedMode, TetrisState } from '@/pages-games/utils/tetris'
 
 const BEST_KEY = 'shuxia_tetris_best_v1'
 const LEVEL_KEY = 'shuxia_tetris_start_level'
@@ -505,6 +505,9 @@ function handleStateChange(state: TetrisState): void {
         case 'hardDropped':
           playTetrisSound('harddrop')
           break
+        case 'drilled':
+          playTetrisSound('drill')
+          break
         case 'levelUp':
           playTetrisSound('levelup')
           break
@@ -551,13 +554,20 @@ function onGameOver(state: TetrisState): void {
 
 // ---------- 手势（棋盘区） ----------
 
+/** M 块无旋转语义：点按/上滑/旋转键统一让位给「钻击」（穿过实心遇空即停）。 */
+function tapAction(): GameAction {
+  return view.value?.active?.id === 'M' ? { t: 'drill' } : { t: 'rotate', dir: 1 }
+}
+/** M 在场时底部操作提示同步切换（否则玩家不知道点按变了）。 */
+const isDrillPiece = computed(() => view.value?.active?.id === 'M')
+
 const dragConfig = defaultDragConfig(layout.value.cell)
 const drag = createDragController(dragConfig, {
   onMove: (dx) => input({ t: 'move', dx }),
   onSoftDrop: () => input({ t: 'softDrop' }),
-  onTap: () => input({ t: 'rotate', dir: 1 }),
+  onTap: () => input(tapAction()),
   onHardDrop: () => input({ t: 'hardDrop' }),
-  onSwipeUp: () => input({ t: 'rotate', dir: 1 }),
+  onSwipeUp: () => input(tapAction()),
 })
 
 // ---------- 按钮排 ----------
@@ -569,7 +579,7 @@ function onPadRightDown(): void {
   beginMove(1)
 }
 function rotatePiece(): void {
-  input({ t: 'rotate', dir: 1 })
+  input(tapAction())
 }
 function holdPiece(): void {
   input({ t: 'hold' })
@@ -739,9 +749,17 @@ const rulesSections = [
   {
     heading: '操作',
     lines: [
-      '棋盘手势：左右拖动逐格移动，向下拖动软降，快速下滑硬降，点按或上滑旋转',
+      '棋盘手势：左右拖动逐格移动，向下拖动软降，快速下滑硬降，点按或上滑旋转（金块 M 点按 = 钻击）',
       '底部按钮：← / → 按住连发，旋转、HOLD 暂存、⤓ 直落（蓝色实底键，与快滑手势双通道）',
       'HOLD 每个块只能用一次，落块后恢复',
+    ],
+  },
+  {
+    heading: '金块 M · 钻击',
+    lines: [
+      'M 是单格闪块，点按/上滑/旋转键 = 钻击：穿过实心方块，落到下方第一个被盖住的空格立即固定',
+      '落点有金色虚线预览；同列下方没有洞时钻击无效',
+      '钻击本身不加分，补满一行走正常消行计分',
     ],
   },
   {

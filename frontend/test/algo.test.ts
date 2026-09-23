@@ -37,11 +37,13 @@ import {
 } from '@/pages-games/utils/gomoku'
 import { canPlay, cardColor, cardLabel, cardValue, isValidCard, isWild, scoreHand, sortHand } from '@/pages-games/utils/uno'
 import {
+  BOARD_H,
   BOARD_W,
   CLEAR_FLASH_MS,
   applyAction,
   collides,
   createGame,
+  drillTargetY,
   emptyBoard,
   gravityIntervalMs,
   levelFrom,
@@ -1468,6 +1470,46 @@ function testTetris() {
   // 移动：被挡返回原引用（composable 跳过重绘的依据）
   const atLeftWall = craft({ active: { id: 'T', x: 0, y: 15, rot: 0 } })
   assert(applyAction(atLeftWall, { t: 'move', dx: -1 }) === atLeftWall, '移动：左墙被挡返回原引用')
+
+  // M 块钻击（2026-09-23 拍板）：穿过实心、遇空即停——先正常落到堆顶，再穿透到下方第一个被盖住的空格
+  {
+    const board = emptyBoard()
+    for (const y of [11, 12, 13, 14, 15, 17, 19]) board[y * BOARD_W + 4] = 'I'
+    const m = craft({ active: { id: 'M', x: 4, y: 10, rot: 0 }, board })
+    assert(drillTargetY(m) === 16, '钻击：同列多洞停在最高的被盖住的洞（y=16，跳过更深的 y=18）')
+    const drilled = applyAction(m, { t: 'drill' })
+    assert(drilled !== m, '钻击：命中产生新状态')
+    assert(drilled.board[16 * BOARD_W + 4] === 'M' && drilled.board[10 * BOARD_W + 4] === null, '钻击：落进洞并盖章，原位置不残留')
+    assert(drilled.active !== null, '钻击：立即锁定并出生下一块（跳过锁定延迟）')
+    assert(drilled.events.some((e) => e.t === 'drilled'), '钻击：产生 drilled 事件（音效驱动）')
+    assert(drilled.score === m.score, '钻击：本身不加分')
+  }
+  {
+    const board = emptyBoard()
+    for (let y = 11; y < BOARD_H; y++) board[y * BOARD_W + 4] = 'J'
+    const m = craft({ active: { id: 'M', x: 4, y: 10, rot: 0 }, board })
+    assert(drillTargetY(m) === null, '钻击：下方全实心无落点')
+    assert(applyAction(m, { t: 'drill' }) === m, '钻击：无洞返回原引用（跳过重绘与音效）')
+    const tOnHole = craft({ active: { id: 'T', x: 4, y: 10, rot: 0 } })
+    assert(applyAction(tOnHole, { t: 'drill' }) === tOnHole, '钻击：非 M 块一律返回原引用')
+  }
+  {
+    // 半空触发：先按重力落到自然落点（堆顶），再穿透——不会锁在半空下一格
+    const board = emptyBoard()
+    for (const y of [15, 17, 18, 19]) board[y * BOARD_W + 4] = 'I'
+    const m = craft({ active: { id: 'M', x: 4, y: 5, rot: 0 }, board })
+    assert(drillTargetY(m) === 16, '钻击：半空触发先落到堆顶（y=14）再穿透进被盖住的洞（y=16）')
+  }
+  {
+    // 钻击补满底行：正常走消行流程（clearing 相位 + 计分）
+    const board = emptyBoard()
+    for (let y = 11; y <= 18; y++) board[y * BOARD_W + 4] = 'I'
+    for (let x = 0; x < BOARD_W; x++) if (x !== 4) board[19 * BOARD_W + x] = 'J'
+    const m = craft({ active: { id: 'M', x: 4, y: 10, rot: 0 }, board })
+    const drilled = applyAction(m, { t: 'drill' })
+    assert(drilled.phase === 'clearing' && drilled.clearingRows.includes(19), '钻击：补满底行走正常消行')
+    assert(drilled.score === 100, '钻击：消行计分照常（1 行 100×1 级），钻击本身 0 分')
+  }
 
   // 速度模式：constant 恒取起始等级基础档（不随消行加速）；setSpeedMode 对局内即时切换
   assert(createGame(5, rng, 'constant').speedMode === 'constant', '速度模式：createGame 接受 constant')

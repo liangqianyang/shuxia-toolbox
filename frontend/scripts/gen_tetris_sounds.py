@@ -87,6 +87,8 @@ def main() -> None:
     write('lock', tone(220, 140, 0.12, 0.5, harmonics=(1, 2)))
     # 硬降：噪声砸击 + 闷响
     write('harddrop', noise(0.07, 0.45) + tone(180, 110, 0.13, 0.55, harmonics=(1, 2)))
+    # 钻击（M 块）：下行长滑（沉进洞里的下坠感，区别于 rotate 的上行）
+    write('drill', tone(920, 240, 0.18, 0.45, 'tri', harmonics=(1, 3)))
     # 消行：双音上行
     write('clear', tone(659, 659, 0.07, 0.42) + silence(0.02) + tone(880, 988, 0.14, 0.45))
     # Tetris：四音琶音

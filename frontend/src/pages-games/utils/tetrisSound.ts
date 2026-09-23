@@ -11,6 +11,7 @@ export type TetrisSoundName =
   | 'rotate'
   | 'lock'
   | 'harddrop'
+  | 'drill'
   | 'clear'
   | 'tetris'
   | 'hold'

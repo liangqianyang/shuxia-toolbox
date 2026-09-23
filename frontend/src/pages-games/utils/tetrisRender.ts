@@ -5,7 +5,7 @@
  * 每次状态变化整幅重绘（clearRect 清全幅——右栏透明区不清屏会残留旧帧叠成马赛克）。
  */
 
-import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/pages-games/utils/tetris'
+import { BOARD_H, BOARD_W, CLEAR_FLASH_MS, drillTargetY, ghostY, pieceCells, type ActivePiece, type PieceId, type TetrisState } from '@/pages-games/utils/tetris'
 
 /** 马卡龙淡彩 11 色（原型 pc 表 6 色 + 同族补 5；M 闪块保留金色 = 内容点缀）。 */
 export const PIECE_COLORS: Record<PieceId, string> = {
@@ -305,20 +305,34 @@ export function drawTetrisFrame(ctx: CanvasRenderingContext2D, layout: TetrisLay
     }
   }
 
-  // 幽灵块（描边样式——半透明填充在深底上发 muddy,描边更干净）+ 活动块
+  // 幽灵块（描边样式——半透明填充在深底上发 muddy,描边更干净）+ 活动块。
+  // M 块点按语义是「钻击」，预览换成金色虚线的钻击落点（穿过实心遇空即停）。
   const active: ActivePiece | null = state.active
   if (active && state.phase === 'playing') {
-    const gy = ghostY(state)
-    if (gy > active.y) {
-      ctx.save()
-      ctx.globalAlpha = 0.55
-      ctx.strokeStyle = PIECE_COLORS[active.id]
-      ctx.lineWidth = 1.5
-      for (const [cx, cy] of pieceCells(active.id, active.rot)) {
-        roundRectPath(ctx, boardX + (active.x + cx) * cell + 3, boardY + (gy + cy) * cell + 3, cell - 6, cell - 6, cell * 0.14)
+    if (active.id === 'M') {
+      const ty = drillTargetY(state)
+      if (ty !== null && ty > active.y) {
+        ctx.save()
+        ctx.setLineDash([4, 3])
+        ctx.strokeStyle = CLEAR_FLASH
+        ctx.lineWidth = 1.5
+        roundRectPath(ctx, boardX + active.x * cell + 3, boardY + ty * cell + 3, cell - 6, cell - 6, cell * 0.14)
         ctx.stroke()
+        ctx.restore()
       }
-      ctx.restore()
+    } else {
+      const gy = ghostY(state)
+      if (gy > active.y) {
+        ctx.save()
+        ctx.globalAlpha = 0.55
+        ctx.strokeStyle = PIECE_COLORS[active.id]
+        ctx.lineWidth = 1.5
+        for (const [cx, cy] of pieceCells(active.id, active.rot)) {
+          roundRectPath(ctx, boardX + (active.x + cx) * cell + 3, boardY + (gy + cy) * cell + 3, cell - 6, cell - 6, cell * 0.14)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
     }
     // 单格闪块下落时按真实时间闪烁（每 MONO_BLINK_MS 翻转明暗；重绘由 33ms tick 驱动，接地也不冻结）
     const monoBlink = active.id === 'M' ? (Math.floor(Date.now() / MONO_BLINK_MS) % 2 === 0 ? 1 : 0.3) : 1
