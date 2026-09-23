@@ -301,7 +301,7 @@
  */
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import { onShareAppMessage, onUnload } from '@dcloudio/uni-app'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 import { useSokoban } from '@/pages-games/composables/useSokoban'
 import { storedUser } from '@/services/toolbox'
 import { fetchSokobanLeaderboard, fetchSokobanProgress, submitSokobanScore, type SokobanLeaderboard, type SokobanProgressMap } from '@/pages-games/services/sokoban'

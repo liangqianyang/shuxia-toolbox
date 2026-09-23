@@ -2,7 +2,7 @@
  *  开关持久化到 storage（默认开），页面可切换。
  */
 
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 const SOUND_KEY = 'shuxia-uno-sound-enabled'
 
 export type UnoSoundName = 'play' | 'draw' | 'uno' | 'win' | 'chat'

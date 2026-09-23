@@ -4,7 +4,7 @@
  * 加载失败静默（onError 置空），开关持久化 storage。
  */
 
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 
 export type AdventureSoundName =
   | 'roll' | 'move' | 'ladder' | 'cable' | 'slide' | 'leaf' | 'item'

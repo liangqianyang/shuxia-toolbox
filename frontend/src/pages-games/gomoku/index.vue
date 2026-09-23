@@ -183,7 +183,7 @@ import {
 import type { CanvasNode, ElementRect } from '@/utils/canvasAdapter'
 import type { GomokuColor } from '@/types/gomoku'
 import { playGomokuPlace, playGomokuWin } from '@/pages-games/utils/gomokuAudio'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
 import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'

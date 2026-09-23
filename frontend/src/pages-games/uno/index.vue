@@ -361,7 +361,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { onHide, onLoad, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useUnoRoom } from '@/pages-games/composables/useUnoRoom'
@@ -373,7 +373,7 @@ import { COLOR_META, UNO_COLORS, cardLabel, isWild, sortHand } from '@/pages-gam
 import { UNO_EMOJIS, UNO_PHRASE_GROUPS } from '@/pages-games/utils/unoChat'
 import { playUnoSound, setUnoSoundEnabled, unoSoundEnabled } from '@/pages-games/utils/unoSound'
 import type { UnoChatMessage, UnoColor } from '@/types/uno'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 
 const rulesOpen = ref(false)
 

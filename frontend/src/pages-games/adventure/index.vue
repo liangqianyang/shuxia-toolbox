@@ -506,7 +506,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { resolveAvatarUrl as resolveAvatar } from '@/services/toolbox'
 import { useFeatures } from '@/composables/useFeatures'
@@ -534,7 +534,7 @@ import {
   type AdventureSoundName,
 } from './utils/adventureSound'
 import type { AdventureChatMessage, AdventureEvent, AdventurePlayer } from '@/types/adventure'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 import { adventureBoardImage } from './utils/adventureRender'
 import { getWindowInfo } from '@/utils/canvasAdapter'
 

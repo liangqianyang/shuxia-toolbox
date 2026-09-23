@@ -306,7 +306,7 @@
  */
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import { onHide, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 import { useTetris } from '@/pages-games/composables/useTetris'
 import { useFeatures } from '@/composables/useFeatures'
 import { resolveAvatarUrl, storedUser } from '@/services/toolbox'

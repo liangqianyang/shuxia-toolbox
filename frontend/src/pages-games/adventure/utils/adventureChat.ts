@@ -4,7 +4,7 @@
  * 分组是前端展示逻辑；贴纸 id → CDN 路径在这里映射（固定美术不过内容安全）。
  */
 
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 // 表情/贴纸白名单与 gameChat 完全同数据（PHP 侧两个类各自镜像，TS 侧共用一份常量防漂移）
 import { GAME_EMOJIS, GAME_STICKERS } from '@/pages-games/utils/gameChat'
 

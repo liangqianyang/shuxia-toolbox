@@ -4,7 +4,7 @@
  * 贴纸与冒险棋同一套 CDN 资源。
  */
 
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 
 export interface GamePhraseGroup {
   key: string

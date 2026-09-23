@@ -258,7 +258,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { cdnUrl } from '@/utils/cdn'
+import { cdnUrl } from '@/pages-games/utils/cdn'
 import GameLobby from '@/pages-games/components/GameLobby.vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import { useLudoRoom } from './composables/useLudoRoom'
@@ -267,7 +267,7 @@ import { posToPoint } from './utils/ludoBoard'
 import { HANGAR } from './utils/ludo'
 import { playLudoSound, ludoSoundEnabled, setLudoSoundEnabled } from './utils/ludoSound'
 import { resolveAvatarUrl, saveUserProfile, uploadAvatar } from '@/services/toolbox'
-import GameRulesModal from '@/components/GameRulesModal.vue'
+import GameRulesModal from '@/pages-games/components/GameRulesModal.vue'
 import GameChatPanel from '@/pages-games/components/GameChatPanel.vue'
 import { useRoomChat, type RoomChatMessage } from '@/pages-games/composables/useRoomChat'
 import { useFeatures } from '@/composables/useFeatures'
